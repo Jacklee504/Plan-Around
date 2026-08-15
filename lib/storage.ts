@@ -26,3 +26,11 @@ export function writeStoredValue<T>(key: string, value: T) {
 
   window.localStorage.setItem(key, JSON.stringify(value));
 }
+
+export function clearPlanAroundStorage() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  Object.values(storageKeys).forEach((key) => window.localStorage.removeItem(key));
+}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import { parseTimetablePdf } from "@/lib/timetableParser";
-import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
+import { clearPlanAroundStorage, readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import type { Commitment, CommitmentCategory, Module, TimetableAttendance, TimetableEntry } from "@/types";
 
 const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -173,6 +173,25 @@ export function SetupWorkspace() {
     setTimetableEntries((current) => current.map((entry) => entry.id === selectedEntry.id ? { ...entry, attendance } : entry));
   }
 
+  function resetPlanAround() {
+    if (!window.confirm("Reset all saved PlanAround data on this device? This cannot be undone.")) {
+      return;
+    }
+
+    clearPlanAroundStorage();
+    setModules([]);
+    setCommitments([]);
+    setTimetableEntries([]);
+    setModuleDraft(emptyModuleDraft);
+    setCommitmentDraft(emptyCommitmentDraft);
+    setSelectedEntryId(null);
+    setImportState("idle");
+    setUploadedFileName("");
+    setImportMessage("");
+    setModuleError("");
+    setCommitmentError("");
+  }
+
   return (
     <div className="space-y-10">
       <section aria-labelledby="upload-heading" className="grid gap-5 border-y border-[var(--line)] py-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
@@ -279,6 +298,7 @@ export function SetupWorkspace() {
               <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Your constraints are ready.</h2>
               <dl className="mt-5 space-y-3 border-y border-[var(--line)] py-4 text-sm"><div className="flex justify-between gap-4"><dt className="text-[var(--muted-ink)]">Modules</dt><dd className="font-semibold">{modules.length}</dd></div><div className="flex justify-between gap-4"><dt className="text-[var(--muted-ink)]">Calendar blocks</dt><dd className="font-semibold">{totalBlockedTime}</dd></div></dl>
               <Link href="/assignment" className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Continue to assignment</Link>
+              <button type="button" onClick={resetPlanAround} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-800">Reset all PlanAround data</button>
             </aside>
           </section>
 
