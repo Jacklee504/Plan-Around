@@ -150,9 +150,8 @@ export function SetupWorkspace() {
       const pdfContent = await file.text();
       const parsed = parseTimetablePdf(pdfContent);
       const nextEntries = parsed.entries.map((entry) => ({ ...entry, id: createId(), attendance: "attending" as const }));
-      const existingModules = new Map(modules.map((module) => [module.code?.toUpperCase(), module]));
       const importedModules = [...new Map(nextEntries.map((entry) => [entry.moduleCode, entry])).values()]
-        .map((entry) => existingModules.get(entry.moduleCode) ?? ({
+        .map((entry) => ({
           id: createId(),
           code: entry.moduleCode,
           name: entry.moduleName,
@@ -160,10 +159,7 @@ export function SetupWorkspace() {
         }));
 
       setTimetableEntries(nextEntries);
-      setModules((current) => {
-        const importedCodes = new Set(nextEntries.map((entry) => entry.moduleCode));
-        return [...current.filter((module) => !module.code || !importedCodes.has(module.code.toUpperCase())), ...importedModules];
-      });
+      setModules(importedModules);
       setImportState("complete");
       setImportMessage(`Read ${parsed.entries.length} sessions across ${parsed.moduleCount} modules.`);
     } catch (error) {
