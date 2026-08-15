@@ -1,7 +1,7 @@
 "use client";
 
 import type { Assignment, Module } from "@/types";
-import { calculateWorkloadBreakdown } from "@/lib/workload";
+import { calculateWorkloadBreakdown, COMPLEXITY_MULTIPLIERS } from "@/lib/workload";
 
 type WorkloadBreakdownProps = {
   assignment: Assignment;
@@ -17,6 +17,10 @@ function formatHours(hours: number) {
 
 function formatPercentage(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatWeight(value: number) {
+  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 export function WorkloadBreakdown({ assignment, module, onOverrideChange }: WorkloadBreakdownProps) {
@@ -54,7 +58,7 @@ export function WorkloadBreakdown({ assignment, module, onOverrideChange }: Work
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Task allocation</p>
             <h3 id="task-allocation-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Why each task received that time.</h3>
           </div>
-          <p className="text-sm text-[var(--muted-ink)]">Marks × complexity</p>
+          <p className="text-sm text-[var(--muted-ink)]">Marks × effort adjustment</p>
         </div>
 
         {assignment.tasks.length === 0 ? <p className="mt-4 rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">Add rubric tasks above to divide this recommendation more precisely. Until then, the focused time is kept together as assignment work.</p> : null}
@@ -64,7 +68,7 @@ export function WorkloadBreakdown({ assignment, module, onOverrideChange }: Work
             <li key={task.id} className="grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div>
                 <p className="font-semibold">{task.name}</p>
-                <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">{task.isFallback ? "No task split has been added yet." : `${task.marks} marks × ${complexityLabels[task.complexity] ?? "custom"} complexity = ${task.adjustedWeight} weighting points, ${formatPercentage(task.proportion)} of focused task time.`}</p>
+                <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">{task.isFallback ? "No task split has been added yet." : `${task.marks} marks × ${COMPLEXITY_MULTIPLIERS[task.complexity] ?? 1} (${complexityLabels[task.complexity] ?? "custom"}) = ${formatWeight(task.adjustedWeight)} weighting points, ${formatPercentage(task.proportion)} of focused task time.`}</p>
               </div>
               <span className="text-lg font-semibold tabular-nums sm:text-right">{formatHours(task.recommendedHours)}</span>
             </li>

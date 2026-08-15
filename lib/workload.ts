@@ -4,6 +4,11 @@ export const HOURS_PER_ECTS = 22.5;
 export const ASSESSMENT_WORKLOAD_FACTOR = 0.4;
 export const BUFFER_FACTOR = 0.1;
 export const WORKLOAD_INCREMENT_HOURS = 0.5;
+export const COMPLEXITY_MULTIPLIERS: Record<number, number> = {
+  1: 0.8,
+  2: 1,
+  3: 1.25,
+};
 
 const fallbackTask: AssignmentTask = {
   id: "assignment-work",
@@ -31,7 +36,7 @@ export function calculateAssignmentWorkload(assessmentPoolHours: number, moduleW
 
 function allocateTaskHours(tasks: AssignmentTask[], usableHours: number): WorkloadTask[] {
   const sourceTasks = tasks.length ? tasks : [fallbackTask];
-  const weights = sourceTasks.map((task) => Math.max(0, task.marks) * Math.max(0, task.complexity));
+  const weights = sourceTasks.map((task) => Math.max(0, task.marks) * (COMPLEXITY_MULTIPLIERS[task.complexity] ?? 1));
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   const effectiveWeights = totalWeight > 0 ? weights : sourceTasks.map(() => 1);
   const effectiveTotalWeight = effectiveWeights.reduce((sum, weight) => sum + weight, 0);
