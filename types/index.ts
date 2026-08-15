@@ -48,15 +48,24 @@ export type Assignment = {
   deadline: string;
   moduleWeight: number;
   tasks: AssignmentTask[];
+  workloadOverrideHours?: number;
 };
 
 export type WorkloadTask = AssignmentTask & {
   recommendedHours: number;
+  adjustedWeight: number;
+  proportion: number;
+  isFallback?: boolean;
 };
 
 export type WorkloadBreakdown = {
   totalHours: number;
   bufferHours: number;
+  usableHours: number;
+  moduleWorkloadHours: number;
+  assessmentPoolHours: number;
+  calculatedTotalHours: number;
+  isOverridden: boolean;
   taskHours: WorkloadTask[];
 };
 

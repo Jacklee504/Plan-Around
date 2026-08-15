@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import type { Assignment, AssignmentTask, Module } from "@/types";
+import { WorkloadBreakdown } from "@/components/WorkloadBreakdown";
 
 type AssignmentDraft = {
   moduleId: string;
@@ -56,12 +57,15 @@ export function AssignmentWorkspace() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [deletedAssignment, setDeletedAssignment] = useState<Assignment | null>(null);
+  const [selectedWorkloadAssignmentId, setSelectedWorkloadAssignmentId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
       setModules(readStoredValue<Module[]>(storageKeys.modules, []));
-      setAssignments(readStoredValue<Assignment[]>(storageKeys.assignments, []));
+      const storedAssignments = readStoredValue<Assignment[]>(storageKeys.assignments, []);
+      setAssignments(storedAssignments);
+      setSelectedWorkloadAssignmentId(storedAssignments.at(-1)?.id ?? null);
       setIsLoaded(true);
     }, 0);
 
@@ -124,6 +128,7 @@ export function AssignmentWorkspace() {
     };
 
     setAssignments((current) => [...current, assignment]);
+    setSelectedWorkloadAssignmentId(assignment.id);
     setStatus(`${title} is saved and ready for workload planning.`);
     setDeletedAssignment(null);
     resetForm();
@@ -156,6 +161,7 @@ export function AssignmentWorkspace() {
 
   function deleteAssignment(assignment: Assignment) {
     setAssignments((current) => current.filter((item) => item.id !== assignment.id));
+    if (selectedWorkloadAssignmentId === assignment.id) setSelectedWorkloadAssignmentId(null);
     setDeletedAssignment(assignment);
     setStatus("");
   }
@@ -163,9 +169,17 @@ export function AssignmentWorkspace() {
   function restoreDeletedAssignment() {
     if (!deletedAssignment) return;
     setAssignments((current) => [...current, deletedAssignment]);
+    setSelectedWorkloadAssignmentId(deletedAssignment.id);
     setDeletedAssignment(null);
     setStatus("Assignment restored.");
   }
+
+  function updateWorkloadOverride(assignmentId: string, workloadOverrideHours: number | undefined) {
+    setAssignments((current) => current.map((assignment) => assignment.id === assignmentId ? { ...assignment, workloadOverrideHours } : assignment));
+  }
+
+  const selectedWorkloadAssignment = assignments.find((assignment) => assignment.id === selectedWorkloadAssignmentId) ?? null;
+  const selectedWorkloadModule = selectedWorkloadAssignment ? modules.find((module) => module.id === selectedWorkloadAssignment.moduleId) ?? null : null;
 
   return (
     <div className="space-y-10">
@@ -281,13 +295,18 @@ export function AssignmentWorkspace() {
                     <p className="font-semibold">{assignment.title}</p>
                     <p className="mt-1 text-sm text-[var(--muted-ink)]">{linkedModule?.code ?? linkedModule?.name ?? "Module removed"} · Due {formatDeadline(assignment.deadline)} · {assignment.moduleWeight}% · {assignment.tasks.length ? `${assignment.tasks.length} tasks` : "No task breakdown"}</p>
                   </div>
-                  <button type="button" onClick={() => deleteAssignment(assignment)} className="min-h-10 justify-self-start rounded-lg px-3 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:bg-red-50 hover:text-red-700 sm:justify-self-end">Delete</button>
+                  <div className="flex flex-wrap gap-1 sm:justify-self-end">
+                    <button type="button" onClick={() => setSelectedWorkloadAssignmentId(assignment.id)} className="min-h-10 rounded-lg px-3 text-sm font-semibold text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]">{selectedWorkloadAssignmentId === assignment.id ? "Viewing workload" : "View workload"}</button>
+                    <button type="button" onClick={() => deleteAssignment(assignment)} className="min-h-10 rounded-lg px-3 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:bg-red-50 hover:text-red-700">Delete</button>
+                  </div>
                 </li>
               );
             })}
           </ul>
         ) : <p className="mt-4 text-sm leading-6 text-[var(--muted-ink)]">No assignments saved yet. Add one above, or load the demo details to see the full flow.</p>}
       </section>
+
+      {selectedWorkloadAssignment && selectedWorkloadModule ? <WorkloadBreakdown assignment={selectedWorkloadAssignment} module={selectedWorkloadModule} onOverrideChange={(hours) => updateWorkloadOverride(selectedWorkloadAssignment.id, hours)} /> : null}
     </div>
   );
 }
