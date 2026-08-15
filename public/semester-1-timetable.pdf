@@ -1,0 +1,175 @@
+%PDF-1.4
+%“Œ‹ž ReportLab Generated PDF document (opensource)
+1 0 obj
+<<
+/F1 2 0 R /F2 3 0 R /F3 4 0 R /F4 5 0 R
+>>
+endobj
+2 0 obj
+<<
+/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Name /F1 /Subtype /Type1 /Type /Font
+>>
+endobj
+3 0 obj
+<<
+/BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding /Name /F2 /Subtype /Type1 /Type /Font
+>>
+endobj
+4 0 obj
+<<
+/BaseFont /Courier-Bold /Encoding /WinAnsiEncoding /Name /F3 /Subtype /Type1 /Type /Font
+>>
+endobj
+5 0 obj
+<<
+/BaseFont /Courier /Encoding /WinAnsiEncoding /Name /F4 /Subtype /Type1 /Type /Font
+>>
+endobj
+6 0 obj
+<<
+/Contents 10 0 R /MediaBox [ 0 0 841.8898 595.2756 ] /Parent 9 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
+endobj
+7 0 obj
+<<
+/PageMode /UseNone /Pages 9 0 R /Type /Catalog
+>>
+endobj
+8 0 obj
+<<
+/Author (anonymous) /CreationDate (D:20260815211606+01'00') /Creator (anonymous) /Keywords () /ModDate (D:20260815211606+01'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+  /Subject (A readable weekly timetable for PlanAround's local PDF import demo.) /Title (Semester 1 timetable) /Trapped /False
+>>
+endobj
+9 0 obj
+<<
+/Count 1 /Kids [ 6 0 R ] /Type /Pages
+>>
+endobj
+10 0 obj
+<<
+/Length 3077
+>>
+stream
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+.968627 .956863 .933333 rg
+n 0 0 841.8898 595.2756 re f*
+.133333 .192157 .231373 rg
+BT /F2 20 Tf 24 TL ET
+BT 1 0 0 1 54 537.2756 Tm (SEMESTER 1 TIMETABLE) Tj T* ET
+.356863 .403922 .439216 rg
+BT /F1 10 Tf 12 TL ET
+BT 1 0 0 1 54 517.2756 Tm (Computer Science | Weekly teaching schedule) Tj T* ET
+.858824 .909804 .894118 rg
+n
+54 447.2756 m
+672 447.2756 l
+675.3168 447.2756 678 449.9588 678 453.2756 c
+678 467.2756 l
+678 470.5924 675.3168 473.2756 672 473.2756 c
+54 473.2756 l
+50.6832 473.2756 48 470.5924 48 467.2756 c
+48 453.2756 l
+48 449.9588 50.6832 447.2756 54 447.2756 c
+h
+f*
+.176471 .392157 .341176 rg
+BT /F3 8 Tf 9.6 TL ET
+BT 1 0 0 1 54 456.2756 Tm (DAY       START  END    CODE   MODULE                         SESSION) Tj T* ET
+1 1 1 rg
+n 48 413.2756 630 34 re f*
+.843137 .866667 .847059 RG
+n 48 413.2756 m 678 413.2756 l S
+.133333 .192157 .231373 rg
+BT /F4 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 425.2756 Tm (Monday 09:00 10:00 CS301 Software Engineering Lecture) Tj T* ET
+.843137 .866667 .847059 RG
+n 48 379.2756 m 678 379.2756 l S
+.133333 .192157 .231373 rg
+BT /F4 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 391.2756 Tm (Monday 14:00 16:00 CS301 Software Engineering Lab) Tj T* ET
+1 1 1 rg
+n 48 345.2756 630 34 re f*
+.843137 .866667 .847059 RG
+n 48 345.2756 m 678 345.2756 l S
+.133333 .192157 .231373 rg
+BT /F4 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 357.2756 Tm (Tuesday 10:00 11:00 CS302 Computer Networks Lecture) Tj T* ET
+.843137 .866667 .847059 RG
+n 48 311.2756 m 678 311.2756 l S
+.133333 .192157 .231373 rg
+BT /F4 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 323.2756 Tm (Tuesday 13:00 15:00 CS304 Databases Lab) Tj T* ET
+1 1 1 rg
+n 48 277.2756 630 34 re f*
+.843137 .866667 .847059 RG
+n 48 277.2756 m 678 277.2756 l S
+.133333 .192157 .231373 rg
+BT /F4 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 289.2756 Tm (Wednesday 09:00 10:00 CS303 Applied Cryptography Lecture) Tj T* ET
+.843137 .866667 .847059 RG
+n 48 243.2756 m 678 243.2756 l S
+.133333 .192157 .231373 rg
+BT /F4 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 255.2756 Tm (Wednesday 15:00 16:00 CS305 Algorithms Tutorial) Tj T* ET
+1 1 1 rg
+n 48 209.2756 630 34 re f*
+.843137 .866667 .847059 RG
+n 48 209.2756 m 678 209.2756 l S
+.133333 .192157 .231373 rg
+BT /F4 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 221.2756 Tm (Thursday 11:00 12:00 CS304 Databases Lecture) Tj T* ET
+.843137 .866667 .847059 RG
+n 48 175.2756 m 678 175.2756 l S
+.133333 .192157 .231373 rg
+BT /F4 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 187.2756 Tm (Thursday 14:00 16:00 CS302 Computer Networks Lab) Tj T* ET
+1 1 1 rg
+n 48 141.2756 630 34 re f*
+.843137 .866667 .847059 RG
+n 48 141.2756 m 678 141.2756 l S
+.133333 .192157 .231373 rg
+BT /F4 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 153.2756 Tm (Friday 10:00 11:00 CS305 Algorithms Lecture) Tj T* ET
+.843137 .866667 .847059 RG
+n 48 107.2756 m 678 107.2756 l S
+.133333 .192157 .231373 rg
+BT /F4 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 119.2756 Tm (Friday 13:00 15:00 CS303 Applied Cryptography Lab) Tj T* ET
+.356863 .403922 .439216 rg
+BT /F1 9 Tf 10.8 TL ET
+BT 1 0 0 1 54 18 Tm (Bring this document into PlanAround to turn it into an editable weekly calendar.) Tj T* ET
+ 
+endstream
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000061 00000 n 
+0000000122 00000 n 
+0000000229 00000 n 
+0000000341 00000 n 
+0000000451 00000 n 
+0000000556 00000 n 
+0000000760 00000 n 
+0000000828 00000 n 
+0000001157 00000 n 
+0000001216 00000 n 
+trailer
+<<
+/ID 
+[<66294aa8b3ec6c02ea0d3541fdfb3cb1><66294aa8b3ec6c02ea0d3541fdfb3cb1>]
+% ReportLab generated PDF document -- digest (opensource)
+
+/Info 8 0 R
+/Root 7 0 R
+/Size 11
+>>
+startxref
+4345
+%%EOF

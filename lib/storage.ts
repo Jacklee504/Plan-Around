@@ -1,6 +1,7 @@
 export const storageKeys = {
   modules: "plan-around.modules",
   commitments: "plan-around.commitments",
+  timetableEntries: "plan-around.timetable-entries",
   assignments: "plan-around.assignments",
   studyBlocks: "plan-around.study-blocks",
 } as const;

@@ -12,7 +12,7 @@ type AppShellProps = {
 };
 
 const steps = [
-  { href: "/setup", label: "Setup", number: "01" },
+  { href: "/setup", label: "Timetable", number: "01" },
   { href: "/assignment", label: "Assignment", number: "02" },
   { href: "/plan", label: "Plan", number: "03" },
 ];

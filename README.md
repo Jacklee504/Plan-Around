@@ -11,12 +11,12 @@ Assignment brief + module weighting + weekly commitments
 
 ## What the prototype demonstrates
 
-- Add modules with ECTS credits and recurring weekly commitments.
-- Enter an assignment title, deadline, and percentage of the module grade.
-- Analyse a brief through a mocked, replaceable analysis service.
-- Allocate recommended workload using rubric marks and task complexity.
-- Automatically place 60–120 minute study sessions into free time before the deadline.
-- Show whether the assignment is on track, tight, or exceeds available study time.
+- Download and upload a readable Semester 1 timetable PDF.
+- Parse its timetable rows locally into modules, lectures, labs, and tutorials.
+- View the resulting teaching schedule in an editable weekly calendar.
+- Mark a class as not attended for the current week or for every week.
+- Add personal commitments alongside classes.
+- Keep the resulting constraints in local browser storage for the assignment-planning steps.
 
 ## Why the workload is different
 
@@ -24,15 +24,15 @@ PlanAround does not present an unexplained AI time guess. The recommended worklo
 
 ## Prototype scope
 
-The app is a mobile-first Next.js/TypeScript web app with three screens:
+The app is a mobile-first Next.js/TypeScript web app with three steps:
 
 ```text
-1. Setup       Modules and recurring commitments
+1. Timetable   Import and adjust classes plus personal commitments
 2. Assignment  Assessment details and brief analysis
 3. Plan        Workload review and generated study timetable
 ```
 
-Persistence is local to the browser. Assignment analysis is mocked for the prototype so the core planning flow can be demonstrated end to end without accounts, a database, or document-processing infrastructure.
+Persistence is local to the browser. The first timetable importer intentionally supports text-based PDFs whose rows contain a weekday, start and end time, module code/name, and session type. It uses the file's content, not its filename or preset data. Broader PDF and screenshot recognition will need an OCR or vision service.
 
 ## Stack
 
@@ -49,11 +49,13 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The root route redirects to `/setup`.
+Open [http://localhost:3000](http://localhost:3000). The root opens the timetable step.
+
+For the demo, download `Semester 1 timetable` from the app, then select the downloaded PDF to see the local importer build the calendar.
 
 ## Current status
 
-The responsive app shell, shared three-step navigation, and placeholder screens are implemented. The next build phase adds the setup forms and local browser persistence.
+The working timetable-import milestone is complete. The next milestone is assignment entry and task-breakdown review, followed by workload scheduling.
 
 ## Further reference
 

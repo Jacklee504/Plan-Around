@@ -6,7 +6,7 @@ export default function SetupPage() {
     <AppShell
       eyebrow="Step 01 of 03"
       title="Start with the week you actually have."
-      description="Add your modules and recurring commitments once. Your study plan will use this as its real-world boundary."
+      description="Bring in your semester timetable, then keep classes and personal commitments together in one calendar. Your study plan will use it as a real-world boundary."
     >
       <SetupWorkspace />
     </AppShell>

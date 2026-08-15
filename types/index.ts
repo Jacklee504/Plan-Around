@@ -16,6 +16,21 @@ export type Commitment = {
   category: CommitmentCategory;
 };
 
+export type TimetableSessionType = "lecture" | "lab" | "tutorial";
+
+export type TimetableAttendance = "attending" | "skip-this-week" | "skip-every-week";
+
+export type TimetableEntry = {
+  id: string;
+  moduleCode: string;
+  moduleName: string;
+  dayOfWeek: number;
+  start: string;
+  end: string;
+  sessionType: TimetableSessionType;
+  attendance: TimetableAttendance;
+};
+
 export type AssignmentTask = {
   id: string;
   name: string;
