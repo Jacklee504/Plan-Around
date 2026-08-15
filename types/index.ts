@@ -71,9 +71,23 @@ export type WorkloadBreakdown = {
 
 export type StudyBlock = {
   id: string;
+  assignmentId: string;
   date: string;
   start: string;
   end: string;
   taskId: string;
   taskName: string;
+};
+
+export type ScheduleStatus = "on-track" | "tight" | "not-enough-time";
+
+export type ScheduleResult = {
+  studyBlocks: StudyBlock[];
+  status: ScheduleStatus;
+  requiredHours: number;
+  scheduledHours: number;
+  unscheduledHours: number;
+  bufferedAvailableHours: number;
+  deadlineAvailableHours: number;
+  usesDeadlineBuffer: boolean;
 };

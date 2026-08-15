@@ -50,7 +50,7 @@ export function AppShell({ children, eyebrow, title, description }: AppShellProp
                 <Link
                   href={step.href}
                   aria-current={isCurrent ? "step" : undefined}
-                  className={`flex min-h-12 items-center gap-1 rounded-xl border px-2 py-2 text-left text-xs transition-colors duration-200 sm:gap-2 sm:px-3 sm:text-sm ${
+                  className={`flex min-h-12 items-center gap-0.5 rounded-xl border px-1.5 py-2 text-left text-xs transition-colors duration-200 sm:gap-2 sm:px-3 sm:text-sm ${
                     isCurrent
                       ? "border-[var(--accent)] bg-[var(--accent)] text-white"
                       : isComplete

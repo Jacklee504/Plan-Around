@@ -19,7 +19,9 @@ Assignment brief + module weighting + weekly commitments
 - Add an assignment against an imported module, with its deadline and module weighting.
 - Optionally add rubric tasks, marks, complexity and notes, or load realistic demo details.
 - Review a transparent, rubric-weighted workload recommendation and override its total when needed.
-- Keep constraints and assignments in local browser storage for the later planning steps.
+- Generate study blocks from 08:00 to 22:00 around attended classes and personal commitments.
+- Preserve a 24-hour deadline buffer where capacity permits, and flag plans as On track, Tight or Not enough time.
+- Keep constraints, assignments and generated study blocks in local browser storage.
 
 ## Why the workload is different
 
@@ -62,7 +64,7 @@ For the demo, download `Semester 1 timetable` from the app, then select the down
 
 ## Current status
 
-Timetable import, assignment entry and workload estimation are complete. The next milestone is study-session scheduling.
+Timetable import, assignment entry, workload estimation and deterministic study-session scheduling are complete.
 
 ## Further reference
 
