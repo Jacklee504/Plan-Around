@@ -1,8 +1,8 @@
-# Impact Forge — Project Brief
+# PlanAround — Project Brief
 
 ## Purpose
 
-Impact Forge is a mobile-first student planning web app that turns an assignment brief into a realistic study plan. It estimates recommended effort from the module's ECTS value, assessment weighting, rubric marks, and requirement complexity, then schedules that work around a student's recurring commitments before the deadline.
+PlanAround is a mobile-first student planning web app that turns an assignment brief into a realistic study plan. It estimates recommended effort from the module's ECTS value, assessment weighting, rubric marks, and requirement complexity, then schedules that work around a student's recurring commitments before the deadline.
 
 ## The problem
 

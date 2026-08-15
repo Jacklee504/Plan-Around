@@ -1,6 +1,6 @@
-# Impact Forge
+# PlanAround
 
-Impact Forge helps students turn an assignment brief into a realistic study plan that fits around their actual week.
+Fit assignments around your actual week.
 
 Rather than offering another generic to-do list, it makes the planning decision for a single assessment visible and explainable:
 
@@ -20,7 +20,7 @@ Assignment brief + module weighting + weekly commitments
 
 ## Why the workload is different
 
-Impact Forge does not present an unexplained AI time guess. The recommended workload begins with module ECTS, assessment weighting, and configurable prototype assumptions, then distributes time across rubric tasks using marks and relative complexity. The user can inspect and adjust the result.
+PlanAround does not present an unexplained AI time guess. The recommended workload begins with module ECTS, assessment weighting, and configurable prototype assumptions, then distributes time across rubric tasks using marks and relative complexity. The user can inspect and adjust the result.
 
 ## Prototype scope
 

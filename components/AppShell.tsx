@@ -27,11 +27,11 @@ export function AppShell({ children, eyebrow, title, description }: AppShellProp
       <header className="flex items-center justify-between gap-4 border-b border-[var(--line)] pb-5">
         <Link href="/setup" className="group inline-flex items-center gap-3 rounded-md">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--accent)] text-sm font-bold text-white shadow-sm transition-transform duration-200 group-hover:-rotate-3">
-            IF
+            PA
           </span>
           <span>
-            <span className="block text-sm font-semibold tracking-[-0.02em]">Impact Forge</span>
-            <span className="block text-xs text-[var(--muted-ink)]">Assignment scheduler</span>
+            <span className="block text-sm font-semibold tracking-[-0.02em]">PlanAround</span>
+            <span className="block text-xs text-[var(--muted-ink)]">Fit assignments around your actual week.</span>
           </span>
         </Link>
         <span className="hidden rounded-full bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-medium text-[var(--muted-ink)] sm:inline-flex">

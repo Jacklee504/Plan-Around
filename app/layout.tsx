@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Impact Forge",
-  description: "Turn assignment briefs into realistic study plans.",
+  title: "PlanAround",
+  description: "Fit assignments around your actual week.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

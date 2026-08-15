@@ -1,7 +1,7 @@
 {
   "name": "planaround",
   "version": "1.0.0",
-  "description": "Impact Forge helps students turn an assignment brief into a realistic study plan that fits around their actual week.",
+  "description": "PlanAround helps students fit assignments around their actual week.",
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",

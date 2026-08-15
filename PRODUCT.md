@@ -10,7 +10,7 @@ University students who need to make a realistic plan for an assignment around c
 
 ## Product Purpose
 
-Impact Forge is a mobile-first assignment scheduler. It turns assignment details and a student's weekly constraints into an explainable workload breakdown and a proposed set of study sessions before the deadline. The first prototype must demonstrate this complete flow reliably.
+PlanAround is a mobile-first assignment scheduler. It turns assignment details and a student's weekly constraints into an explainable workload breakdown and a proposed set of study sessions before the deadline. The first prototype must demonstrate this complete flow reliably.
 
 ## Brand Personality
 

@@ -1,6 +1,8 @@
 export const storageKeys = {
-  modules: "impact-forge.modules",
-  commitments: "impact-forge.commitments",
+  modules: "plan-around.modules",
+  commitments: "plan-around.commitments",
+  assignments: "plan-around.assignments",
+  studyBlocks: "plan-around.study-blocks",
 } as const;
 
 export function readStoredValue<T>(key: string, fallback: T): T {
