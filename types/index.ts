@@ -5,6 +5,7 @@ export type Module = {
   name: string;
   code?: string;
   credits: number;
+  creditsConfirmed?: boolean;
 };
 
 export type Commitment = {
@@ -18,7 +19,7 @@ export type Commitment = {
 
 export type TimetableSessionType = "lecture" | "lab" | "tutorial";
 
-export type TimetableAttendance = "attending" | "skip-this-week" | "skip-every-week";
+export type TimetableAttendance = "attending" | "skip-every-week";
 
 export type TimetableEntry = {
   id: string;
@@ -29,6 +30,7 @@ export type TimetableEntry = {
   end: string;
   sessionType: TimetableSessionType;
   attendance: TimetableAttendance;
+  skippedWeeks: string[];
 };
 
 export type AssignmentTask = {

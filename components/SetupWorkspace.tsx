@@ -8,9 +8,9 @@ import type { Commitment, CommitmentCategory, Module, TimetableAttendance, Timet
 
 const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const calendarDays = [1, 2, 3, 4, 5];
-const calendarStartHour = 9;
-const calendarEndHour = 18;
-const hourHeight = 58;
+const calendarStartHour = 8;
+const calendarEndHour = 22;
+const hourHeight = 52;
 
 const categoryLabels: Record<CommitmentCategory, string> = {
   class: "Class",
@@ -36,6 +36,21 @@ const createId = () => window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.ra
 const minutesFromTime = (time: string) => {
   const [hours, minutes] = time.split(":").map(Number);
   return hours * 60 + minutes;
+};
+
+function getWeekKey(date = new Date()) {
+  const monday = new Date(date);
+  const distanceFromMonday = (monday.getDay() + 6) % 7;
+  monday.setDate(monday.getDate() - distanceFromMonday);
+  monday.setHours(0, 0, 0, 0);
+  return monday.toISOString().slice(0, 10);
+}
+
+const currentWeekKey = getWeekKey();
+
+type LegacyTimetableEntry = Omit<TimetableEntry, "attendance" | "skippedWeeks"> & {
+  attendance?: TimetableAttendance | "skip-this-week";
+  skippedWeeks?: string[];
 };
 
 function blockPosition(start: string, end: string) {
@@ -66,7 +81,12 @@ export function SetupWorkspace() {
     const hydrationTimer = window.setTimeout(() => {
       setModules(readStoredValue<Module[]>(storageKeys.modules, []));
       setCommitments(readStoredValue<Commitment[]>(storageKeys.commitments, []));
-      setTimetableEntries(readStoredValue<TimetableEntry[]>(storageKeys.timetableEntries, []));
+      const storedEntries = readStoredValue<LegacyTimetableEntry[]>(storageKeys.timetableEntries, []);
+      setTimetableEntries(storedEntries.map((entry) => ({
+        ...entry,
+        attendance: entry.attendance === "skip-every-week" ? "skip-every-week" : "attending",
+        skippedWeeks: entry.skippedWeeks ?? (entry.attendance === "skip-this-week" ? [currentWeekKey] : []),
+      })));
       setIsLoaded(true);
     }, 0);
 
@@ -88,7 +108,9 @@ export function SetupWorkspace() {
   const selectedEntry = timetableEntries.find((entry) => entry.id === selectedEntryId) ?? null;
   const importedModuleCount = new Set(timetableEntries.map((entry) => entry.moduleCode)).size;
   const hasTimetable = timetableEntries.length > 0;
-  const totalBlockedTime = timetableEntries.filter((entry) => entry.attendance === "attending").length + commitments.length;
+  const isSkippedThisWeek = (entry: TimetableEntry) => entry.attendance === "skip-every-week" || entry.skippedWeeks.includes(currentWeekKey);
+  const totalBlockedTime = timetableEntries.filter((entry) => !isSkippedThisWeek(entry)).length + commitments.length;
+  const unconfirmedCreditCount = modules.filter((module) => module.creditsConfirmed !== true).length;
 
   function resetModuleForm() {
     setModuleDraft(emptyModuleDraft);
@@ -105,7 +127,7 @@ export function SetupWorkspace() {
       return;
     }
 
-    const nextModule: Module = { id: editingModuleId ?? createId(), name, code: moduleDraft.code.trim() || undefined, credits };
+    const nextModule: Module = { id: editingModuleId ?? createId(), name, code: moduleDraft.code.trim() || undefined, credits, creditsConfirmed: true };
     setModules((current) => editingModuleId ? current.map((module) => module.id === editingModuleId ? nextModule : module) : [...current, nextModule]);
     resetModuleForm();
   }
@@ -149,13 +171,14 @@ export function SetupWorkspace() {
     try {
       const pdfContent = await file.text();
       const parsed = parseTimetablePdf(pdfContent);
-      const nextEntries = parsed.entries.map((entry) => ({ ...entry, id: createId(), attendance: "attending" as const }));
+      const nextEntries = parsed.entries.map((entry) => ({ ...entry, id: createId(), attendance: "attending" as const, skippedWeeks: [] }));
       const importedModules = [...new Map(nextEntries.map((entry) => [entry.moduleCode, entry])).values()]
         .map((entry) => ({
           id: createId(),
           code: entry.moduleCode,
           name: entry.moduleName,
           credits: 5,
+          creditsConfirmed: false,
         }));
 
       setTimetableEntries(nextEntries);
@@ -170,7 +193,30 @@ export function SetupWorkspace() {
 
   function updateAttendance(attendance: TimetableAttendance) {
     if (!selectedEntry) return;
-    setTimetableEntries((current) => current.map((entry) => entry.id === selectedEntry.id ? { ...entry, attendance } : entry));
+    setTimetableEntries((current) => current.map((entry) => entry.id === selectedEntry.id ? {
+      ...entry,
+      attendance,
+      skippedWeeks: attendance === "attending" ? entry.skippedWeeks.filter((week) => week !== currentWeekKey) : entry.skippedWeeks,
+    } : entry));
+  }
+
+  function skipSelectedEntryThisWeek() {
+    if (!selectedEntry) return;
+    setTimetableEntries((current) => current.map((entry) => entry.id === selectedEntry.id ? {
+      ...entry,
+      attendance: "attending",
+      skippedWeeks: entry.skippedWeeks.includes(currentWeekKey) ? entry.skippedWeeks : [...entry.skippedWeeks, currentWeekKey],
+    } : entry));
+  }
+
+  function updateModuleCredits(moduleId: string, value: string) {
+    const credits = Number(value);
+    if (!Number.isFinite(credits) || credits <= 0) return;
+    setModules((current) => current.map((module) => module.id === moduleId ? { ...module, credits, creditsConfirmed: false } : module));
+  }
+
+  function confirmModuleCredits(moduleId: string) {
+    setModules((current) => current.map((module) => module.id === moduleId ? { ...module, creditsConfirmed: true } : module));
   }
 
   function resetPlanAround() {
@@ -198,7 +244,7 @@ export function SetupWorkspace() {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Semester timetable</p>
           <h2 id="upload-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Import your real teaching week.</h2>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Start with the supplied text-based PDF. PlanAround reads its weekday, time, module and session rows, then turns them into an editable calendar.</p>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Use the supplied supported timetable PDF for this prototype, then check its modules and classes in the editable calendar.</p>
         </div>
         <div className="flex flex-wrap gap-3 lg:justify-end">
           <Link href="/semester-1-timetable.pdf" download className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">
@@ -241,7 +287,7 @@ export function SetupWorkspace() {
                   {calendarDays.map((dayOfWeek) => (
                     <div key={dayOfWeek} className="relative border-r border-[var(--line)] last:border-r-0" style={{ height: (calendarEndHour - calendarStartHour) * hourHeight, backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent 57px, var(--line) 58px)" }}>
                       {timetableEntries.filter((entry) => entry.dayOfWeek === dayOfWeek).map((entry) => {
-                        const isSkipped = entry.attendance !== "attending";
+                        const isSkipped = isSkippedThisWeek(entry);
                         return (
                           <button key={entry.id} type="button" onClick={() => setSelectedEntryId(entry.id)} className={`absolute left-1 right-1 overflow-hidden rounded-lg border px-2 py-1.5 text-left text-xs leading-4 transition-colors ${isSkipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : "border-[var(--accent-soft)] bg-[var(--accent-soft)] text-[var(--ink)] hover:border-[var(--accent)]"}`} style={blockPosition(entry.start, entry.end)}>
                             <span className="block truncate font-bold">{entry.moduleCode}</span>
@@ -270,7 +316,7 @@ export function SetupWorkspace() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => updateAttendance("attending")} className={`min-h-10 rounded-lg px-3 text-sm font-semibold ${selectedEntry.attendance === "attending" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)]"}`}>Going</button>
-                  <button type="button" onClick={() => updateAttendance("skip-this-week")} className={`min-h-10 rounded-lg px-3 text-sm font-semibold ${selectedEntry.attendance === "skip-this-week" ? "bg-[var(--ink)] text-white" : "border border-[var(--line)]"}`}>Not going this week</button>
+                  <button type="button" onClick={skipSelectedEntryThisWeek} className={`min-h-10 rounded-lg px-3 text-sm font-semibold ${selectedEntry.skippedWeeks.includes(currentWeekKey) ? "bg-[var(--ink)] text-white" : "border border-[var(--line)]"}`}>Not going this week</button>
                   <button type="button" onClick={() => updateAttendance("skip-every-week")} className={`min-h-10 rounded-lg px-3 text-sm font-semibold ${selectedEntry.attendance === "skip-every-week" ? "bg-[var(--ink)] text-white" : "border border-[var(--line)]"}`}>Not going every week</button>
                 </div>
               </div>
@@ -295,17 +341,19 @@ export function SetupWorkspace() {
 
             <aside className="h-fit border-t border-[var(--line)] pt-5 lg:sticky lg:top-6">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Setup status</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Your constraints are ready.</h2>
+              <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">{unconfirmedCreditCount ? "Confirm your module credits." : "Your constraints are ready."}</h2>
               <dl className="mt-5 space-y-3 border-y border-[var(--line)] py-4 text-sm"><div className="flex justify-between gap-4"><dt className="text-[var(--muted-ink)]">Modules</dt><dd className="font-semibold">{modules.length}</dd></div><div className="flex justify-between gap-4"><dt className="text-[var(--muted-ink)]">Calendar blocks</dt><dd className="font-semibold">{totalBlockedTime}</dd></div></dl>
-              <Link href="/assignment" className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Continue to assignment</Link>
+              {unconfirmedCreditCount ? <p className="mt-4 text-sm leading-6 text-[var(--muted-ink)]">Confirm the ECTS for all {unconfirmedCreditCount} imported module{unconfirmedCreditCount === 1 ? "" : "s"} before workload planning.</p> : null}
+              {unconfirmedCreditCount ? <button type="button" disabled className="mt-5 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center rounded-xl bg-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)]">Confirm credits to continue</button> : <Link href="/assignment" className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Continue to assignment</Link>}
               <button type="button" onClick={resetPlanAround} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-800">Reset all PlanAround data</button>
             </aside>
           </section>
 
           <section aria-labelledby="modules-heading" className="border-t border-[var(--line)] pt-8">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Check the import</p>
-            <h2 id="modules-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Modules</h2>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{modules.map((module) => <div key={module.id} className="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3"><p className="text-sm font-semibold">{module.name}</p><p className="mt-1 text-xs text-[var(--muted-ink)]">{module.code ?? "No code"} · {module.credits} ECTS</p></div>)}</div>
+            <h2 id="modules-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Confirm module credits</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">ECTS is pre-filled at 5 because the timetable does not include credit values. Confirm or adjust each value before building an assignment plan.</p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{modules.map((module) => <div key={module.id} className="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3"><p className="text-sm font-semibold">{module.name}</p><p className="mt-1 text-xs text-[var(--muted-ink)]">{module.code ?? "No code"}</p><label className="mt-3 block text-xs font-semibold text-[var(--muted-ink)]">ECTS<input value={module.credits} onChange={(event) => updateModuleCredits(module.id, event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-[var(--line)] bg-[var(--surface-soft)] px-3 text-sm text-[var(--ink)]" type="number" min="0.5" step="0.5" /></label><button type="button" onClick={() => confirmModuleCredits(module.id)} className={`mt-3 min-h-10 w-full rounded-lg px-3 text-sm font-semibold ${module.creditsConfirmed === true ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]"}`}>{module.creditsConfirmed === true ? "Credits confirmed" : `Confirm ${module.credits} ECTS`}</button></div>)}</div>
             <form onSubmit={saveModule} className="mt-5 grid gap-3 border-t border-[var(--line)] pt-5 sm:grid-cols-[1fr_0.5fr_0.3fr_auto] sm:items-end">
               <label className="text-sm font-medium">Module name<input value={moduleDraft.name} onChange={(event) => setModuleDraft((current) => ({ ...current, name: event.target.value }))} className={inputClassName} placeholder="Optional module" /></label>
               <label className="text-sm font-medium">Code<input value={moduleDraft.code} onChange={(event) => setModuleDraft((current) => ({ ...current, code: event.target.value }))} className={inputClassName} placeholder="CS306" /></label>

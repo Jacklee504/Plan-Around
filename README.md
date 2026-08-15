@@ -32,7 +32,11 @@ The app is a mobile-first Next.js/TypeScript web app with three steps:
 3. Plan        Workload review and generated study timetable
 ```
 
-Persistence is local to the browser. The first timetable importer intentionally supports text-based PDFs whose rows contain a weekday, start and end time, module code/name, and session type. It uses the file's content, not its filename or preset data. Broader PDF and screenshot recognition will need an OCR or vision service.
+Persistence is local to the browser.
+
+### Timetable import note
+
+The first release supports the supplied timetable PDF format and extracts its readable schedule rows locally. It is a controlled prototype import, not general support for every university PDF or screenshot.
 
 ## Stack
 
