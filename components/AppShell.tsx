@@ -19,7 +19,8 @@ const steps = [
 
 export function AppShell({ children, eyebrow, title, description }: AppShellProps) {
   const pathname = usePathname();
-  const currentStep = steps.findIndex((step) => pathname.startsWith(step.href));
+  const matchedStep = steps.findIndex((step) => pathname.startsWith(step.href));
+  const currentStep = matchedStep === -1 ? 0 : matchedStep;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-5 pb-10 pt-5 sm:px-8 sm:pt-8">

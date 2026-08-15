@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import SetupPage from "./setup/page";
 
 export default function Home() {
-  redirect("/setup");
+  return <SetupPage />;
 }
