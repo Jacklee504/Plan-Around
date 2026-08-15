@@ -1,19 +1,14 @@
 import { AppShell } from "@/components/AppShell";
-import { BootstrapPanel } from "@/components/BootstrapPanel";
+import { AssignmentWorkspace } from "@/components/AssignmentWorkspace";
 
 export default function AssignmentPage() {
   return (
     <AppShell
       eyebrow="Step 02 of 03"
       title="Give the assignment some context."
-      description="The planner will turn its weighting, deadline and rubric into an explainable workload recommendation."
+      description="Add the details you already have. PlanAround will turn them into an explainable workload recommendation before it makes a study plan."
     >
-      <BootstrapPanel
-        title="Assignment details"
-        detail="The prototype will accept assignment basics, pasted text or a selected file, then return a structured mock analysis."
-        action="Analyse assignment"
-        items={["Choose the linked module", "Set the title, deadline and grade weight", "Paste or select the assignment brief", "Review the rubric-weighted workload"]}
-      />
+      <AssignmentWorkspace />
     </AppShell>
   );
 }

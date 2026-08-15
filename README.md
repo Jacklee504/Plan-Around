@@ -16,7 +16,9 @@ Assignment brief + module weighting + weekly commitments
 - View the resulting teaching schedule in an editable weekly calendar.
 - Mark a class as not attended for the current week or for every week.
 - Add personal commitments alongside classes.
-- Keep the resulting constraints in local browser storage for the assignment-planning steps.
+- Add an assignment against an imported module, with its deadline and module weighting.
+- Optionally add rubric tasks, marks, complexity and notes, or load realistic demo details.
+- Keep constraints and assignments in local browser storage for the later planning steps.
 
 ## Why the workload is different
 
@@ -28,7 +30,7 @@ The app is a mobile-first Next.js/TypeScript web app with three steps:
 
 ```text
 1. Timetable   Import and adjust classes plus personal commitments
-2. Assignment  Assessment details and brief analysis
+2. Assignment  Assessment details and optional rubric tasks
 3. Plan        Workload review and generated study timetable
 ```
 
@@ -59,7 +61,7 @@ For the demo, download `Semester 1 timetable` from the app, then select the down
 
 ## Current status
 
-The working timetable-import milestone is complete. The next milestone is assignment entry and task-breakdown review, followed by workload scheduling.
+Timetable import and assignment entry are complete. The next milestone is workload estimation, followed by study-session scheduling.
 
 ## Further reference
 
