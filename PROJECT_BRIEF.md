@@ -99,3 +99,68 @@ Browser
 → Qwen3.5-397B-A17B
 → validated structured draft
 → user review
+``` 
+
+## Planning Approach
+
+PlanAround estimates assignment workload using module ECTS, assessment weighting and rubric structure rather than asking an AI model to guess a study duration.
+
+The workload is then scheduled deterministically around the student's classes and commitments before the deadline.
+
+The student can review and override the workload recommendation when needed.
+
+## Scheduling
+
+The scheduler uses the student's actual availability and avoids:
+
+- attended teaching sessions;
+- recurring commitments;
+- one-off dated commitments;
+- existing study sessions from other current plans.
+
+It prefers practical study sessions of roughly 60–120 minutes and aims to finish before the deadline where possible.
+
+The result is shown as:
+
+- **On track**
+- **Schedule is tight**
+- **Not enough available time**
+
+If relevant inputs change, the existing plan is treated as outdated and must be regenerated.
+
+## Technology
+
+PlanAround uses:
+
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+- localStorage
+- Vercel
+- Cloudflare Workers
+- Featherless
+- Qwen3.5-397B-A17B
+
+Workload calculation and scheduling are implemented as deterministic TypeScript logic outside the AI layer.
+
+## Scope
+
+The hackathon prototype focuses on the complete flow from timetable and assignment input to a realistic study plan.
+
+It is designed primarily for desktop use.
+
+Outside the current scope:
+
+- calendar-provider integrations;
+- accounts and cloud persistence;
+- generic PDF OCR;
+- automatic replanning;
+- native mobile applications;
+- general-purpose task management.
+
+## Core Principle
+
+Use AI to understand messy input.
+
+Use deterministic logic for decisions that should be explainable.

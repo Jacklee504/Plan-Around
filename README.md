@@ -24,16 +24,16 @@ PlanAround combines both problems into one planning workflow.
 
 ## Built with
 
-Next.js · TypeScript · Tailwind · Cloudflare Workers · Featherless
+Next.js · TypeScript · Tailwind CSS · Cloudflare Workers · Featherless
 
 AI handles interpretation. Workload calculation and scheduling are deterministic.
 
 ## Run locally
 
-\`\`\`bash
+```bash
 npm install
 npm run dev
-\`\`\`
+```
 
 ## More detail
 
