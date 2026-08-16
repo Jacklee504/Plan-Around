@@ -246,6 +246,48 @@ describe("hosted assignment analyser", () => {
     expect(calls).toBe(2);
   });
 
+  it("retries a transient Featherless response once before returning a result", async () => {
+    let calls = 0;
+    const pauses: number[] = [];
+    const worker = createWorker(async () => {
+      calls += 1;
+      return calls === 1 ? new Response(null, { status: 503 }) : providerResponse(workerAnalysis);
+    }, async (milliseconds) => { pauses.push(milliseconds); });
+
+    const response = await worker.fetch(workerRequest(), workerEnv);
+
+    expect(response.status).toBe(200);
+    expect(calls).toBe(2);
+    expect(pauses).toEqual([500]);
+  });
+
+  it("retries a transient Featherless network failure once", async () => {
+    let calls = 0;
+    const worker = createWorker(async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError("network failed");
+      return providerResponse(workerAnalysis);
+    }, async () => {});
+
+    const response = await worker.fetch(workerRequest(), workerEnv);
+
+    expect(response.status).toBe(200);
+    expect(calls).toBe(2);
+  });
+
+  it("does not retry a rejected Featherless request", async () => {
+    let calls = 0;
+    const worker = createWorker(async () => {
+      calls += 1;
+      return new Response(null, { status: 403 });
+    }, async () => {});
+
+    const response = await worker.fetch(workerRequest(), workerEnv);
+
+    expect(response.status).toBe(502);
+    expect(calls).toBe(1);
+  });
+
   it("adds the invalid first response to the repair request", async () => {
     const providerBodies: string[] = [];
     const worker = createWorker(async (_input, init) => {

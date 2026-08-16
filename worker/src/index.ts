@@ -9,11 +9,21 @@ import {
 
 const MAX_REQUEST_BYTES = 25_000;
 const MAX_UPSTREAM_RESPONSE_BYTES = 100_000;
+const PROVIDER_TIMEOUT_MS = 25_000;
+const PROVIDER_RETRY_DELAY_MS = 500;
+const RETRYABLE_PROVIDER_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 class ClientInputError extends Error {}
 class ProviderResponseError extends Error {}
+class TransientProviderError extends Error {}
+
+type Wait = (milliseconds: number) => Promise<void>;
+
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
 
 function corsHeaders(origin: string | null, env: Env) {
   const headers = new Headers({
@@ -128,43 +138,75 @@ function parseAnalysis(content: string): AssignmentAnalysis {
   return validateAssignmentAnalysis(JSON.parse(stripJsonCodeFence(content)));
 }
 
-async function requestProvider(messages: ChatMessage[], env: Env, upstreamFetch: typeof fetch) {
+async function requestProviderOnce(messages: ChatMessage[], env: Env, upstreamFetch: typeof fetch) {
   if (!env.FEATHERLESS_API_KEY) throw new Error("AI provider is not configured.");
 
-  const response = await upstreamFetch(`${env.AI_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.FEATHERLESS_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://jacklee504.github.io/PlanAround/",
-      "X-Title": "PlanAround",
-    },
-    body: JSON.stringify({
-      model: env.AI_MODEL,
-      temperature: 0.1,
-      max_tokens: 1200,
-      response_format: { type: "json_object" },
-      chat_template_kwargs: { enable_thinking: false },
-      messages,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
-  if (!response.ok) throw new Error("AI provider request failed.");
-  const providerBody = await readBoundedText(
-    response.body,
-    MAX_UPSTREAM_RESPONSE_BYTES,
-    () => new ProviderResponseError("AI provider response was too large."),
-  );
-  return contentFromProviderPayload(JSON.parse(providerBody));
+  try {
+    const response = await upstreamFetch(`${env.AI_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.FEATHERLESS_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://jacklee504.github.io/PlanAround/",
+        "X-Title": "PlanAround",
+      },
+      body: JSON.stringify({
+        model: env.AI_MODEL,
+        temperature: 0.1,
+        max_tokens: 1200,
+        response_format: { type: "json_object" },
+        chat_template_kwargs: { enable_thinking: false },
+        messages,
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      if (RETRYABLE_PROVIDER_STATUSES.has(response.status)) {
+        throw new TransientProviderError("AI provider was temporarily unavailable.");
+      }
+      throw new ProviderResponseError("AI provider rejected the request.");
+    }
+
+    const providerBody = await readBoundedText(
+      response.body,
+      MAX_UPSTREAM_RESPONSE_BYTES,
+      () => new ProviderResponseError("AI provider response was too large."),
+    );
+
+    try {
+      return contentFromProviderPayload(JSON.parse(providerBody));
+    } catch {
+      throw new ProviderResponseError("AI provider response was invalid.");
+    }
+  } catch (error) {
+    if (error instanceof ProviderResponseError || error instanceof TransientProviderError) throw error;
+    throw new TransientProviderError("AI provider request did not complete.");
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
-async function analyseBrief(briefText: string, env: Env, upstreamFetch: typeof fetch) {
+async function requestProvider(messages: ChatMessage[], env: Env, upstreamFetch: typeof fetch, pause: Wait) {
+  try {
+    return await requestProviderOnce(messages, env, upstreamFetch);
+  } catch (error) {
+    if (!(error instanceof TransientProviderError)) throw error;
+    await pause(PROVIDER_RETRY_DELAY_MS);
+    return requestProviderOnce(messages, env, upstreamFetch);
+  }
+}
+
+async function analyseBrief(briefText: string, env: Env, upstreamFetch: typeof fetch, pause: Wait) {
   const messages: ChatMessage[] = [
     { role: "system", content: analysisSystemPrompt },
     { role: "user", content: createAnalysisPrompt(briefText) },
   ];
 
-  const firstContent = await requestProvider(messages, env, upstreamFetch);
+  const firstContent = await requestProvider(messages, env, upstreamFetch, pause);
   try {
     return parseAnalysis(firstContent);
   } catch {
@@ -173,11 +215,11 @@ async function analyseBrief(briefText: string, env: Env, upstreamFetch: typeof f
       { role: "assistant", content: firstContent },
       { role: "user", content: "Your previous response was invalid. Return only the exact requested JSON object, following every schema rule." },
     ];
-    return parseAnalysis(await requestProvider(repairedMessages, env, upstreamFetch));
+    return parseAnalysis(await requestProvider(repairedMessages, env, upstreamFetch, pause));
   }
 }
 
-export function createWorker(upstreamFetch: typeof fetch = fetch) {
+export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = wait) {
   return {
     async fetch(request: Request, env: Env): Promise<Response> {
       const url = new URL(request.url);
@@ -203,7 +245,7 @@ export function createWorker(upstreamFetch: typeof fetch = fetch) {
           () => new ClientInputError("Request body is too large."),
         );
         const briefText = parseBriefRequest(requestBody);
-        const analysis = await analyseBrief(briefText, env, upstreamFetch);
+        const analysis = await analyseBrief(briefText, env, upstreamFetch, pause);
         const response: AssignmentAnalysisResponse = { analysis, provider: "featherless", model: env.AI_MODEL };
         return jsonResponse(response, 200, origin, env);
       } catch (error) {

@@ -4,6 +4,8 @@ import {
   validateAssignmentAnalysis,
 } from "@/lib/assignmentAnalysis";
 
+const ANALYZER_TIMEOUT_MS = 35_000;
+
 function getAnalyzerUrl() {
   const configuredUrl = process.env.NEXT_PUBLIC_ANALYZER_URL?.trim();
   if (configuredUrl) return configuredUrl;
@@ -15,22 +17,34 @@ export async function analyzeAssignmentBrief(briefText: string): Promise<Assignm
   if (!briefText.trim()) throw new Error("Paste an assignment brief before analysing it.");
   if (briefText.length > MAX_BRIEF_CHARACTERS) throw new Error("This brief is too long for the prototype analyser.");
 
-  let response: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ANALYZER_TIMEOUT_MS);
+  let payload: Partial<AssignmentAnalysisResponse>;
   try {
-    response = await fetch(getAnalyzerUrl(), {
+    const response = await fetch(getAnalyzerUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ briefText }),
+      signal: controller.signal,
     });
-  } catch {
+
+    if (!response.ok) {
+      throw new Error("The analyser could not read this brief. You can still enter the rubric manually.");
+    }
+
+    payload = await response.json() as Partial<AssignmentAnalysisResponse>;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("The analyser took too long. You can still enter the rubric manually.");
+    }
+    if (error instanceof Error && error.message === "The analyser could not read this brief. You can still enter the rubric manually.") {
+      throw error;
+    }
     throw new Error("The analyser is not available. You can still enter the rubric manually.");
+  } finally {
+    clearTimeout(timeout);
   }
 
-  if (!response.ok) {
-    throw new Error("The analyser could not read this brief. You can still enter the rubric manually.");
-  }
-
-  const payload = await response.json() as Partial<AssignmentAnalysisResponse>;
   if (!payload.analysis || (payload.provider !== "local-ollama" && payload.provider !== "featherless") || typeof payload.model !== "string") {
     throw new Error("The analyser returned an unsupported response. You can still enter the rubric manually.");
   }

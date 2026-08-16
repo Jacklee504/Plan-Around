@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { analyzeAssignmentBrief } from "@/lib/assignmentAnalyzer";
 import type { AssignmentAnalysisResponse } from "@/lib/assignmentAnalysis";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
@@ -61,6 +61,7 @@ export function AssignmentWorkspace() {
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
   const [showTasks, setShowTasks] = useState(false);
   const [briefText, setBriefText] = useState("");
+  const currentBriefText = useRef("");
   const [analysisResult, setAnalysisResult] = useState<AssignmentAnalysisResponse | null>(null);
   const [analysisSource, setAnalysisSource] = useState<Assignment["analysisSource"]>();
   const [isAnalysing, setIsAnalysing] = useState(false);
@@ -96,7 +97,7 @@ export function AssignmentWorkspace() {
     setDraft(emptyAssignmentDraft);
     setTasks([]);
     setShowTasks(false);
-    setBriefText("");
+    updateBriefText("");
     setAnalysisResult(null);
     setAnalysisSource(undefined);
     setAnalysisError("");
@@ -106,6 +107,14 @@ export function AssignmentWorkspace() {
 
   function updateTask(id: string, changes: Partial<TaskDraft>) {
     setTasks((current) => current.map((task) => task.id === id ? { ...task, ...changes } : task));
+  }
+
+  function updateBriefText(nextBriefText: string) {
+    currentBriefText.current = nextBriefText;
+    setBriefText(nextBriefText);
+    setAnalysisError("");
+    setAnalysisResult(null);
+    setNeedsReplacementConfirmation(false);
   }
 
   function saveAssignment(event: FormEvent<HTMLFormElement>) {
@@ -182,14 +191,17 @@ export function AssignmentWorkspace() {
   }
 
   async function analyseBrief() {
+    const analysedBriefText = briefText;
     setIsAnalysing(true);
     setAnalysisError("");
     setStatus("");
     setNeedsReplacementConfirmation(false);
     try {
-      const result = await analyzeAssignmentBrief(briefText);
+      const result = await analyzeAssignmentBrief(analysedBriefText);
+      if (currentBriefText.current !== analysedBriefText) return;
       setAnalysisResult(result);
     } catch (analysisFailure) {
+      if (currentBriefText.current !== analysedBriefText) return;
       setAnalysisResult(null);
       setAnalysisError(analysisFailure instanceof Error ? analysisFailure.message : "The analyser could not read this brief. You can still enter the rubric manually.");
     } finally {
@@ -305,11 +317,11 @@ export function AssignmentWorkspace() {
                   <h3 id="analysis-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Analyse an assignment brief.</h3>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Paste the assessment text to extract a draft rubric. You review it before anything is added.</p>
                 </div>
-                <button type="button" onClick={() => setBriefText("CS301 Coursework Project\n\nThis coursework contributes 40% of the module grade.\nSubmission deadline: 28 August 2026.\n\nAssessment:\nDesign and implementation, 45 marks\nDevelop a working application implementing the required core functionality.\n\nTesting and evaluation, 25 marks\nProvide appropriate test cases and critically evaluate the finished solution.\n\nTechnical report, 20 marks\nSubmit a report of approximately 2,500 words documenting architecture, implementation decisions and evaluation.\n\nPresentation, 10 marks\nDeliver a five-minute presentation demonstrating the completed system.")} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Load sample brief</button>
+                <button type="button" onClick={() => updateBriefText("CS301 Coursework Project\n\nThis coursework contributes 40% of the module grade.\nSubmission deadline: 28 August 2026.\n\nAssessment:\nDesign and implementation, 45 marks\nDevelop a working application implementing the required core functionality.\n\nTesting and evaluation, 25 marks\nProvide appropriate test cases and critically evaluate the finished solution.\n\nTechnical report, 20 marks\nSubmit a report of approximately 2,500 words documenting architecture, implementation decisions and evaluation.\n\nPresentation, 10 marks\nDeliver a five-minute presentation demonstrating the completed system.")} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Load sample brief</button>
               </div>
               <label className="mt-4 block text-sm font-medium">
                 Assignment brief
-                <textarea value={briefText} onChange={(event) => { setBriefText(event.target.value); setAnalysisError(""); }} className={`${inputClassName} min-h-36 py-3`} placeholder="Paste the assessment brief or rubric here" />
+                <textarea value={briefText} onChange={(event) => updateBriefText(event.target.value)} className={`${inputClassName} min-h-36 py-3`} placeholder="Paste the assessment brief or rubric here" />
               </label>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={analyseBrief} disabled={!briefText.trim() || isAnalysing} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">
