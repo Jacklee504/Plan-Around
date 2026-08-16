@@ -29,6 +29,8 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Test
+        run: npm test
       - name: Build static site
         run: npm run build
       - name: Upload GitHub Pages artifact

@@ -50,6 +50,10 @@ function formatDeadline(date: string) {
   return new Intl.DateTimeFormat("en-IE", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${date}T12:00:00`));
 }
 
+function formatAnalysisProvider(provider: AssignmentAnalysisResponse["provider"]) {
+  return provider === "local-ollama" ? "Local AI" : "Featherless AI";
+}
+
 export function AssignmentWorkspace() {
   const [modules, setModules] = useState<Module[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -129,7 +133,7 @@ export function AssignmentWorkspace() {
       name: task.name.trim(),
       marks: Number(task.marks),
       complexity: Number(task.complexity),
-      requirements: task.notes.trim() ? [task.notes.trim()] : [],
+      requirements: task.notes.split(/\r?\n/).map((requirement) => requirement.trim()).filter(Boolean),
     }));
     const assignment: Assignment = {
       id: createId(),
@@ -309,7 +313,7 @@ export function AssignmentWorkspace() {
               </label>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={analyseBrief} disabled={!briefText.trim() || isAnalysing} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">
-                  {isAnalysing ? "Analysing brief…" : "Analyse with local AI"}
+                  {isAnalysing ? "Analysing brief…" : "Analyse brief with AI"}
                 </button>
                 <p className="text-sm text-[var(--muted-ink)]">It extracts details only. Workload and scheduling stay explainable.</p>
               </div>
@@ -322,7 +326,7 @@ export function AssignmentWorkspace() {
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Review suggestions</p>
                       <h4 className="mt-1 text-base font-semibold">Nothing is added until you use these suggestions.</h4>
                     </div>
-                    <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-strong)]">Local AI review</span>
+                    <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-strong)]">{formatAnalysisProvider(analysisResult.provider)} review</span>
                   </div>
                   <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                     <div><dt className="text-[var(--muted-ink)]">Title</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.title ?? "Not found"}</dd></div>
@@ -407,7 +411,7 @@ export function AssignmentWorkspace() {
                   <div>
                     <p className="font-semibold">{assignment.title}</p>
                     <p className="mt-1 text-sm text-[var(--muted-ink)]">{linkedModule?.code ?? linkedModule?.name ?? "Module removed"} · Due {formatDeadline(assignment.deadline)} · {assignment.moduleWeight}% · {assignment.tasks.length ? `${assignment.tasks.length} tasks` : "No task breakdown"}</p>
-                    {assignment.analysisSource ? <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent-strong)]">AI-assisted rubric · {assignment.analysisSource.provider === "local-ollama" ? "local model" : "Featherless"}</p> : null}
+                    {assignment.analysisSource ? <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent-strong)]">AI-assisted rubric · {formatAnalysisProvider(assignment.analysisSource.provider)}</p> : null}
                   </div>
                   <div className="flex flex-wrap gap-1 sm:justify-self-end">
                     <button type="button" onClick={() => setSelectedWorkloadAssignmentId(assignment.id)} className="min-h-10 rounded-lg px-3 text-sm font-semibold text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]">{selectedWorkloadAssignmentId === assignment.id ? "Viewing workload" : "View workload"}</button>

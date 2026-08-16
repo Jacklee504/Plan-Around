@@ -20,7 +20,7 @@ export async function analyzeAssignmentBrief(briefText: string): Promise<Assignm
       body: JSON.stringify({ briefText }),
     });
   } catch {
-    throw new Error("The local analyser is not available. You can still enter the rubric manually.");
+    throw new Error("The analyser is not available. You can still enter the rubric manually.");
   }
 
   if (!response.ok) {

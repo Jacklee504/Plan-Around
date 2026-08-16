@@ -121,7 +121,7 @@ export function PlanWorkspace() {
     ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments })
     : null;
   const existingResult = recalculatedResult && !isStoredPlanStale ? getResultForExistingBlocks(storedSelectedBlocks, recalculatedResult) : null;
-  const result = generatedResult?.studyBlocks[0]?.assignmentId === selectedAssignmentId ? generatedResult : existingResult;
+  const result = generatedResult ?? existingResult;
   const groupedBlocks = (result?.studyBlocks ?? []).reduce<Record<string, StudyBlock[]>>((groups, block) => {
     (groups[block.date] ??= []).push(block);
     return groups;
