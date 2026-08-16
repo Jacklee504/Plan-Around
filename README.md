@@ -19,7 +19,7 @@ Assignment details + module weighting + weekly commitments
 - Mark a class as not attended for the current week or for every week.
 - Add personal commitments alongside classes.
 - Add an assignment against an imported module, with its deadline and module weighting.
-- Paste an assignment brief into a local AI review, then inspect and apply only the suggested title, deadline, weighting and rubric tasks you want. Missing marks remain for the student to confirm.
+- Paste an assignment brief into an AI-assisted review, then inspect and apply only the suggested title, deadline, weighting and rubric tasks you want. Missing marks remain for the student to confirm.
 - Optionally add rubric tasks, marks, complexity and notes manually, or load realistic demo details.
 - Review a transparent, rubric-weighted workload recommendation and override its total when needed.
 - Generate study blocks from 08:00 to 22:00 around attended classes and personal commitments.
@@ -46,16 +46,25 @@ Persistence is local to the browser.
 ## Demo in three steps
 
 1. In **Timetable**, download and import the supplied Semester 1 timetable PDF, then confirm the detected module credits and add a commitment if useful.
-2. In **Assignment**, load the demo assignment or enter an assessment against an imported module. Review its rubric tasks and workload recommendation.
+2. In **Assignment**, load the sample brief, analyse it, review the suggested rubric, and confirm any missing marks before saving. Manual rubric entry remains available throughout.
 3. In **Plan**, generate the proposed study sessions and show the workload story, project buffer, status and sessions grouped by date.
 
 ## How it works
 
 ```text
 Timetable → local parser → constraints
-Assignment brief → local AI review → editable rubric
-Assignment and rubric → workload.ts
-Constraints + workload → scheduler.ts → study plan
+
+Assignment brief
+→ Cloudflare Worker
+→ Featherless + Qwen3.5-9B
+→ reviewed, editable rubric
+
+Assignment + rubric
+→ deterministic workload.ts
+
+Constraints + workload
+→ deterministic scheduler.ts
+→ study plan
 ```
 
 ### Timetable import note
@@ -68,6 +77,9 @@ The first release supports the supplied timetable PDF format and extracts its re
 - TypeScript
 - Tailwind CSS
 - localStorage
+- GitHub Pages frontend hosting
+- Cloudflare Worker AI boundary
+- Featherless + Qwen3.5-9B for brief interpretation
 - Deterministic scheduling and workload logic
 
 ## Run locally
@@ -81,19 +93,21 @@ Open [http://localhost:3000](http://localhost:3000). The root opens the timetabl
 
 For the demo, download `Semester 1 timetable` from the app, then select the downloaded PDF to see the local importer build the calendar.
 
-### Optional local AI review
+### AI-assisted brief review
 
-The AI stage is local-only for the first integration pass. With Ollama running and the `qwen3.5:9b` model installed, use a second terminal:
+The live prototype sends an assignment brief to a Cloudflare Worker, which uses Featherless with `Qwen/Qwen3.5-9B` to produce a structured draft rubric. The student reviews and edits that draft before it affects the assignment. The AI never calculates workload hours, creates study sessions, or bypasses the review step.
+
+For local development, Ollama remains an optional provider. With Ollama running and the `qwen3.5:9b` model installed, use a second terminal:
 
 ```bash
 npm run ai:local
 ```
 
-Then use **Analyse with local AI** on the Assignment page. The browser sends the brief only to `http://localhost:8787/analyze`; the local service talks to Ollama. No API key or assignment content is sent to a hosted service in this mode. If the service is not running, manual rubric entry remains available.
+Then use **Analyse with local AI** on the Assignment page. The browser sends the brief only to `http://localhost:8787/analyze`; the local service talks to Ollama. No API key or assignment content is sent to a hosted service in this mode. If either AI provider is unavailable, manual rubric entry remains available.
 
 ## Current status
 
-Timetable import, local AI-assisted or manual rubric entry, workload estimation, stale-plan detection and deterministic study-session scheduling are complete. AI only extracts a reviewed draft rubric. Workload and scheduling remain deterministic.
+Timetable import, AI-assisted or manual rubric entry, workload estimation, stale-plan detection and deterministic study-session scheduling are complete. AI only extracts a reviewed draft rubric; workload and scheduling remain deterministic.
 
 ## Further reference
 
