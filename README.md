@@ -2,10 +2,12 @@
 
 Fit assignments around your actual week.
 
+[Open the live prototype](https://jacklee504.github.io/PlanAround/)
+
 Rather than offering another generic to-do list, it makes the planning decision for a single assessment visible and explainable:
 
 ```text
-Assignment brief + module weighting + weekly commitments
+Assignment details + module weighting + weekly commitments
 → workload breakdown + automatically scheduled study sessions
 ```
 
@@ -20,7 +22,8 @@ Assignment brief + module weighting + weekly commitments
 - Optionally add rubric tasks, marks, complexity and notes, or load realistic demo details.
 - Review a transparent, rubric-weighted workload recommendation and override its total when needed.
 - Generate study blocks from 08:00 to 22:00 around attended classes and personal commitments.
-- Preserve a 24-hour deadline buffer where capacity permits, and flag plans as On track, Tight or Not enough time.
+- Aim to finish before the deadline date, using that date only when capacity makes it necessary, and flag plans as On track, Tight or Not enough time.
+- Detect when timetable, commitment or workload inputs have changed, and require the plan to be regenerated before showing saved study blocks.
 - Keep constraints, assignments and generated study blocks in local browser storage.
 
 ## Why the workload is different
@@ -38,6 +41,20 @@ The app is a mobile-first Next.js/TypeScript web app with three steps:
 ```
 
 Persistence is local to the browser.
+
+## Demo in three steps
+
+1. In **Timetable**, download and import the supplied Semester 1 timetable PDF, then confirm the detected module credits and add a commitment if useful.
+2. In **Assignment**, load the demo assignment or enter an assessment against an imported module. Review its rubric tasks and workload recommendation.
+3. In **Plan**, generate the proposed study sessions and show the workload story, project buffer, status and sessions grouped by date.
+
+## How it works
+
+```text
+Timetable → local parser → constraints
+Assignment and rubric → workload.ts
+Constraints + workload → scheduler.ts → study plan
+```
 
 ### Timetable import note
 
@@ -64,7 +81,7 @@ For the demo, download `Semester 1 timetable` from the app, then select the down
 
 ## Current status
 
-Timetable import, assignment entry, workload estimation and deterministic study-session scheduling are complete.
+Timetable import, manual assignment and rubric entry, workload estimation, stale-plan detection and deterministic study-session scheduling are complete.
 
 ## Further reference
 

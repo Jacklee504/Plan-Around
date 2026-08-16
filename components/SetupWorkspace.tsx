@@ -38,12 +38,19 @@ const minutesFromTime = (time: string) => {
   return hours * 60 + minutes;
 };
 
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function getWeekKey(date = new Date()) {
   const monday = new Date(date);
   const distanceFromMonday = (monday.getDay() + 6) % 7;
   monday.setDate(monday.getDate() - distanceFromMonday);
   monday.setHours(0, 0, 0, 0);
-  return monday.toISOString().slice(0, 10);
+  return localDateKey(monday);
 }
 
 const currentWeekKey = getWeekKey();
@@ -172,14 +179,20 @@ export function SetupWorkspace() {
       const pdfContent = await file.text();
       const parsed = parseTimetablePdf(pdfContent);
       const nextEntries = parsed.entries.map((entry) => ({ ...entry, id: createId(), attendance: "attending" as const, skippedWeeks: [] }));
+      const existingModulesByCode = new Map(modules
+        .filter((module) => module.code)
+        .map((module) => [module.code!.toUpperCase(), module]));
       const importedModules = [...new Map(nextEntries.map((entry) => [entry.moduleCode, entry])).values()]
-        .map((entry) => ({
-          id: createId(),
-          code: entry.moduleCode,
-          name: entry.moduleName,
-          credits: 5,
-          creditsConfirmed: false,
-        }));
+        .map((entry) => {
+          const existingModule = existingModulesByCode.get(entry.moduleCode);
+          return {
+            id: existingModule?.id ?? createId(),
+            code: entry.moduleCode,
+            name: entry.moduleName,
+            credits: existingModule?.credits ?? 5,
+            creditsConfirmed: existingModule?.creditsConfirmed ?? false,
+          };
+        });
 
       setTimetableEntries(nextEntries);
       setModules(importedModules);

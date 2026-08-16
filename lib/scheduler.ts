@@ -78,7 +78,7 @@ function getWeekKey(date: Date) {
   const monday = startOfDay(date);
   const distanceFromMonday = (monday.getDay() + 6) % 7;
   monday.setDate(monday.getDate() - distanceFromMonday);
-  return monday.toISOString().slice(0, 10);
+  return dateKey(monday);
 }
 
 function isTimetableEntryActive(entry: TimetableEntry, date: Date) {

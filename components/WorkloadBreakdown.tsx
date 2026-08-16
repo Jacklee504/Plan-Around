@@ -48,7 +48,7 @@ export function WorkloadBreakdown({ assignment, module, onOverrideChange }: Work
 
       <dl className="mt-6 grid border-y border-[var(--line)] sm:grid-cols-3">
         <div className="py-4 sm:border-r sm:border-[var(--line)] sm:pr-5"><dt className="text-sm text-[var(--muted-ink)]">Focused task time</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{formatHours(workload.usableHours)}</dd></div>
-        <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:px-5 sm:border-r"><dt className="text-sm text-[var(--muted-ink)]">Deadline buffer</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{formatHours(workload.bufferHours)}</dd></div>
+        <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:px-5 sm:border-r"><dt className="text-sm text-[var(--muted-ink)]">Project buffer</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{formatHours(workload.bufferHours)}</dd></div>
         <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:pl-5"><dt className="text-sm text-[var(--muted-ink)]">Total recommendation</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{formatHours(workload.totalHours)}</dd></div>
       </dl>
 

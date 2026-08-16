@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { createPlanFingerprint } from "@/lib/planSnapshot";
 import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
@@ -12,7 +13,7 @@ type PlanStatus = ScheduleResult["status"];
 const statusCopy: Record<PlanStatus, { label: string; detail: string; className: string }> = {
   "on-track": {
     label: "On track",
-    detail: "The required focused time fits before the final 24-hour buffer.",
+    detail: "The focused work fits before the deadline date.",
     className: "bg-[var(--accent-soft)] text-[var(--accent-strong)]",
   },
   tight: {
@@ -68,6 +69,7 @@ export function PlanWorkspace() {
   const [commitments, setCommitments] = useState<Commitment[]>([]);
   const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
   const [studyBlocks, setStudyBlocks] = useState<StudyBlock[]>([]);
+  const [planSnapshots, setPlanSnapshots] = useState<Record<string, string>>({});
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
   const [generatedResult, setGeneratedResult] = useState<ScheduleResult | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -81,6 +83,7 @@ export function PlanWorkspace() {
       setCommitments(readStoredValue<Commitment[]>(storageKeys.commitments, []));
       setTimetableEntries(readStoredValue<TimetableEntry[]>(storageKeys.timetableEntries, []));
       setStudyBlocks(readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []));
+      setPlanSnapshots(readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {}));
       const latestSchedulableAssignment = [...storedAssignments].reverse().find((assignment) => storedModules.some((module) => module.id === assignment.moduleId));
       setSelectedAssignmentId(latestSchedulableAssignment?.id ?? "");
       setIsLoaded(true);
@@ -93,6 +96,10 @@ export function PlanWorkspace() {
     if (isLoaded) writeStoredValue(storageKeys.studyBlocks, studyBlocks);
   }, [isLoaded, studyBlocks]);
 
+  useEffect(() => {
+    if (isLoaded) writeStoredValue(storageKeys.planSnapshots, planSnapshots);
+  }, [isLoaded, planSnapshots]);
+
   const schedulableAssignments = useMemo(
     () => assignments.filter((assignment) => modules.some((module) => module.id === assignment.moduleId)),
     [assignments, modules],
@@ -101,11 +108,19 @@ export function PlanWorkspace() {
   const selectedModule = selectedAssignment ? modules.find((module) => module.id === selectedAssignment.moduleId) ?? null : null;
   const workload = selectedAssignment && selectedModule ? calculateWorkloadBreakdown(selectedModule.credits, selectedAssignment) : null;
   const storedSelectedBlocks = selectedAssignment ? studyBlocks.filter((block) => block.assignmentId === selectedAssignment.id) : [];
-  const recalculatedResult = useMemo(
-    () => selectedAssignment && workload ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments }) : null,
-    [commitments, selectedAssignment, timetableEntries, workload],
+  const currentFingerprint = selectedAssignment && selectedModule
+    ? createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments })
+    : null;
+  const isStoredPlanStale = Boolean(
+    selectedAssignment
+      && storedSelectedBlocks.length
+      && currentFingerprint
+      && planSnapshots[selectedAssignment.id] !== currentFingerprint,
   );
-  const existingResult = recalculatedResult ? getResultForExistingBlocks(storedSelectedBlocks, recalculatedResult) : null;
+  const recalculatedResult = selectedAssignment && workload
+    ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments })
+    : null;
+  const existingResult = recalculatedResult && !isStoredPlanStale ? getResultForExistingBlocks(storedSelectedBlocks, recalculatedResult) : null;
   const result = generatedResult?.studyBlocks[0]?.assignmentId === selectedAssignmentId ? generatedResult : existingResult;
   const groupedBlocks = (result?.studyBlocks ?? []).reduce<Record<string, StudyBlock[]>>((groups, block) => {
     (groups[block.date] ??= []).push(block);
@@ -119,6 +134,10 @@ export function PlanWorkspace() {
       ...current.filter((block) => block.assignmentId !== selectedAssignment.id),
       ...nextResult.studyBlocks,
     ]);
+    setPlanSnapshots((current) => ({
+      ...current,
+      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule!, timetableEntries, commitments }),
+    }));
     setGeneratedResult(nextResult);
   }
 
@@ -166,12 +185,28 @@ export function PlanWorkspace() {
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">{selectedModule.code ?? selectedModule.name}</p>
               <h2 id="plan-summary-heading" className="mt-1 text-2xl font-semibold tracking-[-0.035em]">{selectedAssignment.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">Due {formatDeadline(selectedAssignment.deadline)} · {formatHours(workload.usableHours)} focused work from your workload recommendation.</p>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">Due {formatDeadline(selectedAssignment.deadline)}. Finish before the deadline date where possible.</p>
             </div>
             <button type="button" onClick={generatePlan} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">
-              {result ? "Regenerate plan" : "Generate plan"}
+              {result || isStoredPlanStale ? "Regenerate plan" : "Generate plan"}
             </button>
           </section>
+
+          <dl className="grid border-y border-[var(--line)] sm:grid-cols-4">
+            <div className="py-4 sm:border-r sm:border-[var(--line)] sm:pr-5"><dt className="text-sm text-[var(--muted-ink)]">Total recommendation</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{formatHours(workload.totalHours)}</dd></div>
+            <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:border-r sm:px-5"><dt className="text-sm text-[var(--muted-ink)]">Focused work</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{formatHours(workload.usableHours)}</dd></div>
+            <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:border-r sm:px-5"><dt className="text-sm text-[var(--muted-ink)]">Project buffer</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{formatHours(workload.bufferHours)}</dd></div>
+            <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:pl-5"><dt className="text-sm text-[var(--muted-ink)]">Focused work scheduled</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{result ? formatHours(result.scheduledHours) : "Not yet"}</dd></div>
+          </dl>
+
+          <section className="border-b border-[var(--line)] pb-5" aria-labelledby="plan-task-summary-heading">
+            <h3 id="plan-task-summary-heading" className="text-sm font-semibold">Work split</h3>
+            <ul className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+              {workload.taskHours.map((task) => <li key={task.id} className="flex items-center justify-between gap-4 py-2.5 text-sm"><span>{task.name}</span><span className="font-semibold tabular-nums">{formatHours(task.recommendedHours)}</span></li>)}
+            </ul>
+          </section>
+
+          {isStoredPlanStale ? <section className="border-y border-amber-200 bg-amber-50 px-5 py-4 text-amber-950" role="status"><p className="font-semibold">Your inputs changed. Regenerate this plan.</p><p className="mt-1 text-sm leading-6">The saved study blocks are hidden because they may no longer fit your timetable, commitments or workload.</p></section> : null}
 
           {result && selectedStatus ? (
             <>
@@ -188,7 +223,7 @@ export function PlanWorkspace() {
 
               <dl className="grid border-y border-[var(--line)] sm:grid-cols-3">
                 <div className="py-4 sm:border-r sm:border-[var(--line)] sm:pr-5"><dt className="text-sm text-[var(--muted-ink)]">Focused work needed</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{formatHours(result.requiredHours)}</dd></div>
-                <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:border-r sm:px-5"><dt className="text-sm text-[var(--muted-ink)]">Before buffer</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{result.bufferedAvailableHours ? formatHours(result.bufferedAvailableHours) : "Saved plan"}</dd></div>
+                <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:border-r sm:px-5"><dt className="text-sm text-[var(--muted-ink)]">Before deadline date</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{result.bufferedAvailableHours ? formatHours(result.bufferedAvailableHours) : "Saved plan"}</dd></div>
                 <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:pl-5"><dt className="text-sm text-[var(--muted-ink)]">Still unplaced</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{formatHours(result.unscheduledHours)}</dd></div>
               </dl>
 
@@ -223,7 +258,7 @@ export function PlanWorkspace() {
                 ) : <p className="mt-5 border-y border-[var(--line)] py-5 text-sm leading-6 text-[var(--muted-ink)]">No suitable study periods were found. Check the deadline and the commitments in your timetable.</p>}
               </section>
             </>
-          ) : <section className="border-y border-[var(--line)] bg-[var(--surface-soft)] px-5 py-6 text-sm leading-6 text-[var(--muted-ink)]"><p className="font-semibold text-[var(--ink)]">Ready to build a realistic plan.</p><p className="mt-1">It will use sessions of roughly 60 to 120 minutes, avoid your recurring commitments, and leave the final 24 hours clear when the available capacity allows it.</p></section>}
+          ) : !isStoredPlanStale ? <section className="border-y border-[var(--line)] bg-[var(--surface-soft)] px-5 py-6 text-sm leading-6 text-[var(--muted-ink)]"><p className="font-semibold text-[var(--ink)]">Ready to build a realistic plan.</p><p className="mt-1">It will use sessions of roughly 60 to 120 minutes, avoid your recurring commitments, and aim to finish before the deadline date when capacity allows it.</p></section> : null}
         </>
       ) : null}
     </div>
