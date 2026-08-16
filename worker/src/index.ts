@@ -103,9 +103,13 @@ function corsHeaders(origin: string | null, env: Env) {
 }
 
 function isAllowedOrigin(origin: string, env: Env) {
-  return origin === env.ALLOWED_PRODUCTION_ORIGIN || origin === "http://localhost:3000";
+  return (
+    origin === env.ALLOWED_PRODUCTION_ORIGIN ||
+    origin === "https://plan-around.vercel.app" ||
+    origin === "https://jacklee504.github.io" ||
+    origin === "http://localhost:3000"
+  );
 }
-
 function rateLimitKey(request: Request) {
   return request.headers.get("CF-Connecting-IP") || "unknown-client";
 }
@@ -338,10 +342,13 @@ async function analyseSource<T>(source: AssignmentAnalysisInput, route: Analysis
     } catch {
       const repairedMessages: ChatMessage[] = [
         ...messages,
-        { role: "assistant", content: firstContent },
-        { role: "user", content: "Your previous response was invalid. Return only the exact requested JSON object, following every schema rule." },
+        {
+          role: "user",
+          content:
+            "The previous attempt was invalid or too long. Start again. Return only compact valid JSON matching the schema. Keep rationales under 25 words, use at most 4 short requirements per task, use YYYY-MM-DD for the deadline, and do not add commentary.",
+        },
       ];
-      return route.parse(await requestProvider(repairedMessages, env, upstreamFetch, pause, budget, route.completionTokens));
+    return route.parse(await requestProvider(repairedMessages, env, upstreamFetch, pause, budget, route.completionTokens));
     }
   } finally {
     budget.dispose();

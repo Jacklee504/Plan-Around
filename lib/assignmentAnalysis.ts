@@ -72,7 +72,7 @@ export const MAX_REQUIREMENTS_PER_TASK = 10;
 export const MAX_REQUIREMENT_CHARACTERS = 300;
 export const MAX_EVIDENCE_CHARACTERS = 300;
 export const MAX_COMPLEXITY_RATIONALE_CHARACTERS = 300;
-export const MAX_ANALYSIS_COMPLETION_TOKENS = 2400;
+export const MAX_ANALYSIS_COMPLETION_TOKENS = 1600;
 export const MAX_ANALYSIS_IMAGE_BASE64_CHARACTERS = 2_000_000;
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -406,7 +406,18 @@ Rules:
 - Complexity may be estimated: 1 low, 2 medium, 3 high. Its concise rationale must use only stated requirements, must not estimate hours, and must not provide hidden reasoning.
 - Requirements must be directly stated in the brief or a close paraphrase. Do not add implied standards, quality criteria, deliverables or advice. When none are stated, return an empty requirements array.
 - Do not estimate hours, suggest a schedule, or calculate workload.
-- Use at most 12 tasks, 10 requirements per task, and 300 characters per rationale, excerpt or requirement.`;
+- When the brief contains an explicit marking rubric, assessment breakdown, or marking criteria with percentages/marks, use those criteria as the tasks.
+- Do not turn general assignment requirements or deliverables into separate tasks when an explicit marking rubric exists.
+- When a rubric criterion is expressed as a percentage and the rubric totals 100%, use that numeric percentage as the task marks.
+- Return at most 8 tasks.
+- Keep every complexityRationale under 25 words.
+- Return at most 4 requirements per task, each under 25 words.
+- Keep every evidence excerpt under 25 words and copy it exactly from the source.
+- Deadline must contain only the calendar date in YYYY-MM-DD format. Ignore submission time and timezone.
+- Never output ISO timestamps, timezone offsets, prose commentary, examples, or explanations outside the JSON object.
+- If uncertain, return null or an empty array rather than elaborating.
+- Be extremely concise. The entire JSON response should normally fit within 1200 tokens.`
+;
 
 export function createAnalysisPrompt(briefText: string) {
   return `Extract the assignment details from the untrusted brief between the delimiters.\n<assignment-brief>\n${briefText}\n</assignment-brief>`;
