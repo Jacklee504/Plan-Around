@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parseTimetablePdf } from "@/lib/timetableParser";
 import {
   clearPlanAroundStorage,
@@ -588,48 +588,45 @@ function SetupWorkspaceContent({
     );
   }
 
-  async function importTimetable(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setImportState("error");
-      setImportMessage(
-        "Choose the supplied supported sample PDF for this prototype.",
-      );
-      return;
-    }
-    setImportState("reading");
-    setUploadedFileName(file.name);
-    setImportMessage("");
-    try {
-      const parsed = parseTimetablePdf(await file.text());
-      setReviewEntries(
-        parsed.entries.map((entry) => ({
-          moduleCode: entry.moduleCode,
-          moduleName: entry.moduleName,
-          day: days[entry.dayOfWeek] as TimetableAnalysisEntry["day"],
-          start: entry.start,
-          end: entry.end,
-          sessionType: entry.sessionType,
-        })),
-      );
-      setReviewWarnings([]);
-      setReviewError("");
-      setImportState("complete");
-      setImportMessage(
-        `Read ${parsed.entries.length} sample sessions across ${parsed.moduleCount} modules. Review them before saving.`,
-      );
-    } catch (error) {
-      setImportState("error");
-      setImportMessage(
-        error instanceof Error
-          ? error.message
-          : "We could not read that timetable.",
-      );
-    }
+async function importTimetable(file: File | undefined) {
+  if (!file) return;
+
+  setImportState("reading");
+  setUploadedFileName(file.name);
+  setImportMessage("");
+  setPreparedTimetableImage(null);
+  setTimetableAnalysisError("");
+  setReviewEntries(null);
+  setReviewWarnings([]);
+  setReviewError("");
+
+  try {
+    const parsed = parseTimetablePdf(await file.text());
+
+    setReviewEntries(
+      parsed.entries.map((entry) => ({
+        moduleCode: entry.moduleCode,
+        moduleName: entry.moduleName,
+        day: days[entry.dayOfWeek] as TimetableAnalysisEntry["day"],
+        start: entry.start,
+        end: entry.end,
+        sessionType: entry.sessionType,
+      })),
+    );
+
+    setImportState("complete");
+    setImportMessage(
+      `Read ${parsed.entries.length} teaching sessions across ${parsed.moduleCount} modules. Review them before saving.`,
+    );
+  } catch (error) {
+    setImportState("error");
+    setImportMessage(
+      error instanceof Error
+        ? error.message
+        : "We could not read that timetable PDF.",
+    );
   }
-  async function selectTimetableImage(file: File | undefined) {
+}  async function selectTimetableImage(file: File | undefined) {
     if (!file) return;
     const version = timetableImageVersion.current + 1;
     timetableImageVersion.current = version;
@@ -839,11 +836,47 @@ function SetupWorkspaceContent({
               : "Import your normal teaching week."}
           </h2>
           <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">
-            Upload a clear timetable screenshot for AI-assisted extraction,
-            then review every detected class in the calendar before confirming.
+            Upload a timetable screenshot or supported text PDF, then review every
+            detected class in the calendar before confirming.
           </p>
         </div>
         <div className="flex flex-wrap gap-3 lg:justify-end">
+          <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
+            {importState === "reading"
+              ? "Reading timetable..."
+              : isPreparingTimetableImage
+                ? "Preparing timetable..."
+                : "Upload timetable"}
+
+            <input
+              ref={timetableImageInput}
+              className="sr-only"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,application/pdf,.pdf"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+
+                if (!file) return;
+
+                const isPdf =
+                  file.type === "application/pdf" ||
+                  file.name.toLowerCase().endsWith(".pdf");
+
+                if (isPdf) {
+                  void importTimetable(file);
+                } else {
+                  void selectTimetableImage(file);
+                }
+              }}
+              disabled={
+                isPreparingTimetableImage ||
+                isAnalysingTimetable ||
+                importState === "reading"
+              }
+            />
+          </label>
+
           <a
             href="/semester-1-timetable.pdf"
             download
@@ -851,31 +884,6 @@ function SetupWorkspaceContent({
           >
             Download sample PDF
           </a>
-          <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
-            {isPreparingTimetableImage
-              ? "Preparing screenshot..."
-              : "Upload timetable screenshot"}
-            <input
-              ref={timetableImageInput}
-              className="sr-only"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(event) =>
-                void selectTimetableImage(event.target.files?.[0])
-              }
-              disabled={isPreparingTimetableImage || isAnalysingTimetable}
-            />
-          </label>
-          <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--ink)] hover:border-[var(--accent)]">
-            {importState === "reading" ? "Reading sample..." : "Try sample PDF"}
-            <input
-              className="sr-only"
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={importTimetable}
-              disabled={importState === "reading"}
-            />
-          </label>
         </div>
         {importState !== "idle" ? (
           <p
