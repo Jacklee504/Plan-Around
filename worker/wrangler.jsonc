@@ -1,0 +1,19 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "planaround-ai",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "AI_BASE_URL": "https://api.featherless.ai/v1",
+    "AI_MODEL": "Qwen/Qwen3.5-9B",
+    "ALLOWED_PRODUCTION_ORIGIN": "https://jacklee504.github.io"
+  },
+  "secrets": {
+    "required": ["FEATHERLESS_API_KEY"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
