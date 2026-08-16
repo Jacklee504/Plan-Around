@@ -197,7 +197,7 @@ function EventDialog({
                 type="date"
               />
             </label>
-          ) : (
+          ) : isEdit ? (
             <label className="text-sm font-medium sm:col-span-2">
               Day
               <select
@@ -214,6 +214,47 @@ function EventDialog({
                 ))}
               </select>
             </label>
+          ) : (
+            <div className="sm:col-span-2">
+              <p className="text-sm font-medium">Days</p>
+
+              <div className="mt-2 grid grid-cols-7 gap-1.5">
+                {CALENDAR_DAYS.map((day) => {
+                  const selected = (
+                    draft.selectedDays ?? [draft.dayOfWeek]
+                  ).includes(day);
+
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => {
+                        const current =
+                          draft.selectedDays ?? [draft.dayOfWeek];
+
+                        const selectedDays = selected
+                          ? current.filter(
+                              (selectedDay) => selectedDay !== day,
+                            )
+                          : [...current, day];
+
+                        onChange({
+                          ...draft,
+                          selectedDays,
+                        });
+                      }}
+                      className={`min-h-10 rounded-lg border px-1 text-xs font-semibold ${
+                        selected
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                          : "border-[var(--line)] text-[var(--muted-ink)] hover:border-[var(--accent)]"
+                      }`}
+                    >
+                      {days[day].slice(0, 3)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
           <label className="text-sm font-medium">
             Start
