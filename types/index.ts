@@ -49,6 +49,10 @@ export type Assignment = {
   moduleWeight: number;
   tasks: AssignmentTask[];
   workloadOverrideHours?: number;
+  analysisSource?: {
+    provider: "local-ollama" | "featherless";
+    model: string;
+  };
 };
 
 export type WorkloadTask = AssignmentTask & {

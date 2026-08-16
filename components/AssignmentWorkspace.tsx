@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
+import { analyzeAssignmentBrief } from "@/lib/assignmentAnalyzer";
+import type { AssignmentAnalysisResponse } from "@/lib/assignmentAnalysis";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import type { Assignment, AssignmentTask, Module } from "@/types";
 import { WorkloadBreakdown } from "@/components/WorkloadBreakdown";
@@ -54,6 +56,12 @@ export function AssignmentWorkspace() {
   const [draft, setDraft] = useState<AssignmentDraft>(emptyAssignmentDraft);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
   const [showTasks, setShowTasks] = useState(false);
+  const [briefText, setBriefText] = useState("");
+  const [analysisResult, setAnalysisResult] = useState<AssignmentAnalysisResponse | null>(null);
+  const [analysisSource, setAnalysisSource] = useState<Assignment["analysisSource"]>();
+  const [isAnalysing, setIsAnalysing] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+  const [needsReplacementConfirmation, setNeedsReplacementConfirmation] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [deletedAssignment, setDeletedAssignment] = useState<Assignment | null>(null);
@@ -84,6 +92,11 @@ export function AssignmentWorkspace() {
     setDraft(emptyAssignmentDraft);
     setTasks([]);
     setShowTasks(false);
+    setBriefText("");
+    setAnalysisResult(null);
+    setAnalysisSource(undefined);
+    setAnalysisError("");
+    setNeedsReplacementConfirmation(false);
     setError("");
   }
 
@@ -125,6 +138,7 @@ export function AssignmentWorkspace() {
       deadline: draft.deadline,
       moduleWeight,
       tasks: savedTasks,
+      ...(analysisSource ? { analysisSource } : {}),
     };
 
     setAssignments((current) => [...current, assignment]);
@@ -154,9 +168,62 @@ export function AssignmentWorkspace() {
       { id: createId(), name: "Presentation", marks: "10", complexity: "1", notes: "Five-minute presentation." },
     ]);
     setShowTasks(true);
+    setAnalysisResult(null);
+    setAnalysisSource(undefined);
+    setAnalysisError("");
+    setNeedsReplacementConfirmation(false);
     setStatus("Demo details loaded. Review them, then save when ready.");
     setError("");
     setDeletedAssignment(null);
+  }
+
+  async function analyseBrief() {
+    setIsAnalysing(true);
+    setAnalysisError("");
+    setStatus("");
+    setNeedsReplacementConfirmation(false);
+    try {
+      const result = await analyzeAssignmentBrief(briefText);
+      setAnalysisResult(result);
+    } catch (analysisFailure) {
+      setAnalysisResult(null);
+      setAnalysisError(analysisFailure instanceof Error ? analysisFailure.message : "The analyser could not read this brief. You can still enter the rubric manually.");
+    } finally {
+      setIsAnalysing(false);
+    }
+  }
+
+  function applySuggestions(forceReplace = false) {
+    if (!analysisResult) return;
+    if (analysisResult.analysis.tasks.length && tasks.length && !forceReplace) {
+      setNeedsReplacementConfirmation(true);
+      return;
+    }
+
+    const { analysis } = analysisResult;
+    setDraft((current) => ({
+      ...current,
+      title: current.title.trim() || analysis.title || "",
+      deadline: current.deadline || analysis.deadline || "",
+      moduleWeight: current.moduleWeight || (analysis.moduleWeight ? String(analysis.moduleWeight) : ""),
+    }));
+    if (analysis.tasks.length) {
+      setTasks(analysis.tasks.map((task) => ({
+        id: createId(),
+        name: task.name,
+        marks: task.marks === null ? "" : String(task.marks),
+        complexity: String(task.complexity) as TaskDraft["complexity"],
+        notes: task.requirements.join("\n"),
+      })));
+      setShowTasks(true);
+    }
+    setAnalysisSource({ provider: analysisResult.provider, model: analysisResult.model });
+    setAnalysisResult(null);
+    setNeedsReplacementConfirmation(false);
+    setStatus(analysis.tasks.some((task) => task.marks === null)
+      ? "Suggestions applied. Add the missing task marks before saving."
+      : "Suggestions applied. Review every field, then save when ready.");
+    setError("");
   }
 
   function deleteAssignment(assignment: Assignment) {
@@ -227,6 +294,52 @@ export function AssignmentWorkspace() {
 
             {hasUnconfirmedSelection ? <p className="rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">This module still needs its ECTS confirmed in <Link href="/setup" className="font-semibold text-[var(--accent-strong)] underline underline-offset-2">Timetable</Link>.</p> : null}
 
+            <section className="border-t border-[var(--line)] pt-6" aria-labelledby="analysis-heading">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Optional</p>
+                  <h3 id="analysis-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Analyse an assignment brief.</h3>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Paste the assessment text to extract a draft rubric. You review it before anything is added.</p>
+                </div>
+                <button type="button" onClick={() => setBriefText("CS301 Coursework Project\n\nThis coursework contributes 40% of the module grade.\nSubmission deadline: 28 August 2026.\n\nAssessment:\nDesign and implementation, 45 marks\nDevelop a working application implementing the required core functionality.\n\nTesting and evaluation, 25 marks\nProvide appropriate test cases and critically evaluate the finished solution.\n\nTechnical report, 20 marks\nSubmit a report of approximately 2,500 words documenting architecture, implementation decisions and evaluation.\n\nPresentation, 10 marks\nDeliver a five-minute presentation demonstrating the completed system.")} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Load sample brief</button>
+              </div>
+              <label className="mt-4 block text-sm font-medium">
+                Assignment brief
+                <textarea value={briefText} onChange={(event) => { setBriefText(event.target.value); setAnalysisError(""); }} className={`${inputClassName} min-h-36 py-3`} placeholder="Paste the assessment brief or rubric here" />
+              </label>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button type="button" onClick={analyseBrief} disabled={!briefText.trim() || isAnalysing} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">
+                  {isAnalysing ? "Analysing brief…" : "Analyse with local AI"}
+                </button>
+                <p className="text-sm text-[var(--muted-ink)]">It extracts details only. Workload and scheduling stay explainable.</p>
+              </div>
+              {analysisError ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{analysisError}</p> : null}
+
+              {analysisResult ? (
+                <div className="mt-5 border-y border-[var(--line)] py-5" aria-live="polite">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Review suggestions</p>
+                      <h4 className="mt-1 text-base font-semibold">Nothing is added until you use these suggestions.</h4>
+                    </div>
+                    <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-strong)]">Local AI review</span>
+                  </div>
+                  <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                    <div><dt className="text-[var(--muted-ink)]">Title</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.title ?? "Not found"}</dd></div>
+                    <div><dt className="text-[var(--muted-ink)]">Deadline</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.deadline ? formatDeadline(analysisResult.analysis.deadline) : "Not found"}</dd></div>
+                    <div><dt className="text-[var(--muted-ink)]">Module weighting</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.moduleWeight ? `${analysisResult.analysis.moduleWeight}%` : "Not found"}</dd></div>
+                  </dl>
+                  {analysisResult.analysis.tasks.length ? <ul className="mt-5 divide-y divide-[var(--line)] border-y border-[var(--line)]">{analysisResult.analysis.tasks.map((task) => <li key={`${task.name}-${task.marks}`} className="py-3"><p className="font-semibold">{task.name}</p><p className="mt-1 text-sm text-[var(--muted-ink)]">{task.marks === null ? "Marks need confirmation" : `${task.marks} marks`} · {task.complexity === 1 ? "Low" : task.complexity === 2 ? "Medium" : "High"} complexity</p>{task.requirements.length ? <ul className="mt-2 space-y-1 text-sm leading-6 text-[var(--muted-ink)]">{task.requirements.map((requirement) => <li key={requirement}>• {requirement}</li>)}</ul> : null}</li>)}</ul> : <p className="mt-4 text-sm leading-6 text-[var(--muted-ink)]">No clear rubric tasks were found. You can still use any title, deadline or weighting suggestion.</p>}
+                  {analysisResult.analysis.warnings.length ? <ul className="mt-4 space-y-1 text-sm leading-6 text-[var(--muted-ink)]">{analysisResult.analysis.warnings.map((warning) => <li key={warning}>• {warning}</li>)}</ul> : null}
+                  {needsReplacementConfirmation ? <p className="mt-4 rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">Using the task suggestions will replace the {tasks.length} task{tasks.length === 1 ? "" : "s"} currently in this form.</p> : null}
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button type="button" onClick={() => applySuggestions(needsReplacementConfirmation)} className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">{needsReplacementConfirmation ? "Replace with suggestions" : "Use suggestions"}</button>
+                    <button type="button" onClick={() => { setAnalysisResult(null); setNeedsReplacementConfirmation(false); }} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">Discard</button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
             <section className="border-t border-[var(--line)] pt-6" aria-labelledby="tasks-heading">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -294,6 +407,7 @@ export function AssignmentWorkspace() {
                   <div>
                     <p className="font-semibold">{assignment.title}</p>
                     <p className="mt-1 text-sm text-[var(--muted-ink)]">{linkedModule?.code ?? linkedModule?.name ?? "Module removed"} · Due {formatDeadline(assignment.deadline)} · {assignment.moduleWeight}% · {assignment.tasks.length ? `${assignment.tasks.length} tasks` : "No task breakdown"}</p>
+                    {assignment.analysisSource ? <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent-strong)]">AI-assisted rubric · {assignment.analysisSource.provider === "local-ollama" ? "local model" : "Featherless"}</p> : null}
                   </div>
                   <div className="flex flex-wrap gap-1 sm:justify-self-end">
                     <button type="button" onClick={() => setSelectedWorkloadAssignmentId(assignment.id)} className="min-h-10 rounded-lg px-3 text-sm font-semibold text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]">{selectedWorkloadAssignmentId === assignment.id ? "Viewing workload" : "View workload"}</button>

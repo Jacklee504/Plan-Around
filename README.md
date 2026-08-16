@@ -19,7 +19,8 @@ Assignment details + module weighting + weekly commitments
 - Mark a class as not attended for the current week or for every week.
 - Add personal commitments alongside classes.
 - Add an assignment against an imported module, with its deadline and module weighting.
-- Optionally add rubric tasks, marks, complexity and notes, or load realistic demo details.
+- Paste an assignment brief into a local AI review, then inspect and apply only the suggested title, deadline, weighting and rubric tasks you want. Missing marks remain for the student to confirm.
+- Optionally add rubric tasks, marks, complexity and notes manually, or load realistic demo details.
 - Review a transparent, rubric-weighted workload recommendation and override its total when needed.
 - Generate study blocks from 08:00 to 22:00 around attended classes and personal commitments.
 - Aim to finish before the deadline date, using that date only when capacity makes it necessary, and flag plans as On track, Tight or Not enough time.
@@ -52,6 +53,7 @@ Persistence is local to the browser.
 
 ```text
 Timetable → local parser → constraints
+Assignment brief → local AI review → editable rubric
 Assignment and rubric → workload.ts
 Constraints + workload → scheduler.ts → study plan
 ```
@@ -79,9 +81,19 @@ Open [http://localhost:3000](http://localhost:3000). The root opens the timetabl
 
 For the demo, download `Semester 1 timetable` from the app, then select the downloaded PDF to see the local importer build the calendar.
 
+### Optional local AI review
+
+The AI stage is local-only for the first integration pass. With Ollama running and the `qwen3.5:9b` model installed, use a second terminal:
+
+```bash
+npm run ai:local
+```
+
+Then use **Analyse with local AI** on the Assignment page. The browser sends the brief only to `http://localhost:8787/analyze`; the local service talks to Ollama. No API key or assignment content is sent to a hosted service in this mode. If the service is not running, manual rubric entry remains available.
+
 ## Current status
 
-Timetable import, manual assignment and rubric entry, workload estimation, stale-plan detection and deterministic study-session scheduling are complete.
+Timetable import, local AI-assisted or manual rubric entry, workload estimation, stale-plan detection and deterministic study-session scheduling are complete. AI only extracts a reviewed draft rubric. Workload and scheduling remain deterministic.
 
 ## Further reference
 
