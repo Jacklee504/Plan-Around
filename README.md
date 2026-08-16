@@ -38,7 +38,3 @@ npm run dev
 ## More detail
 
 See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the workload model, scheduling rules, architecture and prototype scope.
-
-## Impact Forge HA1
-
-Built as a focused prototype for Impact Forge HA1.
