@@ -336,25 +336,60 @@ async function analyseSource<T>(source: AssignmentAnalysisInput, route: Analysis
   const messages = createMessages(source, route);
 
   try {
-    const firstContent = await requestProvider(messages, env, upstreamFetch, pause, budget, route.completionTokens);
+    const firstContent = await requestProvider(
+        messages,
+        env,
+        upstreamFetch,
+        pause,
+        budget,
+        route.completionTokens,
+    );
+
     try {
       return route.parse(firstContent);
-    } catch {
+    } catch (firstError) {
+      console.error(
+          "First analysis response rejected:",
+          firstError instanceof Error
+              ? firstError.message
+              : String(firstError),
+      );
+
       const repairedMessages: ChatMessage[] = [
         ...messages,
         {
           role: "user",
           content:
-            "The previous attempt was invalid or too long. Start again. Return only compact valid JSON matching the schema. Keep rationales under 25 words, use at most 4 short requirements per task, use YYYY-MM-DD for the deadline, and do not add commentary.",
+              "The previous attempt was invalid or too long. Start again. Return only compact valid JSON matching the schema. Keep rationales under 25 words, use at most 4 short requirements per task, use YYYY-MM-DD for the deadline, and do not add commentary.",
         },
       ];
-    return route.parse(await requestProvider(repairedMessages, env, upstreamFetch, pause, budget, route.completionTokens));
+
+      try {
+        return route.parse(
+            await requestProvider(
+                repairedMessages,
+                env,
+                upstreamFetch,
+                pause,
+                budget,
+                route.completionTokens,
+            ),
+        );
+      } catch (repairError) {
+        console.error(
+            "Repair analysis failed:",
+            repairError instanceof Error
+                ? repairError.message
+                : String(repairError),
+        );
+
+        throw repairError;
+      }
     }
   } finally {
     budget.dispose();
   }
 }
-
 export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = wait) {
   return {
     async fetch(request: Request, env: Env): Promise<Response> {
