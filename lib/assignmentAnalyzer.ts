@@ -6,7 +6,7 @@ import {
 } from "@/lib/assignmentAnalysis";
 import { getAnalyzerEndpoint, imageAnalysisIsAvailable } from "@/lib/analyzerEndpoint";
 
-const ANALYZER_TIMEOUT_MS = 35_000;
+const ANALYZER_TIMEOUT_MS = 65_000;
 
 export { imageAnalysisIsAvailable };
 
