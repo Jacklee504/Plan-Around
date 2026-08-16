@@ -445,20 +445,24 @@ export function AssignmentWorkspace() {
             </section>
 
             <section className="border-t border-[var(--line)] pt-6" aria-labelledby="tasks-heading">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Optional</p>
-                  <h3 id="tasks-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Add tasks from the rubric.</h3>
-                  <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">This gives the later workload estimate more detail. You can save without tasks.</p>
-                </div>
-                <button type="button" onClick={() => { setShowTasks((current) => !current); setError(""); }} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">
-                  {showTasks ? "Hide tasks" : "Add tasks manually"}
-                </button>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 id="tasks-heading" className="text-lg font-semibold tracking-[-0.025em]">Tasks from rubric</h3>
+
+                {tasks.length ? (
+                  <p className="text-sm font-semibold text-[var(--muted-ink)]">{taskMarks}% allocated</p>
+                ) : !showTasks ? (
+                  <button
+                    type="button"
+                    onClick={() => { setShowTasks(true); setError(""); }}
+                    className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+                  >
+                    Add tasks manually
+                  </button>
+                ) : null}
               </div>
 
               {showTasks ? (
                 <div className="mt-5 space-y-4">
-                  {tasks.length ? <p className="text-sm text-[var(--muted-ink)]">Task marks entered: <span className="font-semibold text-[var(--ink)]">{taskMarks}</span>{taskMarks === 100 ? "%" : ""}{taskMarks && taskMarks !== 100 ? " total" : ""}</p> : <p className="text-sm text-[var(--muted-ink)]">Break the assignment into the parts you are assessed on.</p>}
                   {tasks.map((task, index) => (
                     <fieldset key={task.id} className="border-t border-[var(--line)] pt-4">
                       <div className="flex items-center justify-between gap-3">
@@ -473,11 +477,20 @@ export function AssignmentWorkspace() {
                       <label className="mt-3 block text-sm font-medium">Notes <span className="font-normal text-[var(--muted-ink)]">(optional)</span><textarea value={task.notes} onChange={(event) => updateTask(task.id, { notes: event.target.value })} className={`${inputClassName} min-h-20 py-2`} placeholder="e.g. 2,500 words or a five-minute presentation" /></label>
                     </fieldset>
                   ))}
+
                   <button type="button" onClick={() => setTasks((current) => [...current, createEmptyTask()])} className="min-h-11 rounded-xl border border-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]">Add another task</button>
                 </div>
               ) : null}
             </section>
           </div>
+
+          <aside className="h-fit border-t border-[var(--line)] pt-5 lg:sticky lg:top-6">
+            {error ? <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{error}</p> : null}
+            {status && !status.startsWith("Suggestions applied.") ? <p className="mb-4 rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-sm leading-6 text-[var(--accent-strong)]" role="status">{status}</p> : null}
+
+            <button type="submit" disabled={!modules.length || hasUnconfirmedSelection} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">Save assignment</button>
+            <button type="button" onClick={resetForm} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">Clear form</button>
+          </aside>
 
           <aside className="h-fit border-t border-[var(--line)] pt-5 lg:sticky lg:top-6">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Ready when you are</p>
