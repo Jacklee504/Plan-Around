@@ -1,14 +1,19 @@
 import {
   analysisSystemPrompt,
   createAnalysisPrompt,
+  createImageAnalysisPrompt,
+  createImageAnalysisProvenance,
   createTextAnalysisProvenance,
-  MAX_BRIEF_CHARACTERS,
+  type AssignmentAnalysisInput,
+  MAX_ANALYSIS_COMPLETION_TOKENS,
   type AssignmentAnalysis,
   type AssignmentAnalysisResponse,
   validateAssignmentAnalysis,
+  validateAssignmentAnalysisInput,
 } from "../../lib/assignmentAnalysis";
 
-const MAX_REQUEST_BYTES = 25_000;
+const MAX_TEXT_REQUEST_BYTES = 25_000;
+const MAX_IMAGE_REQUEST_BYTES = 2_100_000;
 const MAX_UPSTREAM_RESPONSE_BYTES = 100_000;
 const ANALYSIS_TIMEOUT_MS = 30_000;
 const PROVIDER_TIMEOUT_MS = 25_000;
@@ -17,7 +22,10 @@ const MIN_PROVIDER_WINDOW_MS = 1_000;
 const MAX_PROVIDER_CALLS = 3;
 const RETRYABLE_PROVIDER_STATUSES = new Set([429, 500, 502, 503, 504]);
 
-type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+};
 
 class ClientInputError extends Error {}
 class ProviderResponseError extends Error {}
@@ -139,7 +147,7 @@ async function readBoundedText(
   return new TextDecoder().decode(body);
 }
 
-function parseBriefRequest(body: string) {
+function parseAnalysisRequest(body: string) {
   let payload: unknown;
   try {
     payload = JSON.parse(body);
@@ -151,14 +159,21 @@ function parseBriefRequest(body: string) {
     throw new ClientInputError("Request body was invalid.");
   }
 
-  const briefText = (payload as { briefText?: unknown }).briefText;
-  if (typeof briefText !== "string" || !briefText.trim()) {
-    throw new ClientInputError("A non-empty assignment brief is required.");
+  let source: AssignmentAnalysisInput;
+  try {
+    source = validateAssignmentAnalysisInput((payload as { source?: unknown }).source);
+  } catch (error) {
+    throw new ClientInputError(error instanceof Error ? error.message : "Analysis input was invalid.");
   }
-  if (briefText.length > MAX_BRIEF_CHARACTERS) {
-    throw new ClientInputError("Assignment brief is too long.");
+
+  const bodyBytes = new TextEncoder().encode(body).byteLength;
+  if (source.kind === "text" && bodyBytes > MAX_TEXT_REQUEST_BYTES) {
+    throw new ClientInputError("Text analysis request is too large.");
   }
-  return briefText;
+  if (source.kind === "image" && bodyBytes > MAX_IMAGE_REQUEST_BYTES) {
+    throw new ClientInputError("Screenshot analysis request is too large.");
+  }
+  return source;
 }
 
 function stripJsonCodeFence(content: string) {
@@ -206,7 +221,7 @@ async function requestProviderOnce(
       body: JSON.stringify({
         model: env.AI_PRIMARY_MODEL,
         temperature: 0.1,
-        max_tokens: 1200,
+        max_tokens: MAX_ANALYSIS_COMPLETION_TOKENS,
         response_format: { type: "json_object" },
         chat_template_kwargs: { enable_thinking: false },
         messages,
@@ -259,12 +274,22 @@ async function requestProvider(
   }
 }
 
-async function analyseBrief(briefText: string, env: Env, upstreamFetch: typeof fetch, pause: Wait) {
-  const budget = new AnalysisBudget();
-  const messages: ChatMessage[] = [
+function createMessages(source: AssignmentAnalysisInput): ChatMessage[] {
+  const userContent = source.kind === "text"
+    ? createAnalysisPrompt(source.text)
+    : [
+      { type: "text" as const, text: createImageAnalysisPrompt() },
+      { type: "image_url" as const, image_url: { url: `data:${source.mimeType};base64,${source.base64}` } },
+    ];
+  return [
     { role: "system", content: analysisSystemPrompt },
-    { role: "user", content: createAnalysisPrompt(briefText) },
+    { role: "user", content: userContent },
   ];
+}
+
+async function analyseSource(source: AssignmentAnalysisInput, env: Env, upstreamFetch: typeof fetch, pause: Wait) {
+  const budget = new AnalysisBudget();
+  const messages = createMessages(source);
 
   try {
     const firstContent = await requestProvider(messages, env, upstreamFetch, pause, budget);
@@ -295,7 +320,7 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
       if (request.method !== "POST") return jsonResponse({ error: "Not found." }, 404, origin, env);
 
       const contentLength = Number(request.headers.get("Content-Length"));
-      if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
+      if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_REQUEST_BYTES) {
         return jsonResponse({ error: "Request body is too large." }, 400, origin, env);
       }
 
@@ -305,14 +330,16 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
         }
         const requestBody = await readBoundedText(
           request.body,
-          MAX_REQUEST_BYTES,
+          MAX_IMAGE_REQUEST_BYTES,
           () => new ClientInputError("Request body is too large."),
         );
-        const briefText = parseBriefRequest(requestBody);
-        const analysis = await analyseBrief(briefText, env, upstreamFetch, pause);
+        const source = parseAnalysisRequest(requestBody);
+        const analysis = await analyseSource(source, env, upstreamFetch, pause);
         const response: AssignmentAnalysisResponse = {
           analysis,
-          provenance: createTextAnalysisProvenance(briefText, analysis),
+          provenance: source.kind === "text"
+            ? createTextAnalysisProvenance(source.text, analysis)
+            : createImageAnalysisProvenance(analysis),
           provider: "featherless",
           model: env.AI_PRIMARY_MODEL,
           verifier: { used: false, model: null, reasons: [] },

@@ -3,9 +3,11 @@ import {
   analysisSystemPrompt,
   createAnalysisPrompt,
   createTextAnalysisProvenance,
-  MAX_BRIEF_CHARACTERS,
+  MAX_ANALYSIS_COMPLETION_TOKENS,
+  type AssignmentAnalysisInput,
   type AssignmentAnalysis,
   validateAssignmentAnalysis,
+  validateAssignmentAnalysisInput,
 } from "../lib/assignmentAnalysis";
 
 const port = Number(process.env.ANALYZER_PORT ?? 8787);
@@ -28,17 +30,14 @@ function respond(response: ServerResponse, status: number, body: unknown) {
   response.end(JSON.stringify(body));
 }
 
-async function readJsonBody(request: IncomingMessage): Promise<{ briefText: string }> {
+async function readJsonBody(request: IncomingMessage): Promise<AssignmentAnalysisInput> {
   let body = "";
   for await (const chunk of request) {
     body += chunk;
     if (body.length > maxBodyBytes) throw new Error("Body too large");
   }
-  const payload = JSON.parse(body) as { briefText?: unknown };
-  if (typeof payload.briefText !== "string" || !payload.briefText.trim() || payload.briefText.length > MAX_BRIEF_CHARACTERS) {
-    throw new Error("Invalid assignment brief");
-  }
-  return { briefText: payload.briefText };
+  const payload = JSON.parse(body) as { source?: unknown };
+  return validateAssignmentAnalysisInput(payload.source);
 }
 
 function contentFromCompletion(payload: ChatCompletionResponse) {
@@ -54,7 +53,7 @@ async function requestAnalysis(briefText: string, correction?: string): Promise<
     body: JSON.stringify({
       model,
       temperature: 0.1,
-      max_tokens: 1200,
+      max_tokens: MAX_ANALYSIS_COMPLETION_TOKENS,
       reasoning_effort: "none",
       stream: false,
       response_format: { type: "json_object" },
@@ -86,11 +85,14 @@ const server = createServer(async (request, response) => {
   }
 
   try {
-    const { briefText } = await readJsonBody(request);
-    const analysis = await analyseWithRetry(briefText);
+    const source = await readJsonBody(request);
+    if (source.kind === "image") {
+      return respond(response, 400, { error: "Screenshot analysis uses the hosted analyser. Configure NEXT_PUBLIC_ANALYZER_URL or use the deployed app." });
+    }
+    const analysis = await analyseWithRetry(source.text);
     return respond(response, 200, {
       analysis,
-      provenance: createTextAnalysisProvenance(briefText, analysis),
+      provenance: createTextAnalysisProvenance(source.text, analysis),
       provider: "local-ollama",
       model,
       verifier: { used: false, model: null, reasons: [] },

@@ -1,5 +1,6 @@
 import {
   MAX_BRIEF_CHARACTERS,
+  type AssignmentAnalysisInput,
   type AssignmentAnalysisResponse,
   validateAssignmentAnalysisResponse,
 } from "@/lib/assignmentAnalysis";
@@ -13,9 +14,23 @@ function getAnalyzerUrl() {
   throw new Error("The analyser is not configured for this build.");
 }
 
-export async function analyzeAssignmentBrief(briefText: string): Promise<AssignmentAnalysisResponse> {
-  if (!briefText.trim()) throw new Error("Paste an assignment brief before analysing it.");
-  if (briefText.length > MAX_BRIEF_CHARACTERS) throw new Error("This brief is too long for the prototype analyser.");
+export function imageAnalysisIsAvailable() {
+  const configuredUrl = process.env.NEXT_PUBLIC_ANALYZER_URL?.trim();
+  if (!configuredUrl) return process.env.NODE_ENV !== "development";
+  try {
+    const hostname = new URL(configuredUrl).hostname;
+    return hostname !== "localhost" && hostname !== "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+export async function analyzeAssignmentBrief(input: AssignmentAnalysisInput): Promise<AssignmentAnalysisResponse> {
+  if (input.kind === "text" && !input.text.trim()) throw new Error("Paste an assignment brief before analysing it.");
+  if (input.kind === "text" && input.text.length > MAX_BRIEF_CHARACTERS) throw new Error("This brief is too long for the prototype analyser.");
+  if (input.kind === "image" && !imageAnalysisIsAvailable()) {
+    throw new Error("Screenshot analysis uses the hosted analyser. Use the deployed app or configure NEXT_PUBLIC_ANALYZER_URL locally.");
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ANALYZER_TIMEOUT_MS);
@@ -24,7 +39,7 @@ export async function analyzeAssignmentBrief(briefText: string): Promise<Assignm
     const response = await fetch(getAnalyzerUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ briefText }),
+      body: JSON.stringify({ source: input }),
       signal: controller.signal,
     });
 
