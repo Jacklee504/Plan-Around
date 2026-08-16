@@ -9,8 +9,11 @@ import {
 
 const MAX_REQUEST_BYTES = 25_000;
 const MAX_UPSTREAM_RESPONSE_BYTES = 100_000;
+const ANALYSIS_TIMEOUT_MS = 30_000;
 const PROVIDER_TIMEOUT_MS = 25_000;
 const PROVIDER_RETRY_DELAY_MS = 500;
+const MIN_PROVIDER_WINDOW_MS = 1_000;
+const MAX_PROVIDER_CALLS = 3;
 const RETRYABLE_PROVIDER_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -18,11 +21,51 @@ type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 class ClientInputError extends Error {}
 class ProviderResponseError extends Error {}
 class TransientProviderError extends Error {}
+class AnalysisBudgetError extends Error {}
 
 type Wait = (milliseconds: number) => Promise<void>;
 
 function wait(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+class AnalysisBudget {
+  readonly controller = new AbortController();
+  readonly deadline = Date.now() + ANALYSIS_TIMEOUT_MS;
+  providerCalls = 0;
+  private readonly timeout = setTimeout(() => this.controller.abort(), ANALYSIS_TIMEOUT_MS);
+
+  remainingMilliseconds() {
+    return Math.max(0, this.deadline - Date.now());
+  }
+
+  isExhausted() {
+    return this.controller.signal.aborted || this.remainingMilliseconds() < MIN_PROVIDER_WINDOW_MS;
+  }
+
+  takeProviderCall() {
+    if (this.providerCalls >= MAX_PROVIDER_CALLS) {
+      throw new AnalysisBudgetError("The analyser exhausted its provider-call budget.");
+    }
+    if (this.isExhausted()) {
+      throw new AnalysisBudgetError("The analyser ran out of time.");
+    }
+
+    this.providerCalls += 1;
+    return Math.min(PROVIDER_TIMEOUT_MS, this.remainingMilliseconds());
+  }
+
+  async pauseBeforeRetry(pause: Wait) {
+    if (this.remainingMilliseconds() <= PROVIDER_RETRY_DELAY_MS + MIN_PROVIDER_WINDOW_MS) {
+      throw new AnalysisBudgetError("The analyser ran out of time before retrying.");
+    }
+    await pause(PROVIDER_RETRY_DELAY_MS);
+    if (this.isExhausted()) throw new AnalysisBudgetError("The analyser ran out of time.");
+  }
+
+  dispose() {
+    clearTimeout(this.timeout);
+  }
 }
 
 function corsHeaders(origin: string | null, env: Env) {
@@ -138,11 +181,17 @@ function parseAnalysis(content: string): AssignmentAnalysis {
   return validateAssignmentAnalysis(JSON.parse(stripJsonCodeFence(content)));
 }
 
-async function requestProviderOnce(messages: ChatMessage[], env: Env, upstreamFetch: typeof fetch) {
+async function requestProviderOnce(
+  messages: ChatMessage[],
+  env: Env,
+  upstreamFetch: typeof fetch,
+  budget: AnalysisBudget,
+) {
   if (!env.FEATHERLESS_API_KEY) throw new Error("AI provider is not configured.");
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), budget.takeProviderCall());
+  const signal = AbortSignal.any([budget.controller.signal, controller.signal]);
 
   try {
     const response = await upstreamFetch(`${env.AI_BASE_URL}/chat/completions`, {
@@ -161,7 +210,7 @@ async function requestProviderOnce(messages: ChatMessage[], env: Env, upstreamFe
         chat_template_kwargs: { enable_thinking: false },
         messages,
       }),
-      signal: controller.signal,
+      signal,
     });
     if (!response.ok) {
       await response.body?.cancel();
@@ -183,39 +232,53 @@ async function requestProviderOnce(messages: ChatMessage[], env: Env, upstreamFe
       throw new ProviderResponseError("AI provider response was invalid.");
     }
   } catch (error) {
-    if (error instanceof ProviderResponseError || error instanceof TransientProviderError) throw error;
+    if (error instanceof AnalysisBudgetError || error instanceof ProviderResponseError || error instanceof TransientProviderError) throw error;
+    if (budget.controller.signal.aborted || budget.remainingMilliseconds() < MIN_PROVIDER_WINDOW_MS) {
+      throw new AnalysisBudgetError("The analyser ran out of time.");
+    }
     throw new TransientProviderError("AI provider request did not complete.");
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function requestProvider(messages: ChatMessage[], env: Env, upstreamFetch: typeof fetch, pause: Wait) {
+async function requestProvider(
+  messages: ChatMessage[],
+  env: Env,
+  upstreamFetch: typeof fetch,
+  pause: Wait,
+  budget: AnalysisBudget,
+) {
   try {
-    return await requestProviderOnce(messages, env, upstreamFetch);
+    return await requestProviderOnce(messages, env, upstreamFetch, budget);
   } catch (error) {
     if (!(error instanceof TransientProviderError)) throw error;
-    await pause(PROVIDER_RETRY_DELAY_MS);
-    return requestProviderOnce(messages, env, upstreamFetch);
+    await budget.pauseBeforeRetry(pause);
+    return requestProviderOnce(messages, env, upstreamFetch, budget);
   }
 }
 
 async function analyseBrief(briefText: string, env: Env, upstreamFetch: typeof fetch, pause: Wait) {
+  const budget = new AnalysisBudget();
   const messages: ChatMessage[] = [
     { role: "system", content: analysisSystemPrompt },
     { role: "user", content: createAnalysisPrompt(briefText) },
   ];
 
-  const firstContent = await requestProvider(messages, env, upstreamFetch, pause);
   try {
-    return parseAnalysis(firstContent);
-  } catch {
-    const repairedMessages: ChatMessage[] = [
-      ...messages,
-      { role: "assistant", content: firstContent },
-      { role: "user", content: "Your previous response was invalid. Return only the exact requested JSON object, following every schema rule." },
-    ];
-    return parseAnalysis(await requestProvider(repairedMessages, env, upstreamFetch, pause));
+    const firstContent = await requestProvider(messages, env, upstreamFetch, pause, budget);
+    try {
+      return parseAnalysis(firstContent);
+    } catch {
+      const repairedMessages: ChatMessage[] = [
+        ...messages,
+        { role: "assistant", content: firstContent },
+        { role: "user", content: "Your previous response was invalid. Return only the exact requested JSON object, following every schema rule." },
+      ];
+      return parseAnalysis(await requestProvider(repairedMessages, env, upstreamFetch, pause, budget));
+    }
+  } finally {
+    budget.dispose();
   }
 }
 

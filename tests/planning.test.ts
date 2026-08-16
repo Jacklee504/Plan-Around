@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createPlanFingerprint } from "../lib/planSnapshot";
 import { analysisSystemPrompt, createAnalysisPrompt, validateAssignmentAnalysis } from "../lib/assignmentAnalysis";
 import { generateStudySchedule } from "../lib/scheduler";
@@ -273,6 +273,43 @@ describe("hosted assignment analyser", () => {
 
     expect(response.status).toBe(200);
     expect(calls).toBe(2);
+  });
+
+  it("caps a transient retry plus repair attempt at three Featherless calls", async () => {
+    let calls = 0;
+    const worker = createWorker(async () => {
+      calls += 1;
+      if (calls === 1 || calls === 3) return new Response(null, { status: 503 });
+      return providerResponse({ invalid: true });
+    }, async () => {});
+
+    const response = await worker.fetch(workerRequest(), workerEnv);
+
+    expect(response.status).toBe(502);
+    expect(calls).toBe(3);
+  });
+
+  it("ends all provider work within the shared 30-second analysis budget", async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const worker = createWorker(async (_input, init) => {
+        calls += 1;
+        return new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal as AbortSignal;
+          signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+        });
+      });
+
+      const responsePromise = worker.fetch(workerRequest(), workerEnv);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const response = await responsePromise;
+
+      expect(response.status).toBe(502);
+      expect(calls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not retry a rejected Featherless request", async () => {

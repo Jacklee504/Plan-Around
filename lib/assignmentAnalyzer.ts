@@ -28,6 +28,9 @@ export async function analyzeAssignmentBrief(briefText: string): Promise<Assignm
       signal: controller.signal,
     });
 
+    if (response.status === 429) {
+      throw new Error("Too many analysis requests. Please wait a minute before trying again.");
+    }
     if (!response.ok) {
       throw new Error("The analyser could not read this brief. You can still enter the rubric manually.");
     }
@@ -37,7 +40,11 @@ export async function analyzeAssignmentBrief(briefText: string): Promise<Assignm
     if (controller.signal.aborted) {
       throw new Error("The analyser took too long. You can still enter the rubric manually.");
     }
-    if (error instanceof Error && error.message === "The analyser could not read this brief. You can still enter the rubric manually.") {
+    if (
+      error instanceof Error
+      && (error.message === "The analyser could not read this brief. You can still enter the rubric manually."
+        || error.message === "Too many analysis requests. Please wait a minute before trying again.")
+    ) {
       throw error;
     }
     throw new Error("The analyser is not available. You can still enter the rubric manually.");
