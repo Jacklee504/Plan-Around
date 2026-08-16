@@ -2,6 +2,8 @@ export const storageKeys = {
   modules: "plan-around.modules",
   commitments: "plan-around.commitments",
   timetableEntries: "plan-around.timetable-entries",
+  datedCommitments: "plan-around.dated-commitments",
+  onboarding: "plan-around.onboarding",
   assignments: "plan-around.assignments",
   studyBlocks: "plan-around.study-blocks",
   planSnapshots: "plan-around.plan-snapshots",

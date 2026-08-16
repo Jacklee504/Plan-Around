@@ -22,11 +22,11 @@ Demonstrate one complete path with three routes:
 /setup → /assignment → /plan
 ```
 
-1. **Setup:** add modules and weekly blocked periods.
+1. **Setup:** establish a recurring seven-day baseline by reviewing timetable screenshot extraction or the supplied local PDF fallback, confirm ECTS, and add weekly blocked periods.
 2. **Assignment:** select a module, enter title, deadline and grade weighting, then add rubric tasks manually or load the supplied demo assignment.
 3. **Plan:** review the workload breakdown and generated study blocks grouped by day.
 
-HA1 uses manual rubric entry and a supplied demo assignment. This keeps the prototype fully explainable and avoids presenting mock document analysis as a real capability.
+Assignment and timetable analysis are AI-assisted, never automatically accepted, and always remain editable. This keeps the workload and scheduling decisions fully explainable.
 
 ## Workload model
 
@@ -49,7 +49,7 @@ The supplied demo assignment uses a credible software-project breakdown: impleme
 
 - Consider availability from 08:00 to 22:00.
 - Treat a date-only deadline as the end of that date. Aim to finish before the deadline date, then use it only when earlier capacity is insufficient and surface a warning.
-- Remove recurring commitments for each matching weekday.
+- Remove recurring commitments for each matching weekday and one-off commitments only on their exact dates.
 - Ignore free gaps under 60 minutes and use 60–120 minute study sessions.
 - Aim for roughly three assignment hours a day, increasing only when the deadline makes it necessary.
 - Allocate tasks in the analysis order and split tasks across sessions when needed.
@@ -77,4 +77,4 @@ A judge can add a 10 ECTS module and recurring commitments, enter a 40% assignme
 
 ## Deliberately excluded
 
-Real document AI/OCR/PDF extraction, calendar integrations, drag-and-drop scheduling, automatic replanning, completion tracking, personal productivity modelling, generic student tools, accounts, databases, payments, and native apps.
+Calendar integrations, drag-and-drop scheduling, automatic replanning, completion tracking, personal productivity modelling, generic student tools, accounts, databases, payments, native apps, generic PDF OCR and multi-page timetable ingestion.

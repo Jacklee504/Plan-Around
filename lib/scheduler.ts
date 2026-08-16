@@ -1,6 +1,7 @@
 import type {
   Assignment,
   Commitment,
+  DatedCommitment,
   ScheduleResult,
   StudyBlock,
   TimetableEntry,
@@ -22,6 +23,8 @@ type SchedulerInput = {
   workload: WorkloadBreakdown;
   timetableEntries: TimetableEntry[];
   commitments: Commitment[];
+  /** Exact-date commitments block only their recorded date. */
+  datedCommitments?: DatedCommitment[];
   /** Existing sessions for other assignments. Unlike commitments, these block one exact date only. */
   reservedBlocks?: StudyBlock[];
   now?: Date;
@@ -106,6 +109,7 @@ function availableRanges(
   date: Date,
   timetableEntries: TimetableEntry[],
   commitments: Commitment[],
+  datedCommitments: DatedCommitment[],
   reservedBlocks: StudyBlock[],
 ) {
   const recurringRanges = [
@@ -114,6 +118,9 @@ function availableRanges(
       .map((entry) => ({ start: minutesFromTime(entry.start), end: minutesFromTime(entry.end) })),
     ...commitments
       .filter((commitment) => commitment.dayOfWeek === date.getDay())
+      .map((commitment) => ({ start: minutesFromTime(commitment.start), end: minutesFromTime(commitment.end) })),
+    ...datedCommitments
+      .filter((commitment) => commitment.date === dateKey(date))
       .map((commitment) => ({ start: minutesFromTime(commitment.start), end: minutesFromTime(commitment.end) })),
     ...reservedBlocks
       .filter((block) => block.date === dateKey(date))
@@ -141,11 +148,12 @@ function buildAvailability(
   endExclusive: Date,
   timetableEntries: TimetableEntry[],
   commitments: Commitment[],
+  datedCommitments: DatedCommitment[],
   reservedBlocks: StudyBlock[],
 ) {
   const dates: DatedAvailability[] = [];
   for (let date = startOfDay(start); date < endExclusive; date = addDays(date, 1)) {
-    dates.push({ date, dateKey: dateKey(date), ranges: availableRanges(date, timetableEntries, commitments, reservedBlocks) });
+    dates.push({ date, dateKey: dateKey(date), ranges: availableRanges(date, timetableEntries, commitments, datedCommitments, reservedBlocks) });
   }
   return dates;
 }
@@ -274,6 +282,7 @@ export function generateStudySchedule({
   workload,
   timetableEntries,
   commitments,
+  datedCommitments = [],
   reservedBlocks = [],
   now = new Date(),
 }: SchedulerInput): ScheduleResult {
@@ -283,8 +292,8 @@ export function generateStudySchedule({
   // Callers should already pass only other assignments, but this makes regeneration
   // safe even if an old plan is supplied accidentally.
   const otherAssignmentBlocks = reservedBlocks.filter((block) => block.assignmentId !== assignment.id);
-  const fullAvailability = buildAvailability(scheduleStart, dayAfterDeadline, timetableEntries, commitments, otherAssignmentBlocks);
-  const bufferedAvailability = buildAvailability(scheduleStart, deadline, timetableEntries, commitments, otherAssignmentBlocks);
+  const fullAvailability = buildAvailability(scheduleStart, dayAfterDeadline, timetableEntries, commitments, datedCommitments, otherAssignmentBlocks);
+  const bufferedAvailability = buildAvailability(scheduleStart, deadline, timetableEntries, commitments, datedCommitments, otherAssignmentBlocks);
   removePastAvailability(fullAvailability, now);
   removePastAvailability(bufferedAvailability, now);
   const requiredMinutes = Math.round(workload.usableHours * 60);

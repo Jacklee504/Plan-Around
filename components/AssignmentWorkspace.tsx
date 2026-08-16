@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { analyzeAssignmentBrief, imageAnalysisIsAvailable } from "@/lib/assignmentAnalyzer";
-import { prepareAssignmentImage, type PreparedAssignmentImage } from "@/lib/assignmentImage";
+import { prepareAnalysisImage, type PreparedAnalysisImage } from "@/lib/analysisImage";
 import { assignmentAnalysisInputKey, type AssignmentAnalysisInput, type AssignmentAnalysisResponse, type GroundedField } from "@/lib/assignmentAnalysis";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import type { Assignment, AssignmentTask, Module } from "@/types";
 import { WorkloadBreakdown } from "@/components/WorkloadBreakdown";
+import { OnboardingRequired } from "@/components/OnboardingRequired";
+import { useOnboardingState } from "@/lib/onboarding";
 
 type AssignmentDraft = {
   moduleId: string;
@@ -72,13 +74,14 @@ function EvidenceDetail({ field }: { field: GroundedField }) {
 }
 
 export function AssignmentWorkspace() {
+  const { onboarding, isOnboardingLoaded } = useOnboardingState();
   const [modules, setModules] = useState<Module[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [draft, setDraft] = useState<AssignmentDraft>(emptyAssignmentDraft);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
   const [showTasks, setShowTasks] = useState(false);
   const [briefText, setBriefText] = useState("");
-  const [analysisImage, setAnalysisImage] = useState<PreparedAssignmentImage | null>(null);
+  const [analysisImage, setAnalysisImage] = useState<PreparedAnalysisImage | null>(null);
   const currentAnalysisInputKey = useRef("");
   const imagePreparationVersion = useRef(0);
   const imageInput = useRef<HTMLInputElement>(null);
@@ -133,6 +136,7 @@ export function AssignmentWorkspace() {
 
   function updateBriefText(nextBriefText: string) {
     imagePreparationVersion.current += 1;
+    setIsPreparingImage(false);
     currentAnalysisInputKey.current = assignmentAnalysisInputKey({ kind: "text", text: nextBriefText });
     setBriefText(nextBriefText);
     setAnalysisImage(null);
@@ -144,6 +148,7 @@ export function AssignmentWorkspace() {
 
   function clearAnalysisImage() {
     imagePreparationVersion.current += 1;
+    setIsPreparingImage(false);
     currentAnalysisInputKey.current = assignmentAnalysisInputKey({ kind: "text", text: "" });
     setAnalysisImage(null);
     if (imageInput.current) imageInput.current.value = "";
@@ -164,7 +169,7 @@ export function AssignmentWorkspace() {
     setAnalysisResult(null);
     setNeedsReplacementConfirmation(false);
     try {
-      const image = await prepareAssignmentImage(file);
+      const image = await prepareAnalysisImage(file);
       if (imagePreparationVersion.current !== version) return;
       currentAnalysisInputKey.current = assignmentAnalysisInputKey(image);
       setBriefText("");
@@ -330,6 +335,12 @@ export function AssignmentWorkspace() {
 
   const selectedWorkloadAssignment = assignments.find((assignment) => assignment.id === selectedWorkloadAssignmentId) ?? null;
   const selectedWorkloadModule = selectedWorkloadAssignment ? modules.find((module) => module.id === selectedWorkloadAssignment.moduleId) ?? null : null;
+
+  if (!isLoaded || !isOnboardingLoaded) {
+    return <div className="h-44 animate-pulse border-y border-[var(--line)] bg-[var(--surface-soft)]" aria-label="Loading assignment" />;
+  }
+
+  if (!onboarding.completed) return <OnboardingRequired />;
 
   return (
     <div className="space-y-10">

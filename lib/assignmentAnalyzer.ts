@@ -4,26 +4,11 @@ import {
   type AssignmentAnalysisResponse,
   validateAssignmentAnalysisResponse,
 } from "@/lib/assignmentAnalysis";
+import { getAnalyzerEndpoint, imageAnalysisIsAvailable } from "@/lib/analyzerEndpoint";
 
 const ANALYZER_TIMEOUT_MS = 35_000;
 
-function getAnalyzerUrl() {
-  const configuredUrl = process.env.NEXT_PUBLIC_ANALYZER_URL?.trim();
-  if (configuredUrl) return configuredUrl;
-  if (process.env.NODE_ENV === "development") return "http://localhost:8787/analyze";
-  throw new Error("The analyser is not configured for this build.");
-}
-
-export function imageAnalysisIsAvailable() {
-  const configuredUrl = process.env.NEXT_PUBLIC_ANALYZER_URL?.trim();
-  if (!configuredUrl) return process.env.NODE_ENV !== "development";
-  try {
-    const hostname = new URL(configuredUrl).hostname;
-    return hostname !== "localhost" && hostname !== "127.0.0.1";
-  } catch {
-    return false;
-  }
-}
+export { imageAnalysisIsAvailable };
 
 export async function analyzeAssignmentBrief(input: AssignmentAnalysisInput): Promise<AssignmentAnalysisResponse> {
   if (input.kind === "text" && !input.text.trim()) throw new Error("Paste an assignment brief before analysing it.");
@@ -36,7 +21,7 @@ export async function analyzeAssignmentBrief(input: AssignmentAnalysisInput): Pr
   const timeout = setTimeout(() => controller.abort(), ANALYZER_TIMEOUT_MS);
   let payload: Partial<AssignmentAnalysisResponse>;
   try {
-    const response = await fetch(getAnalyzerUrl(), {
+    const response = await fetch(getAnalyzerEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source: input }),

@@ -11,6 +11,14 @@ import {
   validateAssignmentAnalysis,
   validateAssignmentAnalysisInput,
 } from "../../lib/assignmentAnalysis";
+import {
+  createTimetableImageAnalysisPrompt,
+  MAX_TIMETABLE_COMPLETION_TOKENS,
+  timetableAnalysisSystemPrompt,
+  type TimetableAnalysis,
+  type TimetableAnalysisResponse,
+  validateTimetableAnalysis,
+} from "../../lib/timetableAnalysis";
 
 const MAX_TEXT_REQUEST_BYTES = 25_000;
 const MAX_IMAGE_REQUEST_BYTES = 2_100_000;
@@ -193,7 +201,7 @@ function contentFromProviderPayload(payload: unknown) {
   return content;
 }
 
-function parseAnalysis(content: string): AssignmentAnalysis {
+function parseAssignmentAnalysis(content: string): AssignmentAnalysis {
   return validateAssignmentAnalysis(JSON.parse(stripJsonCodeFence(content)));
 }
 
@@ -202,6 +210,7 @@ async function requestProviderOnce(
   env: Env,
   upstreamFetch: typeof fetch,
   budget: AnalysisBudget,
+  completionTokens: number,
 ) {
   if (!env.FEATHERLESS_API_KEY) throw new Error("AI provider is not configured.");
 
@@ -215,13 +224,13 @@ async function requestProviderOnce(
       headers: {
         Authorization: `Bearer ${env.FEATHERLESS_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://jacklee504.github.io/PlanAround/",
+        "HTTP-Referer": "https://plan-around.vercel.app/",
         "X-Title": "PlanAround",
       },
       body: JSON.stringify({
         model: env.AI_PRIMARY_MODEL,
         temperature: 0.1,
-        max_tokens: MAX_ANALYSIS_COMPLETION_TOKENS,
+        max_tokens: completionTokens,
         response_format: { type: "json_object" },
         chat_template_kwargs: { enable_thinking: false },
         messages,
@@ -264,44 +273,75 @@ async function requestProvider(
   upstreamFetch: typeof fetch,
   pause: Wait,
   budget: AnalysisBudget,
+  completionTokens: number,
 ) {
   try {
-    return await requestProviderOnce(messages, env, upstreamFetch, budget);
+    return await requestProviderOnce(messages, env, upstreamFetch, budget, completionTokens);
   } catch (error) {
     if (!(error instanceof TransientProviderError)) throw error;
     await budget.pauseBeforeRetry(pause);
-    return requestProviderOnce(messages, env, upstreamFetch, budget);
+    return requestProviderOnce(messages, env, upstreamFetch, budget, completionTokens);
   }
 }
 
-function createMessages(source: AssignmentAnalysisInput): ChatMessage[] {
+type AnalysisRoute<T> = {
+  pathname: "/analyze" | "/analyze-timetable";
+  systemPrompt: string;
+  completionTokens: number;
+  imagePrompt: () => string;
+  parse: (content: string) => T;
+  errorMessage: string;
+  allowsText: boolean;
+};
+
+const assignmentRoute: AnalysisRoute<AssignmentAnalysis> = {
+  pathname: "/analyze",
+  systemPrompt: analysisSystemPrompt,
+  completionTokens: MAX_ANALYSIS_COMPLETION_TOKENS,
+  imagePrompt: createImageAnalysisPrompt,
+  parse: parseAssignmentAnalysis,
+  errorMessage: "The analyser could not read this brief.",
+  allowsText: true,
+};
+
+const timetableRoute: AnalysisRoute<TimetableAnalysis> = {
+  pathname: "/analyze-timetable",
+  systemPrompt: timetableAnalysisSystemPrompt,
+  completionTokens: MAX_TIMETABLE_COMPLETION_TOKENS,
+  imagePrompt: createTimetableImageAnalysisPrompt,
+  parse: (content) => validateTimetableAnalysis(JSON.parse(stripJsonCodeFence(content))),
+  errorMessage: "The analyser could not read this timetable.",
+  allowsText: false,
+};
+
+function createMessages(source: AssignmentAnalysisInput, route: AnalysisRoute<unknown>): ChatMessage[] {
   const userContent = source.kind === "text"
     ? createAnalysisPrompt(source.text)
     : [
-      { type: "text" as const, text: createImageAnalysisPrompt() },
+      { type: "text" as const, text: route.imagePrompt() },
       { type: "image_url" as const, image_url: { url: `data:${source.mimeType};base64,${source.base64}` } },
     ];
   return [
-    { role: "system", content: analysisSystemPrompt },
+    { role: "system", content: route.systemPrompt },
     { role: "user", content: userContent },
   ];
 }
 
-async function analyseSource(source: AssignmentAnalysisInput, env: Env, upstreamFetch: typeof fetch, pause: Wait) {
+async function analyseSource<T>(source: AssignmentAnalysisInput, route: AnalysisRoute<T>, env: Env, upstreamFetch: typeof fetch, pause: Wait) {
   const budget = new AnalysisBudget();
-  const messages = createMessages(source);
+  const messages = createMessages(source, route);
 
   try {
-    const firstContent = await requestProvider(messages, env, upstreamFetch, pause, budget);
+    const firstContent = await requestProvider(messages, env, upstreamFetch, pause, budget, route.completionTokens);
     try {
-      return parseAnalysis(firstContent);
+      return route.parse(firstContent);
     } catch {
       const repairedMessages: ChatMessage[] = [
         ...messages,
         { role: "assistant", content: firstContent },
         { role: "user", content: "Your previous response was invalid. Return only the exact requested JSON object, following every schema rule." },
       ];
-      return parseAnalysis(await requestProvider(repairedMessages, env, upstreamFetch, pause, budget));
+      return route.parse(await requestProvider(repairedMessages, env, upstreamFetch, pause, budget, route.completionTokens));
     }
   } finally {
     budget.dispose();
@@ -313,8 +353,13 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
     async fetch(request: Request, env: Env): Promise<Response> {
       const url = new URL(request.url);
       const origin = request.headers.get("Origin");
+      const route = url.pathname === assignmentRoute.pathname
+        ? assignmentRoute
+        : url.pathname === timetableRoute.pathname
+          ? timetableRoute
+          : null;
 
-      if (url.pathname !== "/analyze") return jsonResponse({ error: "Not found." }, 404, origin, env);
+      if (!route) return jsonResponse({ error: "Not found." }, 404, origin, env);
       if (origin && !isAllowedOrigin(origin, env)) return jsonResponse({ error: "Origin is not allowed." }, 403, null, env);
       if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin, env) });
       if (request.method !== "POST") return jsonResponse({ error: "Not found." }, 404, origin, env);
@@ -334,12 +379,26 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
           () => new ClientInputError("Request body is too large."),
         );
         const source = parseAnalysisRequest(requestBody);
-        const analysis = await analyseSource(source, env, upstreamFetch, pause);
-        const response: AssignmentAnalysisResponse = {
+        if (!route.allowsText && source.kind !== "image") {
+          throw new ClientInputError("A timetable screenshot is required.");
+        }
+        if (route === assignmentRoute) {
+          const analysis = await analyseSource(source, assignmentRoute, env, upstreamFetch, pause);
+          const response: AssignmentAnalysisResponse = {
+            analysis,
+            provenance: source.kind === "text"
+              ? createTextAnalysisProvenance(source.text, analysis)
+              : createImageAnalysisProvenance(analysis),
+            provider: "featherless",
+            model: env.AI_PRIMARY_MODEL,
+            verifier: { used: false, model: null, reasons: [] },
+          };
+          return jsonResponse(response, 200, origin, env);
+        }
+
+        const analysis = await analyseSource(source, timetableRoute, env, upstreamFetch, pause);
+        const response: TimetableAnalysisResponse = {
           analysis,
-          provenance: source.kind === "text"
-            ? createTextAnalysisProvenance(source.text, analysis)
-            : createImageAnalysisProvenance(analysis),
           provider: "featherless",
           model: env.AI_PRIMARY_MODEL,
           verifier: { used: false, model: null, reasons: [] },
@@ -347,7 +406,7 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
         return jsonResponse(response, 200, origin, env);
       } catch (error) {
         if (error instanceof ClientInputError) return jsonResponse({ error: error.message }, 400, origin, env);
-        return jsonResponse({ error: "The analyser could not read this brief." }, 502, origin, env);
+        return jsonResponse({ error: route.errorMessage }, 502, origin, env);
       }
     },
   } satisfies ExportedHandler<Env>;

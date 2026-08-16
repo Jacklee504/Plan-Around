@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "react";
 import { parseTimetablePdf } from "@/lib/timetableParser";
 import { clearPlanAroundStorage, readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
-import type { Commitment, CommitmentCategory, Module, TimetableAttendance, TimetableEntry } from "@/types";
+import { CALENDAR_DAYS } from "@/lib/calendarLayout";
+import { WeeklyCalendar } from "@/components/WeeklyCalendar";
+import { initialOnboardingState, useOnboardingState } from "@/lib/onboarding";
+import { prepareAnalysisImage, type PreparedAnalysisImage } from "@/lib/analysisImage";
+import { analyzeTimetableScreenshot } from "@/lib/timetableAnalyzer";
+import type { TimetableAnalysisEntry } from "@/lib/timetableAnalysis";
+import { TimetableReview } from "@/components/TimetableReview";
+import type { Commitment, CommitmentCategory, DatedCommitment, Module, TimetableAttendance, TimetableEntry } from "@/types";
 
 const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const calendarDays = [1, 2, 3, 4, 5];
-const calendarStartHour = 8;
-const calendarEndHour = 22;
-const HOUR_HEIGHT = 64;
-const calendarStartMinutes = calendarStartHour * 60;
-const calendarHeight = (calendarEndHour - calendarStartHour) * HOUR_HEIGHT;
+const calendarDays = CALENDAR_DAYS;
 
 const categoryLabels: Record<CommitmentCategory, string> = {
   class: "Class",
@@ -23,22 +25,20 @@ const categoryLabels: Record<CommitmentCategory, string> = {
   other: "Other",
 };
 
-const sessionLabels = { lecture: "Lecture", lab: "Lab", tutorial: "Tutorial" } as const;
+const sessionLabels = { lecture: "Lecture", lab: "Lab", tutorial: "Tutorial", other: "Class" } as const;
 
 const inputClassName =
   "mt-1.5 min-h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)] outline-none transition-colors placeholder:text-[var(--muted-ink)] focus:border-[var(--accent)]";
 
 type ModuleDraft = { name: string; code: string; credits: string };
 type CommitmentDraft = { label: string; dayOfWeek: string; start: string; end: string; category: CommitmentCategory };
+type DatedCommitmentDraft = { label: string; date: string; start: string; end: string; category: CommitmentCategory };
 
 const emptyModuleDraft: ModuleDraft = { name: "", code: "", credits: "5" };
 const emptyCommitmentDraft: CommitmentDraft = { label: "", dayOfWeek: "1", start: "16:00", end: "17:00", category: "other" };
+const emptyDatedCommitmentDraft: DatedCommitmentDraft = { label: "", date: "", start: "16:00", end: "17:00", category: "other" };
 
 const createId = () => window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const minutesFromTime = (time: string) => {
-  const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + minutes;
-};
 
 function localDateKey(date: Date) {
   const year = date.getFullYear();
@@ -62,40 +62,44 @@ type LegacyTimetableEntry = Omit<TimetableEntry, "attendance" | "skippedWeeks"> 
   skippedWeeks?: string[];
 };
 
-function minuteToPixel(time: string) {
-  return ((minutesFromTime(time) - calendarStartMinutes) / 60) * HOUR_HEIGHT;
-}
+type SetupWorkspaceContentProps = {
+  onboardingCompleted: boolean;
+  onCompleteOnboarding: () => void;
+  onResetOnboarding: () => void;
+};
 
-function blockPosition(start: string, end: string) {
-  return {
-    top: `${minuteToPixel(start)}px`,
-    height: `${minuteToPixel(end) - minuteToPixel(start)}px`,
-  };
-}
-
-function isCompactCalendarBlock(start: string, end: string) {
-  return minutesFromTime(end) - minutesFromTime(start) < 60;
-}
-
-export function SetupWorkspace() {
+function SetupWorkspaceContent({ onboardingCompleted, onCompleteOnboarding, onResetOnboarding }: SetupWorkspaceContentProps) {
   const [modules, setModules] = useState<Module[]>([]);
   const [commitments, setCommitments] = useState<Commitment[]>([]);
+  const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>([]);
   const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
   const [moduleDraft, setModuleDraft] = useState<ModuleDraft>(emptyModuleDraft);
   const [commitmentDraft, setCommitmentDraft] = useState<CommitmentDraft>(emptyCommitmentDraft);
+  const [datedCommitmentDraft, setDatedCommitmentDraft] = useState<DatedCommitmentDraft>(emptyDatedCommitmentDraft);
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [importState, setImportState] = useState<"idle" | "reading" | "complete" | "error">("idle");
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [importMessage, setImportMessage] = useState("");
+  const [preparedTimetableImage, setPreparedTimetableImage] = useState<PreparedAnalysisImage | null>(null);
+  const [isPreparingTimetableImage, setIsPreparingTimetableImage] = useState(false);
+  const [isAnalysingTimetable, setIsAnalysingTimetable] = useState(false);
+  const [timetableAnalysisError, setTimetableAnalysisError] = useState("");
+  const [reviewEntries, setReviewEntries] = useState<TimetableAnalysisEntry[] | null>(null);
+  const [reviewWarnings, setReviewWarnings] = useState<string[]>([]);
+  const [reviewError, setReviewError] = useState("");
+  const timetableImageInput = useRef<HTMLInputElement>(null);
+  const timetableImageVersion = useRef(0);
   const [moduleError, setModuleError] = useState("");
   const [commitmentError, setCommitmentError] = useState("");
+  const [datedCommitmentError, setDatedCommitmentError] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
       setModules(readStoredValue<Module[]>(storageKeys.modules, []));
       setCommitments(readStoredValue<Commitment[]>(storageKeys.commitments, []));
+      setDatedCommitments(readStoredValue<DatedCommitment[]>(storageKeys.datedCommitments, []));
       const storedEntries = readStoredValue<LegacyTimetableEntry[]>(storageKeys.timetableEntries, []);
       setTimetableEntries(storedEntries.map((entry) => ({
         ...entry,
@@ -117,6 +121,10 @@ export function SetupWorkspace() {
   }, [commitments, isLoaded]);
 
   useEffect(() => {
+    if (isLoaded) writeStoredValue(storageKeys.datedCommitments, datedCommitments);
+  }, [datedCommitments, isLoaded]);
+
+  useEffect(() => {
     if (isLoaded) writeStoredValue(storageKeys.timetableEntries, timetableEntries);
   }, [isLoaded, timetableEntries]);
 
@@ -126,6 +134,8 @@ export function SetupWorkspace() {
   const isSkippedThisWeek = (entry: TimetableEntry) => entry.attendance === "skip-every-week" || entry.skippedWeeks.includes(currentWeekKey);
   const totalBlockedTime = timetableEntries.filter((entry) => !isSkippedThisWeek(entry)).length + commitments.length;
   const unconfirmedCreditCount = modules.filter((module) => module.creditsConfirmed !== true).length;
+  const hasBaseline = totalBlockedTime > 0;
+  const canCompleteSetup = hasBaseline && unconfirmedCreditCount === 0;
 
   function resetModuleForm() {
     setModuleDraft(emptyModuleDraft);
@@ -168,6 +178,25 @@ export function SetupWorkspace() {
     setCommitmentError("");
   }
 
+  function saveDatedCommitment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const label = datedCommitmentDraft.label.trim();
+    if (!label || !datedCommitmentDraft.date || datedCommitmentDraft.end <= datedCommitmentDraft.start) {
+      setDatedCommitmentError("Add a label, date, and valid start and end time.");
+      return;
+    }
+    setDatedCommitments((current) => [...current, {
+      id: createId(),
+      label,
+      date: datedCommitmentDraft.date,
+      start: datedCommitmentDraft.start,
+      end: datedCommitmentDraft.end,
+      category: datedCommitmentDraft.category,
+    }]);
+    setDatedCommitmentDraft(emptyDatedCommitmentDraft);
+    setDatedCommitmentError("");
+  }
+
   async function importTimetable(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -186,30 +215,117 @@ export function SetupWorkspace() {
     try {
       const pdfContent = await file.text();
       const parsed = parseTimetablePdf(pdfContent);
-      const nextEntries = parsed.entries.map((entry) => ({ ...entry, id: createId(), attendance: "attending" as const, skippedWeeks: [] }));
-      const existingModulesByCode = new Map(modules
-        .filter((module) => module.code)
-        .map((module) => [module.code!.toUpperCase(), module]));
-      const importedModules = [...new Map(nextEntries.map((entry) => [entry.moduleCode, entry])).values()]
-        .map((entry) => {
-          const existingModule = existingModulesByCode.get(entry.moduleCode);
-          return {
-            id: existingModule?.id ?? createId(),
-            code: entry.moduleCode,
-            name: entry.moduleName,
-            credits: existingModule?.credits ?? 5,
-            creditsConfirmed: existingModule?.creditsConfirmed ?? false,
-          };
-        });
-
-      setTimetableEntries(nextEntries);
-      setModules(importedModules);
+      setReviewEntries(parsed.entries.map((entry) => ({
+        moduleCode: entry.moduleCode,
+        moduleName: entry.moduleName,
+        day: days[entry.dayOfWeek] as TimetableAnalysisEntry["day"],
+        start: entry.start,
+        end: entry.end,
+        sessionType: entry.sessionType,
+      })));
+      setReviewWarnings([]);
+      setReviewError("");
       setImportState("complete");
-      setImportMessage(`Read ${parsed.entries.length} sessions across ${parsed.moduleCount} modules.`);
+      setImportMessage(`Read ${parsed.entries.length} sample sessions across ${parsed.moduleCount} modules. Review them before saving.`);
     } catch (error) {
       setImportState("error");
       setImportMessage(error instanceof Error ? error.message : "We could not read that timetable.");
     }
+  }
+
+  async function selectTimetableImage(file: File | undefined) {
+    if (!file) return;
+    const version = timetableImageVersion.current + 1;
+    timetableImageVersion.current = version;
+    setIsPreparingTimetableImage(true);
+    setPreparedTimetableImage(null);
+    setTimetableAnalysisError("");
+    setReviewEntries(null);
+    setReviewWarnings([]);
+    setReviewError("");
+    try {
+      const preparedImage = await prepareAnalysisImage(file);
+      if (timetableImageVersion.current !== version) return;
+      setPreparedTimetableImage(preparedImage);
+    } catch (error) {
+      if (timetableImageVersion.current !== version) return;
+      setTimetableAnalysisError(error instanceof Error ? error.message : "This timetable screenshot could not be prepared.");
+    } finally {
+      if (timetableImageVersion.current === version) setIsPreparingTimetableImage(false);
+      if (timetableImageInput.current) timetableImageInput.current.value = "";
+    }
+  }
+
+  function clearTimetableImage() {
+    timetableImageVersion.current += 1;
+    setIsPreparingTimetableImage(false);
+    setPreparedTimetableImage(null);
+    setTimetableAnalysisError("");
+    if (timetableImageInput.current) timetableImageInput.current.value = "";
+  }
+
+  async function analyseTimetableImage() {
+    if (!preparedTimetableImage) return;
+    setIsAnalysingTimetable(true);
+    setTimetableAnalysisError("");
+    setReviewEntries(null);
+    setReviewWarnings([]);
+    setReviewError("");
+    try {
+      const response = await analyzeTimetableScreenshot(preparedTimetableImage);
+      setReviewEntries(response.analysis.entries);
+      setReviewWarnings(response.analysis.warnings);
+    } catch (error) {
+      setTimetableAnalysisError(error instanceof Error ? error.message : "This timetable could not be analysed.");
+    } finally {
+      setIsAnalysingTimetable(false);
+    }
+  }
+
+  function confirmReviewedTimetable() {
+    if (!reviewEntries?.length) {
+      setReviewError("Add at least one teaching session before confirming the timetable.");
+      return;
+    }
+    const invalidEntry = reviewEntries.find((entry) => !entry.moduleCode?.trim() || !entry.moduleName.trim() || !/^\d{2}:\d{2}$/.test(entry.start) || !/^\d{2}:\d{2}$/.test(entry.end) || entry.end <= entry.start);
+    if (invalidEntry) {
+      setReviewError("Each session needs a module code, name, valid times, and an end time after its start.");
+      return;
+    }
+    if (onboardingCompleted && timetableEntries.length && !window.confirm("Importing this timetable will replace your current recurring teaching sessions. Your personal commitments and assignments will remain.")) return;
+
+    const nextEntries = reviewEntries.map((entry) => ({
+      id: createId(),
+      moduleCode: entry.moduleCode!.trim(),
+      moduleName: entry.moduleName.trim(),
+      dayOfWeek: days.indexOf(entry.day),
+      start: entry.start,
+      end: entry.end,
+      sessionType: entry.sessionType,
+      attendance: "attending" as const,
+      skippedWeeks: [],
+    }));
+    const existingModulesByCode = new Map(modules.filter((module) => module.code).map((module) => [module.code!.trim().toUpperCase(), module]));
+    const importedModules = [...new Map(nextEntries.map((entry) => [entry.moduleCode.toUpperCase(), entry])).values()].map((entry) => {
+      const existingModule = existingModulesByCode.get(entry.moduleCode.toUpperCase());
+      return {
+        id: existingModule?.id ?? createId(),
+        code: entry.moduleCode,
+        name: entry.moduleName,
+        credits: existingModule?.credits ?? 5,
+        creditsConfirmed: existingModule?.creditsConfirmed ?? false,
+      };
+    });
+
+    setTimetableEntries(nextEntries);
+    setModules(importedModules);
+    setSelectedEntryId(null);
+    setReviewEntries(null);
+    setReviewWarnings([]);
+    setReviewError("");
+    setPreparedTimetableImage(null);
+    setImportState("complete");
+    setImportMessage(`Saved ${nextEntries.length} recurring teaching sessions across ${importedModules.length} modules.`);
   }
 
   function updateAttendance(attendance: TimetableAttendance) {
@@ -248,31 +364,40 @@ export function SetupWorkspace() {
     clearPlanAroundStorage();
     setModules([]);
     setCommitments([]);
+    setDatedCommitments([]);
     setTimetableEntries([]);
     setModuleDraft(emptyModuleDraft);
     setCommitmentDraft(emptyCommitmentDraft);
+    setDatedCommitmentDraft(emptyDatedCommitmentDraft);
     setSelectedEntryId(null);
     setImportState("idle");
     setUploadedFileName("");
     setImportMessage("");
     setModuleError("");
     setCommitmentError("");
+    setDatedCommitmentError("");
+    onResetOnboarding();
   }
 
   return (
     <div className="space-y-10">
+      {!onboardingCompleted ? <section className="border-y border-[var(--line)] py-4" aria-label="Setup progress"><ol className="grid gap-2 text-sm sm:grid-cols-3"><li className="font-semibold text-[var(--accent-strong)]">1. Timetable</li><li className="text-[var(--muted-ink)]">2. Recurring commitments</li><li className="text-[var(--muted-ink)]">3. Review week</li></ol></section> : null}
       <section aria-labelledby="upload-heading" className="grid gap-5 border-y border-[var(--line)] py-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Semester timetable</p>
-          <h2 id="upload-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Import your real teaching week.</h2>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Use the supplied supported timetable PDF for this prototype, then check its modules and classes in the editable calendar.</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">{onboardingCompleted ? "Recurring teaching timetable" : "Step 1: recurring teaching timetable"}</p>
+          <h2 id="upload-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">{onboardingCompleted ? "Update your normal teaching week." : "Import your normal teaching week."}</h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Use the supplied supported sample PDF for this prototype, then check its modules and classes before you save the recurring baseline.</p>
         </div>
         <div className="flex flex-wrap gap-3 lg:justify-end">
           <Link href="/semester-1-timetable.pdf" download className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">
             Download sample PDF
           </Link>
           <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">
-            {importState === "reading" ? "Reading timetable..." : "Select timetable PDF"}
+            {isPreparingTimetableImage ? "Preparing screenshot..." : "Upload timetable screenshot"}
+            <input ref={timetableImageInput} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void selectTimetableImage(event.target.files?.[0])} disabled={isPreparingTimetableImage || isAnalysingTimetable} />
+          </label>
+          <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">
+            {importState === "reading" ? "Reading sample..." : "Try sample PDF"}
             <input className="sr-only" type="file" accept="application/pdf,.pdf" onChange={importTimetable} disabled={importState === "reading"} />
           </label>
         </div>
@@ -283,6 +408,10 @@ export function SetupWorkspace() {
         ) : null}
       </section>
 
+      {preparedTimetableImage ? <section className="grid gap-4 border-y border-[var(--line)] py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" aria-live="polite"><div><p className="text-sm font-semibold">{preparedTimetableImage.filename} is ready to analyse.</p><p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">The screenshot was prepared locally and is sent to the hosted analyser only when you click Analyse.</p></div><div className="flex flex-wrap gap-3"><button type="button" onClick={() => void analyseTimetableImage()} disabled={isAnalysingTimetable} className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] disabled:cursor-wait disabled:opacity-70">{isAnalysingTimetable ? "Analysing timetable..." : "Analyse timetable"}</button><button type="button" onClick={clearTimetableImage} disabled={isAnalysingTimetable} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] hover:border-[var(--accent)]">Remove</button></div></section> : null}
+      {timetableAnalysisError ? <p className="border-y border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{timetableAnalysisError}</p> : null}
+      {reviewEntries ? <TimetableReview entries={reviewEntries} warnings={reviewWarnings} error={reviewError} onChange={(entries) => { setReviewEntries(entries); setReviewError(""); }} onConfirm={confirmReviewedTimetable} onCancel={() => { setReviewEntries(null); setReviewWarnings([]); setReviewError(""); }} /> : null}
+
       {hasTimetable ? (
         <>
           <section aria-labelledby="calendar-heading">
@@ -290,76 +419,14 @@ export function SetupWorkspace() {
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Your actual week</p>
                 <h2 id="calendar-heading" className="mt-1 text-2xl font-semibold tracking-[-0.035em]">Calendar</h2>
-                <p className="mt-1 text-sm text-[var(--muted-ink)]">Select a teaching session to say whether you are attending it this week.</p>
+                <p className="mt-1 text-sm text-[var(--muted-ink)]">{onboardingCompleted ? "Select a teaching session to manage your attendance for this week." : "Review your normal recurring sessions. Week-specific attendance changes come after setup."}</p>
               </div>
               <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-strong)]">{importedModuleCount} modules imported</span>
             </div>
 
-            <div className="mt-5 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
-              <div className="min-w-[46rem]">
-                <div className="grid grid-cols-[3.5rem_repeat(5,minmax(8rem,1fr))] border-b border-[var(--line)] bg-[var(--surface-soft)]">
-                  <div />
-                  {calendarDays.map((dayOfWeek) => <div key={dayOfWeek} className="px-3 py-3 text-sm font-semibold">{days[dayOfWeek]}</div>)}
-                </div>
-                <div className="grid grid-cols-[3.5rem_minmax(0,1fr)]">
-                  <div className="relative border-r border-[var(--line)] text-xs text-[var(--muted-ink)]" style={{ height: calendarHeight }}>
-                    {Array.from({ length: calendarEndHour - calendarStartHour + 1 }, (_, index) => (
-                      <span key={index} className="absolute right-2 tabular-nums" style={{ top: index * HOUR_HEIGHT }}>
-                        {`${calendarStartHour + index}:00`}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="relative" style={{ height: calendarHeight }}>
-                    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-                      {Array.from({ length: calendarEndHour - calendarStartHour + 1 }, (_, index) => (
-                        <div key={index} className="absolute inset-x-0 border-t border-[var(--line)]" style={{ top: index * HOUR_HEIGHT }} />
-                      ))}
-                    </div>
-                    <div className="relative grid h-full grid-cols-5">
-                      {calendarDays.map((dayOfWeek) => (
-                        <div key={dayOfWeek} className="relative border-r border-[var(--line)] last:border-r-0">
-                          {timetableEntries.filter((entry) => entry.dayOfWeek === dayOfWeek).map((entry) => {
-                            const isSkipped = isSkippedThisWeek(entry);
-                            const isCompact = isCompactCalendarBlock(entry.start, entry.end);
-                            return (
-                              <button key={entry.id} type="button" onClick={() => setSelectedEntryId(entry.id)} className={`absolute left-1 right-1 z-10 overflow-hidden rounded-lg border text-left transition-colors ${isCompact ? "px-1.5 py-0 text-[10px] leading-[14px]" : "px-2 py-1 text-[11px] leading-[14px]"} ${isSkipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : "border-[var(--accent-soft)] bg-[var(--accent-soft)] text-[var(--ink)] hover:border-[var(--accent)]"}`} style={blockPosition(entry.start, entry.end)}>
-                                {isCompact ? (
-                                  <span className="block truncate font-bold tabular-nums">{entry.moduleCode} · {entry.start}–{entry.end}</span>
-                                ) : (
-                                  <>
-                                    <span className="block truncate font-bold">{entry.moduleCode}</span>
-                                    <span className="block truncate">{sessionLabels[entry.sessionType]}</span>
-                                    <span className="block tabular-nums">{entry.start}–{entry.end}</span>
-                                  </>
-                                )}
-                              </button>
-                            );
-                          })}
-                          {commitments.filter((commitment) => commitment.dayOfWeek === dayOfWeek).map((commitment) => {
-                            const isCompact = isCompactCalendarBlock(commitment.start, commitment.end);
-                            return (
-                              <div key={commitment.id} className={`absolute left-1 right-1 z-10 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] text-left text-[11px] leading-[14px] text-[var(--ink)] shadow-sm ${isCompact ? "px-1.5 py-0 text-[10px]" : "px-2 py-1"}`} style={blockPosition(commitment.start, commitment.end)}>
-                                {isCompact ? (
-                                  <span className="block truncate font-bold tabular-nums">{commitment.label} · {commitment.start}–{commitment.end}</span>
-                                ) : (
-                                  <>
-                                    <span className="block truncate font-bold">{commitment.label}</span>
-                                    <span className="block truncate text-[var(--muted-ink)]">{categoryLabels[commitment.category]}</span>
-                                    <span className="block tabular-nums text-[var(--muted-ink)]">{commitment.start}–{commitment.end}</span>
-                                  </>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <div className="mt-5"><WeeklyCalendar timetableEntries={timetableEntries} commitments={commitments} datedCommitments={onboardingCompleted ? datedCommitments : []} visibleWeekStart={onboardingCompleted ? currentWeekKey : undefined} selectedEntryId={selectedEntryId} isEntrySkipped={onboardingCompleted ? isSkippedThisWeek : () => false} onSelectEntry={onboardingCompleted ? (entry) => setSelectedEntryId(entry.id) : undefined} /></div>
 
-            {selectedEntry ? (
+            {onboardingCompleted && selectedEntry ? (
               <div className="mt-4 grid gap-4 border-y border-[var(--line)] py-4 sm:grid-cols-[1fr_auto] sm:items-center">
                 <div>
                   <p className="text-sm font-semibold">{selectedEntry.moduleCode} · {selectedEntry.moduleName}</p>
@@ -376,9 +443,9 @@ export function SetupWorkspace() {
 
           <section className="grid gap-8 border-t border-[var(--line)] pt-8 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,0.72fr)]">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Outside class</p>
-              <h2 className="mt-1 text-xl font-semibold tracking-[-0.03em]">Add your commitments.</h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">Work, gym, meals and social time sit alongside your teaching schedule.</p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">{onboardingCompleted ? "Recurring baseline" : "Step 2: recurring commitments"}</p>
+              <h2 className="mt-1 text-xl font-semibold tracking-[-0.03em]">Add your regular weekly commitments.</h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">Add time that is reliably part of your normal week, such as work, gym, meals or a club. You can change it later.</p>
               <form onSubmit={saveCommitment} className="mt-5 grid gap-3 rounded-2xl bg-[var(--surface-soft)] p-4 sm:grid-cols-2">
                 <label className="text-sm font-medium sm:col-span-2">What is this time for?<input value={commitmentDraft.label} onChange={(event) => setCommitmentDraft((current) => ({ ...current, label: event.target.value }))} className={inputClassName} placeholder="Part-time work" autoComplete="off" /></label>
                 <label className="text-sm font-medium">Day<select value={commitmentDraft.dayOfWeek} onChange={(event) => setCommitmentDraft((current) => ({ ...current, dayOfWeek: event.target.value }))} className={inputClassName}>{calendarDays.map((day) => <option key={day} value={day}>{days[day]}</option>)}</select></label>
@@ -388,14 +455,15 @@ export function SetupWorkspace() {
                 {commitmentError ? <p className="text-sm text-red-700 sm:col-span-2">{commitmentError}</p> : null}
                 <button type="submit" className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] sm:col-span-2">Add to calendar</button>
               </form>
+              {onboardingCompleted ? <section className="mt-7 border-t border-[var(--line)] pt-6" aria-labelledby="one-off-heading"><p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">One-off commitment</p><h3 id="one-off-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Protect a specific date.</h3><p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">Use this for something occasional, such as a shift, appointment, trip or event. It will not repeat next week.</p><form onSubmit={saveDatedCommitment} className="mt-4 grid gap-3 rounded-2xl bg-[var(--surface-soft)] p-4 sm:grid-cols-2"><label className="text-sm font-medium sm:col-span-2">What is this time for?<input value={datedCommitmentDraft.label} onChange={(event) => setDatedCommitmentDraft((current) => ({ ...current, label: event.target.value }))} className={inputClassName} placeholder="Dentist appointment" autoComplete="off" /></label><label className="text-sm font-medium">Date<input value={datedCommitmentDraft.date} onChange={(event) => setDatedCommitmentDraft((current) => ({ ...current, date: event.target.value }))} className={inputClassName} type="date" /></label><label className="text-sm font-medium">Category<select value={datedCommitmentDraft.category} onChange={(event) => setDatedCommitmentDraft((current) => ({ ...current, category: event.target.value as CommitmentCategory }))} className={inputClassName}>{Object.entries(categoryLabels).filter(([category]) => category !== "class").map(([category, label]) => <option key={category} value={category}>{label}</option>)}</select></label><label className="text-sm font-medium">Start<input value={datedCommitmentDraft.start} onChange={(event) => setDatedCommitmentDraft((current) => ({ ...current, start: event.target.value }))} className={inputClassName} type="time" /></label><label className="text-sm font-medium">End<input value={datedCommitmentDraft.end} onChange={(event) => setDatedCommitmentDraft((current) => ({ ...current, end: event.target.value }))} className={inputClassName} type="time" /></label>{datedCommitmentError ? <p className="text-sm text-red-700 sm:col-span-2">{datedCommitmentError}</p> : null}<button type="submit" className="min-h-11 rounded-xl border border-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)] sm:col-span-2">Add one-off commitment</button></form>{datedCommitments.length ? <ul className="mt-4 divide-y divide-[var(--line)] border-y border-[var(--line)]">{datedCommitments.slice().sort((first, second) => first.date.localeCompare(second.date) || first.start.localeCompare(second.start)).map((commitment) => <li key={commitment.id} className="flex items-center justify-between gap-3 py-3 text-sm"><span><span className="font-semibold">{commitment.label}</span><span className="text-[var(--muted-ink)]"> · {commitment.date}, {commitment.start}–{commitment.end}</span></span><button type="button" onClick={() => setDatedCommitments((current) => current.filter((item) => item.id !== commitment.id))} className="min-h-10 px-2 font-semibold text-[var(--muted-ink)] hover:text-red-700">Delete</button></li>)}</ul> : null}</section> : null}
             </div>
 
             <aside className="h-fit border-t border-[var(--line)] pt-5 lg:sticky lg:top-6">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Setup status</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">{unconfirmedCreditCount ? "Confirm your module credits." : "Your constraints are ready."}</h2>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">{onboardingCompleted ? "Calendar status" : "Step 3: review week"}</p>
+              <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">{unconfirmedCreditCount ? "Confirm your module credits." : hasBaseline ? onboardingCompleted ? "Your recurring week is ready." : "Your recurring week is ready to save." : "Add at least one recurring constraint."}</h2>
               <dl className="mt-5 space-y-3 border-y border-[var(--line)] py-4 text-sm"><div className="flex justify-between gap-4"><dt className="text-[var(--muted-ink)]">Modules</dt><dd className="font-semibold">{modules.length}</dd></div><div className="flex justify-between gap-4"><dt className="text-[var(--muted-ink)]">Calendar blocks</dt><dd className="font-semibold">{totalBlockedTime}</dd></div></dl>
               {unconfirmedCreditCount ? <p className="mt-4 text-sm leading-6 text-[var(--muted-ink)]">Confirm the ECTS for all {unconfirmedCreditCount} imported module{unconfirmedCreditCount === 1 ? "" : "s"} before workload planning.</p> : null}
-              {unconfirmedCreditCount ? <button type="button" disabled className="mt-5 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center rounded-xl bg-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)]">Confirm credits to continue</button> : <Link href="/assignment" className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Continue to assignment</Link>}
+              {!onboardingCompleted ? <button type="button" onClick={onCompleteOnboarding} disabled={!canCompleteSetup} className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">{unconfirmedCreditCount ? "Confirm credits to continue" : hasBaseline ? "Complete setup" : "Add a recurring constraint"}</button> : <Link href="/assignment" className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Go to assignments</Link>}
               <button type="button" onClick={resetPlanAround} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-800">Reset all PlanAround data</button>
             </aside>
           </section>
@@ -421,4 +489,27 @@ export function SetupWorkspace() {
       )}
     </div>
   );
+}
+
+export function SetupWorkspace() {
+  const { onboarding, isOnboardingLoaded, setOnboarding } = useOnboardingState();
+
+  if (!isOnboardingLoaded) {
+    return <div className="h-44 animate-pulse border-y border-[var(--line)] bg-[var(--surface-soft)]" aria-label="Loading setup" />;
+  }
+
+  function completeOnboarding() {
+    const nextState = { completed: true, completedAt: new Date().toISOString() };
+    writeStoredValue(storageKeys.onboarding, nextState);
+    setOnboarding(nextState);
+    window.dispatchEvent(new Event("planaround:onboarding"));
+  }
+
+  function resetOnboarding() {
+    writeStoredValue(storageKeys.onboarding, initialOnboardingState);
+    setOnboarding(initialOnboardingState);
+    window.dispatchEvent(new Event("planaround:onboarding"));
+  }
+
+  return <SetupWorkspaceContent onboardingCompleted={onboarding.completed} onCompleteOnboarding={completeOnboarding} onResetOnboarding={resetOnboarding} />;
 }

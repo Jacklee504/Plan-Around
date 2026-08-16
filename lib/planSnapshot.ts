@@ -1,10 +1,11 @@
-import type { Assignment, Commitment, Module, StudyBlock, TimetableEntry } from "@/types";
+import type { Assignment, Commitment, DatedCommitment, Module, StudyBlock, TimetableEntry } from "@/types";
 
 type PlanInputs = {
   assignment: Assignment;
   module: Module;
   timetableEntries: TimetableEntry[];
   commitments: Commitment[];
+  datedCommitments?: DatedCommitment[];
 };
 
 function sortByValue<T>(items: T[]) {
@@ -16,7 +17,7 @@ function sortByValue<T>(items: T[]) {
  * IDs are intentionally omitted from recurring constraints so re-importing an
  * identical timetable does not invalidate a plan purely because entries were rebuilt.
  */
-function createPlanInputSnapshot({ assignment, module, timetableEntries, commitments }: PlanInputs) {
+function createPlanInputSnapshot({ assignment, module, timetableEntries, commitments, datedCommitments = [] }: PlanInputs) {
   return {
     assignment: {
       moduleId: assignment.moduleId,
@@ -43,6 +44,13 @@ function createPlanInputSnapshot({ assignment, module, timetableEntries, commitm
       end: commitment.end,
       category: commitment.category,
     }))),
+    datedCommitments: sortByValue(datedCommitments.map((commitment) => ({
+      label: commitment.label,
+      date: commitment.date,
+      start: commitment.start,
+      end: commitment.end,
+      category: commitment.category,
+    }))),
   };
 }
 
@@ -59,7 +67,7 @@ export function createPlanFingerprint(inputs: PlanInputs) {
   return createPlanInputFingerprint(inputs);
 }
 
-type ReservableBlocksInput = Pick<PlanInputs, "timetableEntries" | "commitments"> & {
+type ReservableBlocksInput = Pick<PlanInputs, "timetableEntries" | "commitments" | "datedCommitments"> & {
   currentAssignmentId: string;
   assignments: Assignment[];
   modules: Module[];
@@ -80,6 +88,7 @@ export function getReservableStudyBlocks({
   planSnapshots,
   timetableEntries,
   commitments,
+  datedCommitments,
 }: ReservableBlocksInput) {
   const reservableAssignmentIds = new Set(
     assignments
@@ -93,6 +102,7 @@ export function getReservableStudyBlocks({
           module: assignmentModule,
           timetableEntries,
           commitments,
+          datedCommitments,
         });
       })
       .map((assignment) => assignment.id),

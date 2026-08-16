@@ -4,7 +4,7 @@ import { AssignmentWorkspace } from "@/components/AssignmentWorkspace";
 export default function AssignmentPage() {
   return (
     <AppShell
-      eyebrow="Step 02 of 03"
+      eyebrow="Assignments"
       title="Give the assignment some context."
       description="Add the details you already have. PlanAround will turn them into an explainable workload recommendation before it makes a study plan."
     >

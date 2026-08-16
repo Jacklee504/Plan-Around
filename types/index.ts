@@ -17,7 +17,21 @@ export type Commitment = {
   category: CommitmentCategory;
 };
 
-export type TimetableSessionType = "lecture" | "lab" | "tutorial";
+export type DatedCommitment = {
+  id: string;
+  label: string;
+  date: string;
+  start: string;
+  end: string;
+  category: CommitmentCategory;
+};
+
+export type TimetableSessionType = "lecture" | "lab" | "tutorial" | "other";
+
+export type OnboardingState = {
+  completed: boolean;
+  completedAt?: string;
+};
 
 export type TimetableAttendance = "attending" | "skip-every-week";
 

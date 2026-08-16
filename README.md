@@ -2,7 +2,7 @@
 
 Fit assignments around your actual week.
 
-[Open the live prototype](https://jacklee504.github.io/PlanAround/)
+[Open the live prototype](https://plan-around.vercel.app/)
 
 Rather than offering another generic to-do list, it makes the planning decision for a single assessment visible and explainable:
 
@@ -13,16 +13,17 @@ Assignment details + module weighting + weekly commitments
 
 ## What the prototype demonstrates
 
-- Download and upload a readable Semester 1 timetable PDF.
-- Parse its timetable rows locally into modules, lectures, labs, and tutorials.
-- View the resulting teaching schedule in an editable weekly calendar.
-- Mark a class as not attended for the current week or for every week.
-- Add personal commitments alongside classes.
+- Establish a recurring weekly baseline before using assignments or plans.
+- Upload a normal timetable screenshot for AI-assisted extraction, then edit and confirm every teaching session before it is saved.
+- Keep the controlled Semester 1 PDF as a local, deterministic demo fallback.
+- Confirm module ECTS values before completing setup.
+- View a seven-day baseline calendar, add recurring commitments, then later add one-off dated commitments.
+- Mark a class as not attended for the current week or for every week after setup.
 - Add an assignment against an imported module, with its deadline and module weighting.
 - Paste an assignment brief into an AI-assisted review, then inspect and apply only the suggested title, deadline, weighting and rubric tasks you want. Missing marks remain for the student to confirm.
 - Optionally add rubric tasks, marks, complexity and notes manually, or load realistic demo details.
 - Review a transparent, rubric-weighted workload recommendation and override its total when needed.
-- Generate study blocks from 08:00 to 22:00 around attended classes and personal commitments.
+- Generate study blocks from 08:00 to 22:00 around attended classes, recurring commitments, one-off dated commitments, and other fresh assignment plans.
 - Aim to finish before the deadline date, using that date only when capacity makes it necessary, and flag plans as On track, Tight or Not enough time.
 - Detect when timetable, commitment or workload inputs have changed, and require the plan to be regenerated before showing saved study blocks.
 - Keep constraints, assignments and generated study blocks in local browser storage.
@@ -33,26 +34,32 @@ PlanAround does not present an unexplained AI time guess. The recommended worklo
 
 ## Prototype scope
 
-The app is a mobile-first Next.js/TypeScript web app with three steps:
+The app is a mobile-first Next.js/TypeScript web app. First-run onboarding establishes the recurring baseline, then persistent navigation provides Calendar, Assignments and Plan:
 
 ```text
-1. Timetable   Import and adjust classes plus personal commitments
-2. Assignment  Assessment details and optional rubric tasks
-3. Plan        Workload review and generated study timetable
+1. Calendar   Recurring teaching, recurring commitments and date-specific changes
+2. Assignments   Assessment details and optional rubric tasks
+3. Plan   Workload review and generated study timetable
 ```
 
 Persistence is local to the browser.
 
 ## Demo in three steps
 
-1. In **Timetable**, download and import the supplied Semester 1 timetable PDF, then confirm the detected module credits and add a commitment if useful.
+1. In **Calendar**, upload a timetable screenshot, review the extracted sessions, confirm ECTS and add a recurring commitment. The supplied PDF remains available as a deterministic fallback.
 2. In **Assignment**, load the sample brief, analyse it, review the suggested rubric, and confirm any missing marks before saving. Manual rubric entry remains available throughout.
 3. In **Plan**, generate the proposed study sessions and show the workload story, project buffer, status and sessions grouped by date.
 
 ## How it works
 
 ```text
-Timetable → local parser → constraints
+Timetable screenshot
+→ Cloudflare Worker
+→ Featherless + Qwen3.5-397B-A17B
+→ validated, editable teaching-session review
+→ recurring constraints
+
+Sample timetable PDF → controlled local parser → editable teaching-session review
 
 Assignment brief
 → Cloudflare Worker
@@ -69,7 +76,7 @@ Constraints + workload
 
 ### Timetable import note
 
-The first release supports the supplied timetable PDF format and extracts its readable schedule rows locally. It is a controlled prototype import, not general support for every university PDF or screenshot.
+Timetable screenshots are AI-assisted and always require review before they are saved. The controlled sample PDF is parsed locally as a deterministic demo fallback. Arbitrary PDF timetable import is not supported, and screenshot quality affects extraction.
 
 ## Stack
 
@@ -77,7 +84,7 @@ The first release supports the supplied timetable PDF format and extracts its re
 - TypeScript
 - Tailwind CSS
 - localStorage
-- GitHub Pages frontend hosting
+- Vercel frontend hosting
 - Cloudflare Worker AI boundary
 - Featherless + Qwen3.5-397B-A17B for text and screenshot interpretation
 - Deterministic scheduling and workload logic
@@ -91,7 +98,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). The root opens the timetable step.
 
-For the demo, download `Semester 1 timetable` from the app, then select the downloaded PDF to see the local importer build the calendar.
+For the demo, either upload a timetable screenshot and review the draft sessions, or download `Semester 1 timetable` from the app and select the downloaded PDF for the local fallback.
 
 ### AI-assisted brief review
 
@@ -107,7 +114,7 @@ Then use **Analyse with local AI** on the Assignment page. The browser sends the
 
 ## Current status
 
-Timetable import, AI-assisted or manual rubric entry, workload estimation, stale-plan detection and deterministic study-session scheduling are complete. AI only extracts a reviewed draft rubric; workload and scheduling remain deterministic.
+Recurring-week onboarding, timetable screenshot review, AI-assisted or manual rubric entry, workload estimation, stale-plan detection and deterministic study-session scheduling are complete. AI only extracts reviewed drafts. Workload and scheduling remain deterministic.
 
 ## Further reference
 

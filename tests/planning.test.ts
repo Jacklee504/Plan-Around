@@ -12,8 +12,10 @@ import {
   validateAssignmentAnalysisInput,
 } from "../lib/assignmentAnalysis";
 import { generateStudySchedule } from "../lib/scheduler";
+import { calendarBlockDensity } from "../lib/calendarLayout";
+import { MAX_TIMETABLE_COMPLETION_TOKENS, validateTimetableAnalysis } from "../lib/timetableAnalysis";
 import { calculateWorkloadBreakdown } from "../lib/workload";
-import type { Assignment, Commitment, StudyBlock, TimetableEntry } from "../types";
+import type { Assignment, Commitment, DatedCommitment, StudyBlock, TimetableEntry } from "../types";
 import { createWorker } from "../worker/src";
 
 const softwareModule = { id: "cs301", code: "CS301", name: "Software Engineering", credits: 10, creditsConfirmed: true };
@@ -32,6 +34,10 @@ function assignment(overrides: Partial<Assignment> = {}): Assignment {
 
 function commitment(overrides: Partial<Commitment> = {}): Commitment {
   return { id: "work", label: "Work", dayOfWeek: 1, start: "08:00", end: "20:00", category: "work", ...overrides };
+}
+
+function datedCommitment(overrides: Partial<DatedCommitment> = {}): DatedCommitment {
+  return { id: "dentist", label: "Dentist", date: "2026-08-17", start: "08:00", end: "22:00", category: "other", ...overrides };
 }
 
 function timetableEntry(overrides: Partial<TimetableEntry> = {}): TimetableEntry {
@@ -67,6 +73,43 @@ describe("workload model", () => {
     }));
 
     expect(result.taskHours.map((task) => task.recommendedHours)).toEqual([12.5, 20]);
+  });
+});
+
+describe("calendar block density", () => {
+  it("keeps short blocks compact and gives exactly one hour its own three-line density", () => {
+    expect(calendarBlockDensity("09:00", "09:30")).toBe("compact");
+    expect(calendarBlockDensity("09:00", "09:59")).toBe("compact");
+    expect(calendarBlockDensity("09:00", "10:00")).toBe("tight");
+    expect(calendarBlockDensity("09:00", "10:01")).toBe("normal");
+  });
+});
+
+describe("timetable analysis contract", () => {
+  const timetableAnalysis = {
+    entries: [{ moduleCode: "CS301", moduleName: "Software Engineering", day: "Monday", start: "09:00", end: "10:00", sessionType: "lecture" }],
+    warnings: [],
+  };
+
+  it("accepts a reviewable entry with a missing module code and all supported session types", () => {
+    const result = validateTimetableAnalysis({
+      ...timetableAnalysis,
+      entries: [
+        { ...timetableAnalysis.entries[0], moduleCode: null, sessionType: "other" },
+        { ...timetableAnalysis.entries[0], day: "Sunday", start: "11:00", end: "12:00", sessionType: "tutorial" },
+      ],
+    });
+
+    expect(result.entries[0].moduleCode).toBeNull();
+    expect(result.entries[0].sessionType).toBe("other");
+    expect(result.entries[1].day).toBe("Sunday");
+  });
+
+  it("rejects malformed days and times, and removes exact duplicate sessions", () => {
+    expect(() => validateTimetableAnalysis({ ...timetableAnalysis, entries: [{ ...timetableAnalysis.entries[0], day: "Mon" }] })).toThrow("weekday");
+    expect(() => validateTimetableAnalysis({ ...timetableAnalysis, entries: [{ ...timetableAnalysis.entries[0], start: "9:00" }] })).toThrow("HH:MM");
+    expect(() => validateTimetableAnalysis({ ...timetableAnalysis, entries: [{ ...timetableAnalysis.entries[0], end: "09:00" }] })).toThrow("end after");
+    expect(validateTimetableAnalysis({ ...timetableAnalysis, entries: [timetableAnalysis.entries[0], timetableAnalysis.entries[0]] }).entries).toHaveLength(1);
   });
 });
 
@@ -239,6 +282,35 @@ describe("scheduler", () => {
     expect(result.studyBlocks.some((block) => block.date === "2026-08-17")).toBe(true);
   });
 
+  it("blocks study time for a dated commitment only on its exact date", () => {
+    const task = assignment({ deadline: "2026-08-18", workloadOverrideHours: 3 });
+    const result = generateStudySchedule({
+      assignment: task,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, task),
+      timetableEntries: [],
+      commitments: [],
+      datedCommitments: [datedCommitment()],
+      now: new Date(2026, 7, 17, 7),
+    });
+
+    expect(result.studyBlocks.every((block) => block.date !== "2026-08-17")).toBe(true);
+    expect(result.studyBlocks.some((block) => block.date === "2026-08-18")).toBe(true);
+  });
+
+  it("does not recur a dated commitment on the same weekday in another week", () => {
+    const task = assignment({ deadline: "2026-08-31", workloadOverrideHours: 3 });
+    const result = generateStudySchedule({
+      assignment: task,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, task),
+      timetableEntries: [],
+      commitments: [],
+      datedCommitments: [datedCommitment({ date: "2026-08-17" })],
+      now: new Date(2026, 7, 24, 7),
+    });
+
+    expect(result.studyBlocks.some((block) => block.date === "2026-08-24")).toBe(true);
+  });
+
   it("marks a plan Tight when it must use the deadline date", () => {
     const task = assignment({ deadline: "2026-08-18", workloadOverrideHours: 3 });
     const result = generateStudySchedule({
@@ -382,6 +454,14 @@ describe("saved-plan freshness", () => {
     const changedCommitment = createPlanFingerprint({ ...baseInputs, commitments: [commitment()] });
 
     expect(changedCommitment).not.toBe(original);
+  });
+
+  it("changes the fingerprint when a dated commitment changes", () => {
+    const task = assignment();
+    const baseInputs = { assignment: task, module: softwareModule, timetableEntries: [], commitments: [], datedCommitments: [] };
+    const original = createPlanFingerprint(baseInputs);
+
+    expect(createPlanFingerprint({ ...baseInputs, datedCommitments: [datedCommitment()] })).not.toBe(original);
   });
 
   it("keeps a plan fresh when another assignment is generated around it", () => {
@@ -736,5 +816,50 @@ describe("hosted assignment analyser", () => {
     expect(response.status).toBe(200);
     expect(providerRequest).toContain("<assignment-brief>");
     expect(providerRequest).toContain(injection);
+  });
+});
+
+describe("hosted timetable analyser", () => {
+  const timetableAnalysis = {
+    entries: [{ moduleCode: "CS301", moduleName: "Software Engineering", day: "Monday", start: "09:00", end: "10:00", sessionType: "lecture" }],
+    warnings: ["One room label was not used."],
+  };
+
+  it("requires a screenshot and returns a separately validated timetable response", async () => {
+    let providerRequest = "";
+    const worker = createWorker(async (_input, init) => {
+      providerRequest = String(init?.body);
+      return providerResponse(timetableAnalysis);
+    });
+    const screenshot = { source: { kind: "image", mimeType: "image/png", base64: "c2NyZWVuc2hvdA==" } };
+
+    const response = await worker.fetch(workerRequest("/analyze-timetable", screenshot, "https://plan-around.vercel.app"), workerEnv);
+    const payload = await response.json() as { analysis: typeof timetableAnalysis; provider: string };
+    const messages = JSON.parse(providerRequest).messages;
+
+    expect(response.status).toBe(200);
+    expect(payload.provider).toBe("featherless");
+    expect(payload.analysis).toEqual(timetableAnalysis);
+    expect(messages[0].content).toContain("recurring teaching sessions");
+    expect(messages[1].content).toEqual([
+      expect.objectContaining({ type: "text" }),
+      { type: "image_url", image_url: { url: "data:image/png;base64,c2NyZWVuc2hvdA==" } },
+    ]);
+  });
+
+  it("uses a timetable-sized token budget and keeps route protections", async () => {
+    let providerRequest = "";
+    const worker = createWorker(async (_input, init) => {
+      providerRequest = String(init?.body);
+      return providerResponse(timetableAnalysis);
+    });
+    const text = await worker.fetch(workerRequest("/analyze-timetable"), workerEnv);
+    const untrustedOrigin = await worker.fetch(workerRequest("/analyze-timetable", { source: { kind: "image", mimeType: "image/jpeg", base64: "c2NyZWVuc2hvdA==" } }, "https://untrusted.example"), workerEnv);
+    const screenshot = await worker.fetch(workerRequest("/analyze-timetable", { source: { kind: "image", mimeType: "image/jpeg", base64: "c2NyZWVuc2hvdA==" } }), workerEnv);
+
+    expect(text.status).toBe(400);
+    expect(untrustedOrigin.status).toBe(403);
+    expect(screenshot.status).toBe(200);
+    expect(JSON.parse(providerRequest).max_tokens).toBe(MAX_TIMETABLE_COMPLETION_TOKENS);
   });
 });

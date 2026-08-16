@@ -1,7 +1,7 @@
 import type { AnalysisImageMimeType, AssignmentAnalysisInput } from "@/lib/assignmentAnalysis";
 
 export const MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024;
-const TARGET_IMAGE_BYTES = 1_500_000;
+export const TARGET_IMAGE_BYTES = 1_500_000;
 const MAX_IMAGE_EDGE = 2_000;
 const IMAGE_OUTPUT_QUALITIES = [0.84, 0.74, 0.64];
 const IMAGE_OUTPUT_EDGES = [MAX_IMAGE_EDGE, 1_800, 1_600];
@@ -66,15 +66,33 @@ function blobToBase64(blob: Blob) {
   });
 }
 
-export type PreparedAssignmentImage = Extract<AssignmentAnalysisInput, { kind: "image" }> & {
+export type PreparedAnalysisImage = Extract<AssignmentAnalysisInput, { kind: "image" }> & {
   filename: string;
   originalSize: number;
   preparedSize: number;
 };
 
-export async function prepareAssignmentImage(file: File): Promise<PreparedAssignmentImage> {
+function preparedImage(file: File & { type: AnalysisImageMimeType }, blob: Blob, mimeType: AnalysisImageMimeType): Promise<PreparedAnalysisImage> {
+  return blobToBase64(blob).then((base64) => ({
+    kind: "image",
+    mimeType,
+    base64,
+    filename: file.name,
+    originalSize: file.size,
+    preparedSize: blob.size,
+  }));
+}
+
+/**
+ * Validates each screenshot locally. Crisp, already-bounded images keep their
+ * original encoding so timetable text is not blurred by an unnecessary JPEG pass.
+ */
+export async function prepareAnalysisImage(file: File): Promise<PreparedAnalysisImage> {
   if (!supportedImageMimeType(file)) throw new Error("Choose a PNG, JPEG or WebP screenshot.");
   if (file.size > MAX_IMAGE_UPLOAD_BYTES) throw new Error("Choose a screenshot smaller than 8 MB.");
+
+  await loadImage(file);
+  if (file.size <= TARGET_IMAGE_BYTES) return preparedImage(file, file, file.type);
 
   const image = await loadImage(file);
   let smallestBlob: Blob | null = null;
@@ -84,19 +102,10 @@ export async function prepareAssignmentImage(file: File): Promise<PreparedAssign
     for (const quality of IMAGE_OUTPUT_QUALITIES) {
       const blob = await canvasToBlob(canvas, quality);
       if (!smallestBlob || blob.size < smallestBlob.size) smallestBlob = blob;
-      if (blob.size <= TARGET_IMAGE_BYTES) {
-        return {
-          kind: "image",
-          mimeType: "image/jpeg",
-          base64: await blobToBase64(blob),
-          filename: file.name,
-          originalSize: file.size,
-          preparedSize: blob.size,
-        };
-      }
+      if (blob.size <= TARGET_IMAGE_BYTES) return preparedImage(file, blob, "image/jpeg");
     }
   }
 
   if (!smallestBlob) throw new Error("This screenshot could not be prepared.");
-  throw new Error("This screenshot is still too detailed after compression. Crop it to the assignment brief and try again.");
+  throw new Error("This screenshot is still too detailed after compression. Crop it to the relevant timetable or brief and try again.");
 }

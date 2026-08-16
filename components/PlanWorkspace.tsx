@@ -6,7 +6,9 @@ import { createPlanFingerprint, getReservableStudyBlocks } from "@/lib/planSnaps
 import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
-import type { Assignment, Commitment, Module, ScheduleResult, StudyBlock, TimetableEntry } from "@/types";
+import { OnboardingRequired } from "@/components/OnboardingRequired";
+import { useOnboardingState } from "@/lib/onboarding";
+import type { Assignment, Commitment, DatedCommitment, Module, ScheduleResult, StudyBlock, TimetableEntry } from "@/types";
 
 type PlanStatus = ScheduleResult["status"];
 
@@ -64,9 +66,11 @@ function getResultForExistingBlocks(blocks: StudyBlock[], recalculatedResult: Sc
 }
 
 export function PlanWorkspace() {
+  const { onboarding, isOnboardingLoaded } = useOnboardingState();
   const [modules, setModules] = useState<Module[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [commitments, setCommitments] = useState<Commitment[]>([]);
+  const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>([]);
   const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
   const [studyBlocks, setStudyBlocks] = useState<StudyBlock[]>([]);
   const [planSnapshots, setPlanSnapshots] = useState<Record<string, string>>({});
@@ -81,6 +85,7 @@ export function PlanWorkspace() {
       setModules(storedModules);
       setAssignments(storedAssignments);
       setCommitments(readStoredValue<Commitment[]>(storageKeys.commitments, []));
+      setDatedCommitments(readStoredValue<DatedCommitment[]>(storageKeys.datedCommitments, []));
       setTimetableEntries(readStoredValue<TimetableEntry[]>(storageKeys.timetableEntries, []));
       setStudyBlocks(readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []));
       setPlanSnapshots(readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {}));
@@ -117,10 +122,11 @@ export function PlanWorkspace() {
       planSnapshots,
       timetableEntries,
       commitments,
+      datedCommitments,
     })
     : [];
   const currentFingerprint = selectedAssignment && selectedModule
-    ? createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments })
+    ? createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments })
     : null;
   const isStoredPlanStale = Boolean(
     selectedAssignment
@@ -129,7 +135,7 @@ export function PlanWorkspace() {
       && planSnapshots[selectedAssignment.id] !== currentFingerprint,
   );
   const recalculatedResult = selectedAssignment && workload
-    ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, reservedBlocks })
+    ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks })
     : null;
   const existingResult = recalculatedResult && !isStoredPlanStale ? getResultForExistingBlocks(storedSelectedBlocks, recalculatedResult) : null;
   const result = generatedResult ?? existingResult;
@@ -140,14 +146,14 @@ export function PlanWorkspace() {
 
   function generatePlan() {
     if (!selectedAssignment || !workload) return;
-    const nextResult = generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, reservedBlocks });
+    const nextResult = generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks });
     setStudyBlocks((current) => [
       ...current.filter((block) => block.assignmentId !== selectedAssignment.id),
       ...nextResult.studyBlocks,
     ]);
     setPlanSnapshots((current) => ({
       ...current,
-      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule!, timetableEntries, commitments }),
+      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule!, timetableEntries, commitments, datedCommitments }),
     }));
     setGeneratedResult(nextResult);
   }
@@ -157,9 +163,11 @@ export function PlanWorkspace() {
     setGeneratedResult(null);
   }
 
-  if (!isLoaded) {
+  if (!isLoaded || !isOnboardingLoaded) {
     return <div className="h-44 animate-pulse border-y border-[var(--line)] bg-[var(--surface-soft)]" aria-label="Loading plan" />;
   }
+
+  if (!onboarding.completed) return <OnboardingRequired destination="plan" />;
 
   if (!schedulableAssignments.length) {
     return (
