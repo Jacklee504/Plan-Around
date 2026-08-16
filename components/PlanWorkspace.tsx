@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { createPlanFingerprint } from "@/lib/planSnapshot";
+import { createPlanFingerprint, getReservableStudyBlocks } from "@/lib/planSnapshot";
 import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
@@ -108,8 +108,19 @@ export function PlanWorkspace() {
   const selectedModule = selectedAssignment ? modules.find((module) => module.id === selectedAssignment.moduleId) ?? null : null;
   const workload = selectedAssignment && selectedModule ? calculateWorkloadBreakdown(selectedModule.credits, selectedAssignment) : null;
   const storedSelectedBlocks = selectedAssignment ? studyBlocks.filter((block) => block.assignmentId === selectedAssignment.id) : [];
+  const reservedBlocks = selectedAssignment && selectedModule
+    ? getReservableStudyBlocks({
+      currentAssignmentId: selectedAssignment.id,
+      assignments,
+      modules,
+      studyBlocks,
+      planSnapshots,
+      timetableEntries,
+      commitments,
+    })
+    : [];
   const currentFingerprint = selectedAssignment && selectedModule
-    ? createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments })
+    ? createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, reservedBlocks })
     : null;
   const isStoredPlanStale = Boolean(
     selectedAssignment
@@ -118,7 +129,7 @@ export function PlanWorkspace() {
       && planSnapshots[selectedAssignment.id] !== currentFingerprint,
   );
   const recalculatedResult = selectedAssignment && workload
-    ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments })
+    ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, reservedBlocks })
     : null;
   const existingResult = recalculatedResult && !isStoredPlanStale ? getResultForExistingBlocks(storedSelectedBlocks, recalculatedResult) : null;
   const result = generatedResult ?? existingResult;
@@ -129,14 +140,14 @@ export function PlanWorkspace() {
 
   function generatePlan() {
     if (!selectedAssignment || !workload) return;
-    const nextResult = generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments });
+    const nextResult = generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, reservedBlocks });
     setStudyBlocks((current) => [
       ...current.filter((block) => block.assignmentId !== selectedAssignment.id),
       ...nextResult.studyBlocks,
     ]);
     setPlanSnapshots((current) => ({
       ...current,
-      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule!, timetableEntries, commitments }),
+      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule!, timetableEntries, commitments, reservedBlocks }),
     }));
     setGeneratedResult(nextResult);
   }

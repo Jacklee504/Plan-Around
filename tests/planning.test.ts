@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPlanFingerprint } from "../lib/planSnapshot";
+import { createPlanFingerprint, getReservableStudyBlocks } from "../lib/planSnapshot";
 import { analysisSystemPrompt, createAnalysisPrompt, validateAssignmentAnalysis } from "../lib/assignmentAnalysis";
 import { generateStudySchedule } from "../lib/scheduler";
 import { calculateWorkloadBreakdown } from "../lib/workload";
-import type { Assignment, Commitment, TimetableEntry } from "../types";
+import type { Assignment, Commitment, StudyBlock, TimetableEntry } from "../types";
 import { createWorker } from "../worker/src";
 
 const softwareModule = { id: "cs301", code: "CS301", name: "Software Engineering", credits: 10, creditsConfirmed: true };
@@ -150,6 +150,82 @@ describe("scheduler", () => {
     expect(result.status).toBe("not-enough-time");
     expect(result.unscheduledHours).toBeGreaterThan(0);
   });
+
+  it("does not overlap a second assignment with an existing plan", () => {
+    const first = assignment({ id: "assignment-a", workloadOverrideHours: 3 });
+    const second = assignment({ id: "assignment-b", workloadOverrideHours: 3 });
+    const now = new Date(2026, 7, 17, 7);
+    const firstResult = generateStudySchedule({
+      assignment: first,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, first),
+      timetableEntries: [],
+      commitments: [],
+      now,
+    });
+    const secondResult = generateStudySchedule({
+      assignment: second,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, second),
+      timetableEntries: [],
+      commitments: [],
+      reservedBlocks: firstResult.studyBlocks,
+      now,
+    });
+
+    expect(secondResult.studyBlocks).not.toHaveLength(0);
+    for (const firstBlock of firstResult.studyBlocks) {
+      for (const secondBlock of secondResult.studyBlocks) {
+        const overlaps = firstBlock.date === secondBlock.date
+          && firstBlock.start < secondBlock.end
+          && secondBlock.start < firstBlock.end;
+        expect(overlaps).toBe(false);
+      }
+    }
+  });
+
+  it("ignores an assignment's own old blocks when regenerating it", () => {
+    const task = assignment({ workloadOverrideHours: 3 });
+    const now = new Date(2026, 7, 17, 7);
+    const firstResult = generateStudySchedule({
+      assignment: task,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, task),
+      timetableEntries: [],
+      commitments: [],
+      now,
+    });
+    const regenerated = generateStudySchedule({
+      assignment: task,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, task),
+      timetableEntries: [],
+      commitments: [],
+      reservedBlocks: firstResult.studyBlocks,
+      now,
+    });
+
+    expect(regenerated.studyBlocks).toEqual(firstResult.studyBlocks);
+  });
+
+  it("treats a reserved session as unavailable on its exact date only", () => {
+    const task = assignment({ deadline: "2026-09-01", workloadOverrideHours: 3 });
+    const reserved: StudyBlock[] = [{
+      id: "assignment-a-2026-08-24-08:00-task",
+      assignmentId: "assignment-a",
+      date: "2026-08-24",
+      start: "08:00",
+      end: "22:00",
+      taskId: "task",
+      taskName: "Reserved task",
+    }];
+    const result = generateStudySchedule({
+      assignment: task,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, task),
+      timetableEntries: [],
+      commitments: [],
+      reservedBlocks: reserved,
+      now: new Date(2026, 7, 31, 7),
+    });
+
+    expect(result.studyBlocks.some((block) => block.date === "2026-08-31")).toBe(true);
+  });
 });
 
 describe("saved-plan freshness", () => {
@@ -160,6 +236,57 @@ describe("saved-plan freshness", () => {
     const changedCommitment = createPlanFingerprint({ ...baseInputs, commitments: [commitment()] });
 
     expect(changedCommitment).not.toBe(original);
+  });
+
+  it("changes the fingerprint when another assignment reserves a dated session", () => {
+    const task = assignment();
+    const inputs = { assignment: task, module: softwareModule, timetableEntries: [], commitments: [] };
+    const reserved: StudyBlock = {
+      id: "assignment-b-2026-08-17-08:00-task",
+      assignmentId: "assignment-b",
+      date: "2026-08-17",
+      start: "08:00",
+      end: "09:30",
+      taskId: "task",
+      taskName: "Reserved task",
+    };
+
+    expect(createPlanFingerprint(inputs)).not.toBe(createPlanFingerprint({ ...inputs, reservedBlocks: [reserved] }));
+  });
+
+  it("does not reserve blocks for removed assignments or stale plans", () => {
+    const first = assignment({ id: "assignment-a", workloadOverrideHours: 3 });
+    const block: StudyBlock = {
+      id: "assignment-a-2026-08-17-08:00-implementation",
+      assignmentId: first.id,
+      date: "2026-08-17",
+      start: "08:00",
+      end: "10:30",
+      taskId: "implementation",
+      taskName: "Implementation",
+    };
+    const snapshots = {
+      [first.id]: createPlanFingerprint({
+        assignment: first,
+        module: softwareModule,
+        timetableEntries: [],
+        commitments: [],
+        reservedBlocks: [],
+      }),
+    };
+    const base = {
+      currentAssignmentId: "assignment-b",
+      assignments: [first],
+      modules: [softwareModule],
+      studyBlocks: [block],
+      planSnapshots: snapshots,
+      timetableEntries: [],
+      commitments: [],
+    };
+
+    expect(getReservableStudyBlocks(base)).toEqual([block]);
+    expect(getReservableStudyBlocks({ ...base, assignments: [] })).toEqual([]);
+    expect(getReservableStudyBlocks({ ...base, commitments: [commitment()] })).toEqual([]);
   });
 });
 

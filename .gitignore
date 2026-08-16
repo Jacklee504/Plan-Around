@@ -4,7 +4,5 @@ out/
 *.log
 .env*
 .idea/
-PlanAround_HA1_AI_Integration_Codex_Plan.docx
-PlanAround_HA1_Featherless_Cloudflare_Implementation.md
 worker/.dev.vars
 *.tsbuildinfo
