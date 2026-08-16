@@ -204,6 +204,36 @@ describe("scheduler", () => {
     expect(regenerated.studyBlocks).toEqual(firstResult.studyBlocks);
   });
 
+  it("regenerates an earlier assignment around a later assignment's fresh plan", () => {
+    const first = assignment({ id: "assignment-a", workloadOverrideHours: 3 });
+    const second = assignment({ id: "assignment-b", workloadOverrideHours: 3 });
+    const now = new Date(2026, 7, 17, 7);
+    const secondResult = generateStudySchedule({
+      assignment: second,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, second),
+      timetableEntries: [],
+      commitments: [],
+      now,
+    });
+    const regeneratedFirst = generateStudySchedule({
+      assignment: first,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, first),
+      timetableEntries: [],
+      commitments: [],
+      reservedBlocks: secondResult.studyBlocks,
+      now,
+    });
+
+    for (const firstBlock of regeneratedFirst.studyBlocks) {
+      for (const secondBlock of secondResult.studyBlocks) {
+        const overlaps = firstBlock.date === secondBlock.date
+          && firstBlock.start < secondBlock.end
+          && secondBlock.start < firstBlock.end;
+        expect(overlaps).toBe(false);
+      }
+    }
+  });
+
   it("treats a reserved session as unavailable on its exact date only", () => {
     const task = assignment({ deadline: "2026-09-01", workloadOverrideHours: 3 });
     const reserved: StudyBlock[] = [{
@@ -238,20 +268,29 @@ describe("saved-plan freshness", () => {
     expect(changedCommitment).not.toBe(original);
   });
 
-  it("changes the fingerprint when another assignment reserves a dated session", () => {
-    const task = assignment();
-    const inputs = { assignment: task, module: softwareModule, timetableEntries: [], commitments: [] };
-    const reserved: StudyBlock = {
-      id: "assignment-b-2026-08-17-08:00-task",
-      assignmentId: "assignment-b",
-      date: "2026-08-17",
-      start: "08:00",
-      end: "09:30",
-      taskId: "task",
-      taskName: "Reserved task",
-    };
+  it("keeps a plan fresh when another assignment is generated around it", () => {
+    const first = assignment({ id: "assignment-a" });
+    const second = assignment({ id: "assignment-b" });
+    const firstSnapshot = createPlanFingerprint({ assignment: first, module: softwareModule, timetableEntries: [], commitments: [] });
 
-    expect(createPlanFingerprint(inputs)).not.toBe(createPlanFingerprint({ ...inputs, reservedBlocks: [reserved] }));
+    generateStudySchedule({
+      assignment: second,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, second),
+      timetableEntries: [],
+      commitments: [],
+      reservedBlocks: [{
+        id: "assignment-a-2026-08-17-08:00-implementation",
+        assignmentId: first.id,
+        date: "2026-08-17",
+        start: "08:00",
+        end: "10:30",
+        taskId: "implementation",
+        taskName: "Implementation",
+      }],
+      now: new Date(2026, 7, 17, 7),
+    });
+
+    expect(createPlanFingerprint({ assignment: first, module: softwareModule, timetableEntries: [], commitments: [] })).toBe(firstSnapshot);
   });
 
   it("does not reserve blocks for removed assignments or stale plans", () => {
@@ -271,7 +310,6 @@ describe("saved-plan freshness", () => {
         module: softwareModule,
         timetableEntries: [],
         commitments: [],
-        reservedBlocks: [],
       }),
     };
     const base = {

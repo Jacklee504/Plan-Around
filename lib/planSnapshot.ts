@@ -7,15 +7,6 @@ type PlanInputs = {
   commitments: Commitment[];
 };
 
-type PlanFingerprintInput = PlanInputs & {
-  reservedBlocks?: StudyBlock[];
-};
-
-type StoredPlanFingerprint = {
-  inputs: unknown;
-  reservedBlocks: unknown[];
-};
-
 function sortByValue<T>(items: T[]) {
   return [...items].sort((first, second) => JSON.stringify(first).localeCompare(JSON.stringify(second)));
 }
@@ -55,41 +46,17 @@ function createPlanInputSnapshot({ assignment, module, timetableEntries, commitm
   };
 }
 
-function normalizedReservedBlocks(blocks: StudyBlock[]) {
-  return sortByValue(blocks.map((block) => ({
-    assignmentId: block.assignmentId,
-    date: block.date,
-    start: block.start,
-    end: block.end,
-    taskId: block.taskId,
-  })));
-}
-
 export function createPlanInputFingerprint(inputs: PlanInputs) {
   return JSON.stringify(createPlanInputSnapshot(inputs));
 }
 
 /**
- * Captures both the recurring inputs and the date-specific sessions that had
- * already been reserved by other assignments when this plan was made.
+ * A plan remains valid while the inputs that shaped its own workload and
+ * recurring availability are unchanged. Other plans reserve availability only
+ * when making a new schedule; their later creation must not stale this plan.
  */
-export function createPlanFingerprint({ reservedBlocks = [], ...inputs }: PlanFingerprintInput) {
-  return JSON.stringify({
-    inputs: createPlanInputSnapshot(inputs),
-    reservedBlocks: normalizedReservedBlocks(reservedBlocks),
-  } satisfies StoredPlanFingerprint);
-}
-
-function storedInputFingerprint(snapshot: string | undefined) {
-  if (!snapshot) return null;
-
-  try {
-    const parsed = JSON.parse(snapshot) as Partial<StoredPlanFingerprint>;
-    if (!parsed.inputs || !Array.isArray(parsed.reservedBlocks)) return null;
-    return JSON.stringify(parsed.inputs);
-  } catch {
-    return null;
-  }
+export function createPlanFingerprint(inputs: PlanInputs) {
+  return createPlanInputFingerprint(inputs);
 }
 
 type ReservableBlocksInput = Pick<PlanInputs, "timetableEntries" | "commitments"> & {
@@ -121,7 +88,7 @@ export function getReservableStudyBlocks({
         const assignmentModule = modules.find((candidate) => candidate.id === assignment.moduleId);
         if (!assignmentModule) return false;
 
-        return storedInputFingerprint(planSnapshots[assignment.id]) === createPlanInputFingerprint({
+        return planSnapshots[assignment.id] === createPlanInputFingerprint({
           assignment,
           module: assignmentModule,
           timetableEntries,

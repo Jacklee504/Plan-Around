@@ -120,7 +120,7 @@ export function PlanWorkspace() {
     })
     : [];
   const currentFingerprint = selectedAssignment && selectedModule
-    ? createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, reservedBlocks })
+    ? createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments })
     : null;
   const isStoredPlanStale = Boolean(
     selectedAssignment
@@ -147,7 +147,7 @@ export function PlanWorkspace() {
     ]);
     setPlanSnapshots((current) => ({
       ...current,
-      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule!, timetableEntries, commitments, reservedBlocks }),
+      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule!, timetableEntries, commitments }),
     }));
     setGeneratedResult(nextResult);
   }
