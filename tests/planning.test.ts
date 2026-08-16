@@ -163,11 +163,15 @@ describe("saved-plan freshness", () => {
   });
 });
 
+const allowsRateLimit = { limit: async () => ({ success: true }) } satisfies RateLimit;
+
 const workerEnv: Env = {
   AI_BASE_URL: "https://api.featherless.ai/v1",
   AI_MODEL: "Qwen/Qwen3.5-9B",
   ALLOWED_PRODUCTION_ORIGIN: "https://jacklee504.github.io",
   FEATHERLESS_API_KEY: "test-key",
+  ANALYZE_CLIENT_RATE_LIMITER: allowsRateLimit,
+  ANALYZE_GLOBAL_RATE_LIMITER: allowsRateLimit,
 };
 
 const workerAnalysis = {
@@ -242,6 +246,20 @@ describe("hosted assignment analyser", () => {
     expect(calls).toBe(2);
   });
 
+  it("adds the invalid first response to the repair request", async () => {
+    const providerBodies: string[] = [];
+    const worker = createWorker(async (_input, init) => {
+      providerBodies.push(String(init?.body));
+      return providerBodies.length === 1 ? providerResponse({ invalid: true }) : providerResponse(workerAnalysis);
+    });
+
+    const response = await worker.fetch(workerRequest(), workerEnv);
+
+    expect(response.status).toBe(200);
+    const retryMessages = JSON.parse(providerBodies[1]).messages;
+    expect(retryMessages.at(-2)).toEqual({ role: "assistant", content: JSON.stringify({ invalid: true }) });
+  });
+
   it("fails cleanly after a second invalid model response", async () => {
     let calls = 0;
     const worker = createWorker(async () => {
@@ -254,6 +272,33 @@ describe("hosted assignment analyser", () => {
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: "The analyser could not read this brief." });
     expect(calls).toBe(2);
+  });
+
+  it("treats an oversized Featherless response as an upstream failure", async () => {
+    const worker = createWorker(async () => new Response("x".repeat(100_001), { status: 200 }));
+
+    const response = await worker.fetch(workerRequest(), workerEnv);
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "The analyser could not read this brief." });
+  });
+
+  it("rate limits direct requests before they reach Featherless", async () => {
+    let providerCalls = 0;
+    const worker = createWorker(async () => {
+      providerCalls += 1;
+      return providerResponse(workerAnalysis);
+    });
+    const limitedEnv = {
+      ...workerEnv,
+      ANALYZE_CLIENT_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    } satisfies Env;
+
+    const response = await worker.fetch(workerRequest(), limitedEnv);
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({ error: "Too many analysis requests. Please try again in a minute." });
+    expect(providerCalls).toBe(0);
   });
 
   it("keeps prompt-injection text inside the untrusted brief content", async () => {

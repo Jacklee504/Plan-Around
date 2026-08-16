@@ -10,9 +10,10 @@ import {
 const MAX_REQUEST_BYTES = 25_000;
 const MAX_UPSTREAM_RESPONSE_BYTES = 100_000;
 
-type ChatMessage = { role: "system" | "user"; content: string };
+type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 class ClientInputError extends Error {}
+class ProviderResponseError extends Error {}
 
 function corsHeaders(origin: string | null, env: Env) {
   const headers = new Headers({
@@ -35,11 +36,27 @@ function isAllowedOrigin(origin: string, env: Env) {
   return origin === env.ALLOWED_PRODUCTION_ORIGIN || origin === "http://localhost:3000";
 }
 
+function rateLimitKey(request: Request) {
+  return request.headers.get("CF-Connecting-IP") || "unknown-client";
+}
+
+async function canAnalyse(request: Request, env: Env) {
+  const [client, global] = await Promise.all([
+    env.ANALYZE_CLIENT_RATE_LIMITER.limit({ key: rateLimitKey(request) }),
+    env.ANALYZE_GLOBAL_RATE_LIMITER.limit({ key: "analyze" }),
+  ]);
+  return client.success && global.success;
+}
+
 function jsonResponse(body: unknown, status: number, origin: string | null, env: Env) {
   return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) });
 }
 
-async function readBoundedText(stream: ReadableStream<Uint8Array> | null, maxBytes: number) {
+async function readBoundedText(
+  stream: ReadableStream<Uint8Array> | null,
+  maxBytes: number,
+  createTooLargeError: () => Error,
+) {
   if (!stream) return "";
 
   const reader = stream.getReader();
@@ -52,7 +69,7 @@ async function readBoundedText(stream: ReadableStream<Uint8Array> | null, maxByt
       if (done) break;
       if (!value) continue;
       totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) throw new ClientInputError("Request body is too large.");
+      if (totalBytes > maxBytes) throw createTooLargeError();
       chunks.push(value);
     }
   } finally {
@@ -133,7 +150,12 @@ async function requestProvider(messages: ChatMessage[], env: Env, upstreamFetch:
   });
 
   if (!response.ok) throw new Error("AI provider request failed.");
-  return contentFromProviderPayload(JSON.parse(await readBoundedText(response.body, MAX_UPSTREAM_RESPONSE_BYTES)));
+  const providerBody = await readBoundedText(
+    response.body,
+    MAX_UPSTREAM_RESPONSE_BYTES,
+    () => new ProviderResponseError("AI provider response was too large."),
+  );
+  return contentFromProviderPayload(JSON.parse(providerBody));
 }
 
 async function analyseBrief(briefText: string, env: Env, upstreamFetch: typeof fetch) {
@@ -148,6 +170,7 @@ async function analyseBrief(briefText: string, env: Env, upstreamFetch: typeof f
   } catch {
     const repairedMessages: ChatMessage[] = [
       ...messages,
+      { role: "assistant", content: firstContent },
       { role: "user", content: "Your previous response was invalid. Return only the exact requested JSON object, following every schema rule." },
     ];
     return parseAnalysis(await requestProvider(repairedMessages, env, upstreamFetch));
@@ -171,7 +194,15 @@ export function createWorker(upstreamFetch: typeof fetch = fetch) {
       }
 
       try {
-        const briefText = parseBriefRequest(await readBoundedText(request.body, MAX_REQUEST_BYTES));
+        if (!(await canAnalyse(request, env))) {
+          return jsonResponse({ error: "Too many analysis requests. Please try again in a minute." }, 429, origin, env);
+        }
+        const requestBody = await readBoundedText(
+          request.body,
+          MAX_REQUEST_BYTES,
+          () => new ClientInputError("Request body is too large."),
+        );
+        const briefText = parseBriefRequest(requestBody);
         const analysis = await analyseBrief(briefText, env, upstreamFetch);
         const response: AssignmentAnalysisResponse = { analysis, provider: "featherless", model: env.AI_MODEL };
         return jsonResponse(response, 200, origin, env);

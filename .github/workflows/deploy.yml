@@ -31,6 +31,18 @@ jobs:
         run: npm run lint
       - name: Test
         run: npm test
+      - name: Check Worker bindings and types
+        run: |
+          npm run worker:types:check
+          npm run worker:typecheck
+      - name: Verify hosted analyser configuration
+        run: |
+          if [ -z "$PLANAROUND_ANALYZER_URL" ]; then
+            echo "PLANAROUND_ANALYZER_URL must be configured before deploying production."
+            exit 1
+          fi
+        env:
+          PLANAROUND_ANALYZER_URL: ${{ vars.PLANAROUND_ANALYZER_URL }}
       - name: Build static site
         run: npm run build
         env:

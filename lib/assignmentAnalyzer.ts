@@ -5,7 +5,10 @@ import {
 } from "@/lib/assignmentAnalysis";
 
 function getAnalyzerUrl() {
-  return process.env.NEXT_PUBLIC_ANALYZER_URL?.trim() || "http://localhost:8787/analyze";
+  const configuredUrl = process.env.NEXT_PUBLIC_ANALYZER_URL?.trim();
+  if (configuredUrl) return configuredUrl;
+  if (process.env.NODE_ENV === "development") return "http://localhost:8787/analyze";
+  throw new Error("The analyser is not configured for this build.");
 }
 
 export async function analyzeAssignmentBrief(briefText: string): Promise<AssignmentAnalysisResponse> {
