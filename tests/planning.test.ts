@@ -504,11 +504,11 @@ describe("hosted assignment analyser", () => {
 
   it("allows the production and local origins but rejects other browser origins", async () => {
     const worker = createWorker(async () => providerResponse(workerAnalysis));
-    const production = await worker.fetch(workerRequest("/analyze", undefined, "https://jacklee504.github.io"), workerEnv);
+    const production = await worker.fetch(workerRequest("/analyze", undefined, "https://plan-around.vercel.app"), workerEnv);
     const local = await worker.fetch(workerRequest("/analyze", undefined, "http://localhost:3000"), workerEnv);
     const unapproved = await worker.fetch(workerRequest("/analyze", undefined, "https://untrusted.example"), workerEnv);
 
-    expect(production.headers.get("Access-Control-Allow-Origin")).toBe("https://jacklee504.github.io");
+    expect(production.headers.get("Access-Control-Allow-Origin")).toBe("https://plan-around.vercel.app");
     expect(local.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:3000");
     expect(unapproved.status).toBe(403);
     expect(unapproved.headers.get("Access-Control-Allow-Origin")).toBeNull();
