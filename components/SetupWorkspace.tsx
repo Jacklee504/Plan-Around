@@ -768,9 +768,8 @@ function SetupWorkspaceContent({
               : "Import your normal teaching week."}
           </h2>
           <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">
-            Upload a clear timetable screenshot for AI-assisted extraction, then
-            check every class before it reaches your calendar. The sample PDF is
-            a controlled local fallback.
+            Upload a clear timetable screenshot for AI-assisted extraction,
+            then review every detected class in the calendar before confirming.
           </p>
         </div>
         <div className="flex flex-wrap gap-3 lg:justify-end">
@@ -1116,6 +1115,13 @@ function SetupWorkspaceContent({
                     : hasBaseline
                       ? "Complete setup"
                       : "Add a recurring constraint"}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetPlanAround}
+                  className="mt-3 min-h-10 px-2 text-sm font-semibold text-[var(--muted-ink)] hover:text-red-700"
+                >
+                  Reset PlanAround
                 </button>
               </section>
             </>
