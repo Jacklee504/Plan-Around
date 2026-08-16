@@ -531,7 +531,7 @@ const workerEnv: Env = {
   AI_BASE_URL: "https://api.featherless.ai/v1",
   AI_PRIMARY_MODEL: "Qwen/Qwen3.5-397B-A17B",
   AI_VERIFIER_MODEL: "moonshotai/Kimi-K3",
-  ALLOWED_PRODUCTION_ORIGIN: "https://plan-around.vercel.app",
+  ALLOWED_PRODUCTION_ORIGIN: "https://jacklee504.github.io",
   FEATHERLESS_API_KEY: "test-key",
   ANALYZE_CLIENT_RATE_LIMITER: allowsRateLimit,
   ANALYZE_GLOBAL_RATE_LIMITER: allowsRateLimit,
@@ -585,11 +585,11 @@ describe("hosted assignment analyser", () => {
 
   it("allows the production and local origins but rejects other browser origins", async () => {
     const worker = createWorker(async () => providerResponse(workerAnalysis));
-    const production = await worker.fetch(workerRequest("/analyze", undefined, "https://plan-around.vercel.app"), workerEnv);
+    const production = await worker.fetch(workerRequest("/analyze", undefined, "https://jacklee504.github.io"), workerEnv);
     const local = await worker.fetch(workerRequest("/analyze", undefined, "http://localhost:3000"), workerEnv);
     const unapproved = await worker.fetch(workerRequest("/analyze", undefined, "https://untrusted.example"), workerEnv);
 
-    expect(production.headers.get("Access-Control-Allow-Origin")).toBe("https://plan-around.vercel.app");
+    expect(production.headers.get("Access-Control-Allow-Origin")).toBe("https://jacklee504.github.io");
     expect(local.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:3000");
     expect(unapproved.status).toBe(403);
     expect(unapproved.headers.get("Access-Control-Allow-Origin")).toBeNull();
@@ -834,7 +834,7 @@ describe("hosted timetable analyser", () => {
     });
     const screenshot = { source: { kind: "image", mimeType: "image/png", base64: "c2NyZWVuc2hvdA==" } };
 
-    const response = await worker.fetch(workerRequest("/analyze-timetable", screenshot, "https://plan-around.vercel.app"), workerEnv);
+    const response = await worker.fetch(workerRequest("/analyze-timetable", screenshot, "https://jacklee504.github.io"), workerEnv);
     const payload = await response.json() as { analysis: typeof timetableAnalysis; provider: string };
     const messages = JSON.parse(providerRequest).messages;
 
