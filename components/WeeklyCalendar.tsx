@@ -104,7 +104,7 @@ function cardPadding(density: ReturnType<typeof calendarBlockDensity>) {
     ? "px-1.5 py-0 text-[10px] leading-[14px]"
     : density === "tight"
       ? "flex flex-col justify-center px-1.5 py-0.5 text-sm leading-4"
-      : "px-2 py-1 text-[11px] leading-[14px]";
+      : "px-2 py-1 text-[14px] leading-[18px]";
 }
 
 export function WeeklyCalendar({
