@@ -154,9 +154,41 @@ describe("assignment analysis contract", () => {
     expect(result.tasks[0].marks).toBeNull();
   });
 
-  it("rejects impossible dates and malformed task data", () => {
-    expect(() => validateAssignmentAnalysis({ ...structuredAnalysis, deadline: "2026-02-30" })).toThrow("valid YYYY-MM-DD");
-    expect(() => validateAssignmentAnalysis({ ...structuredAnalysis, tasks: [{ ...structuredAnalysis.tasks[0], requirements: "not an array" }] })).toThrow("requirements must be an array");
+  it("normalises recoverable model shape mistakes and rejects malformed task data", () => {
+    expect(() =>
+      validateAssignmentAnalysis({
+        ...structuredAnalysis,
+        deadline: "2026-02-30",
+      }),
+    ).toThrow("valid YYYY-MM-DD");
+
+    const result = validateAssignmentAnalysis({
+      ...structuredAnalysis,
+      tasks: [
+        {
+          ...structuredAnalysis.tasks[0],
+          complexity: "medium",
+          requirements: "Build the required core functionality.",
+        },
+      ],
+    });
+
+    expect(result.tasks[0].complexity).toBe(2);
+    expect(result.tasks[0].requirements).toEqual([
+      "Build the required core functionality.",
+    ]);
+
+    expect(() =>
+      validateAssignmentAnalysis({
+        ...structuredAnalysis,
+        tasks: [
+          {
+            ...structuredAnalysis.tasks[0],
+            requirements: 123,
+          },
+        ],
+      }),
+    ).toThrow("requirements must be an array, text or null");
   });
 
   it("keeps an instruction-like brief inside explicit data delimiters", () => {
@@ -771,7 +803,12 @@ describe("hosted assignment analyser", () => {
     expect(retryMessages.at(-1)).toEqual({
       role: "user",
       content:
-        "The previous attempt was invalid or too long. Start again. Return only compact valid JSON matching the schema. Keep rationales under 25 words, use at most 4 short requirements per task, use YYYY-MM-DD for the deadline, and do not add commentary.",
+        "The previous response failed validation: tasks must be an array.\n\n" +
+        "Start again. Return only compact valid JSON matching the schema. " +
+        "Complexity must be exactly 1, 2 or 3. " +
+        "Requirements must always be a JSON array of strings, or an empty array. " +
+        "Keep rationales under 25 words, use at most 4 short requirements per task, " +
+        "use YYYY-MM-DD for the deadline, and do not add commentary.",
     });
 
     expect(

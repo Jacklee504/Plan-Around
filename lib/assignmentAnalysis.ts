@@ -148,8 +148,50 @@ function normaliseWarnings(value: unknown): string[] {
 }
 
 function normaliseRequirements(value: unknown): string[] {
-  if (!Array.isArray(value)) throw new Error("task requirements must be an array.");
-  return value.slice(0, MAX_REQUIREMENTS_PER_TASK).map((requirement) => requiredText(requirement, "task requirements entries", MAX_REQUIREMENT_CHARACTERS));
+  if (value === null || value === undefined) return [];
+
+  if (typeof value === "string") {
+    return [
+      requiredText(
+        value,
+        "task requirements entries",
+        MAX_REQUIREMENT_CHARACTERS,
+      ),
+    ];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error("task requirements must be an array, text or null.");
+  }
+
+  return value
+    .slice(0, MAX_REQUIREMENTS_PER_TASK)
+    .map((requirement) =>
+      requiredText(
+        requirement,
+        "task requirements entries",
+        MAX_REQUIREMENT_CHARACTERS,
+      ),
+    );
+}
+
+function normaliseComplexity(
+  value: unknown,
+  taskIndex: number,
+): 1 | 2 | 3 {
+  if (value === 1 || value === 2 || value === 3) return value;
+
+  if (typeof value === "string") {
+    const normalised = value.trim().toLowerCase();
+
+    if (normalised === "1" || normalised === "low") return 1;
+    if (normalised === "2" || normalised === "medium") return 2;
+    if (normalised === "3" || normalised === "high") return 3;
+  }
+
+  throw new Error(
+    `task ${taskIndex + 1} needs a complexity of 1, 2 or 3.`,
+  );
 }
 
 function nullableEvidence(value: unknown, label: string) {
@@ -197,10 +239,10 @@ export function validateAssignmentAnalysis(value: unknown): AssignmentAnalysis {
     if (!taskSource) throw new Error(`task ${index + 1} was malformed.`);
     const name = requiredText(taskSource.name, `task ${index + 1} name`, 200);
     const marks = nullableNumber(taskSource.marks, `task ${index + 1} marks`, 0, 1000);
-    const complexity = taskSource.complexity;
-    if (complexity !== 1 && complexity !== 2 && complexity !== 3) {
-      throw new Error(`task ${index + 1} needs a complexity of 1, 2 or 3.`);
-    }
+    const complexity = normaliseComplexity(
+      taskSource.complexity,
+      index,
+    );
     const requirements = normaliseRequirements(taskSource.requirements);
     return {
       name,

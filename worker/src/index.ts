@@ -348,11 +348,14 @@ async function analyseSource<T>(source: AssignmentAnalysisInput, route: Analysis
     try {
       return route.parse(firstContent);
     } catch (firstError) {
-      console.error(
-        "First analysis response rejected:",
+      const validationError =
         firstError instanceof Error
           ? firstError.message
-          : String(firstError),
+          : String(firstError);
+
+      console.error(
+        "First analysis response rejected:",
+        validationError,
       );
 
       const repairedMessages: ChatMessage[] = [
@@ -360,7 +363,12 @@ async function analyseSource<T>(source: AssignmentAnalysisInput, route: Analysis
         {
           role: "user",
           content:
-            "The previous attempt was invalid or too long. Start again. Return only compact valid JSON matching the schema. Keep rationales under 25 words, use at most 4 short requirements per task, use YYYY-MM-DD for the deadline, and do not add commentary.",
+            `The previous response failed validation: ${validationError}\n\n` +
+            "Start again. Return only compact valid JSON matching the schema. " +
+            "Complexity must be exactly 1, 2 or 3. " +
+            "Requirements must always be a JSON array of strings, or an empty array. " +
+            "Keep rationales under 25 words, use at most 4 short requirements per task, " +
+            "use YYYY-MM-DD for the deadline, and do not add commentary.",
         },
       ];
 
