@@ -337,22 +337,22 @@ async function analyseSource<T>(source: AssignmentAnalysisInput, route: Analysis
 
   try {
     const firstContent = await requestProvider(
-        messages,
-        env,
-        upstreamFetch,
-        pause,
-        budget,
-        route.completionTokens,
+      messages,
+      env,
+      upstreamFetch,
+      pause,
+      budget,
+      route.completionTokens,
     );
 
     try {
       return route.parse(firstContent);
     } catch (firstError) {
       console.error(
-          "First analysis response rejected:",
-          firstError instanceof Error
-              ? firstError.message
-              : String(firstError),
+        "First analysis response rejected:",
+        firstError instanceof Error
+          ? firstError.message
+          : String(firstError),
       );
 
       const repairedMessages: ChatMessage[] = [
@@ -360,27 +360,27 @@ async function analyseSource<T>(source: AssignmentAnalysisInput, route: Analysis
         {
           role: "user",
           content:
-              "The previous attempt was invalid or too long. Start again. Return only compact valid JSON matching the schema. Keep rationales under 25 words, use at most 4 short requirements per task, use YYYY-MM-DD for the deadline, and do not add commentary.",
+            "The previous attempt was invalid or too long. Start again. Return only compact valid JSON matching the schema. Keep rationales under 25 words, use at most 4 short requirements per task, use YYYY-MM-DD for the deadline, and do not add commentary.",
         },
       ];
 
       try {
         return route.parse(
-            await requestProvider(
-                repairedMessages,
-                env,
-                upstreamFetch,
-                pause,
-                budget,
-                route.completionTokens,
-            ),
+          await requestProvider(
+            repairedMessages,
+            env,
+            upstreamFetch,
+            pause,
+            budget,
+            route.completionTokens,
+          ),
         );
       } catch (repairError) {
         console.error(
-            "Repair analysis failed:",
-            repairError instanceof Error
-                ? repairError.message
-                : String(repairError),
+          "Repair analysis failed:",
+          repairError instanceof Error
+            ? repairError.message
+            : String(repairError),
         );
 
         throw repairError;
