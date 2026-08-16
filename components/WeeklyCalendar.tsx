@@ -70,38 +70,21 @@ function snappedTime(offsetY: number) {
 function CalendarCard({
   label,
   detail,
-  start,
-  end,
-  density,
-  className,
 }: {
   label: string;
   detail?: string;
-  start: string;
-  end: string;
-  density: ReturnType<typeof calendarBlockDensity>;
-  className: string;
 }) {
-  if (density === "compact")
-    return (
-      <span className="block truncate font-bold tabular-nums">
-        {label} · {start}–{end}
-      </span>
-    );
   return (
-    <span className={className}>
+    <span>
       <span className="block truncate font-bold">{label}</span>
-        {detail ? <span className="block truncate">{detail}</span> : null}
+      {detail ? <span className="block truncate">{detail}</span> : null}
     </span>
   );
 }
-
 function cardPadding(density: ReturnType<typeof calendarBlockDensity>) {
   return density === "compact"
-    ? "px-1.5 py-0 text-[10px] leading-[14px]"
-    : density === "tight"
-      ? "flex flex-col justify-center px-1.5 py-0.5 text-sm leading-4"
-      : "px-2 py-1 text-[14px] leading-[18px]";
+    ? "px-1.5 py-0 text-[14px] leading-[18px]"
+    : "px-2 py-1 text-[14px] leading-[18px]";
 }
 
 export function WeeklyCalendar({
@@ -201,12 +184,6 @@ export function WeeklyCalendar({
                           <CalendarCard
                             label={entry.moduleCode}
                             detail={sessionLabels[entry.sessionType]}
-                            start={entry.start}
-                            end={entry.end}
-                            density={density}
-                            className={
-                              density === "tight" ? "text-sm leading-4" : ""
-                            }
                           />
                         );
                         return onSelectEntry ? (
@@ -243,17 +220,7 @@ export function WeeklyCalendar({
                         );
                         const className = `absolute left-1 right-1 z-10 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] text-left text-[var(--ink)] shadow-sm transition-colors hover:border-[var(--accent)] ${cardPadding(density)}`;
                         const content = (
-                          <CalendarCard
-                            label={commitment.label}
-                            start={commitment.start}
-                            end={commitment.end}
-                            density={density}
-                            className={
-                              density === "tight"
-                                ? "text-[10px] leading-[12px] text-[var(--muted-ink)]"
-                                : "text-[var(--muted-ink)]"
-                            }
-                          />
+                          <CalendarCard label={commitment.label} />
                         );
                         return onSelectCommitment ? (
                           <button
@@ -296,14 +263,6 @@ export function WeeklyCalendar({
                           <CalendarCard
                             label={commitment.label}
                             detail="One-off"
-                            start={commitment.start}
-                            end={commitment.end}
-                            density={density}
-                            className={
-                              density === "tight"
-                                ? "text-[10px] leading-[12px]"
-                                : ""
-                            }
                           />
                         );
                         return onSelectDatedCommitment ? (
