@@ -278,27 +278,6 @@ function EventDialog({
               type="time"
             />
           </label>
-          <label className="text-sm font-medium sm:col-span-2">
-            Type
-            <select
-              value={draft.category}
-              onChange={(event) =>
-                onChange({
-                  ...draft,
-                  category: event.target.value as CommitmentCategory,
-                })
-              }
-              className={inputClassName}
-            >
-              {Object.entries(categoryLabels)
-                .filter(([category]) => category !== "class")
-                .map(([category, label]) => (
-                  <option key={category} value={category}>
-                    {label}
-                  </option>
-                ))}
-            </select>
-          </label>
         </div>
         {error ? (
           <p className="mt-3 text-sm text-red-700" role="alert">
