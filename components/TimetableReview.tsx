@@ -32,7 +32,7 @@ export function TimetableReview({ entries, warnings, error, onChange, onConfirm,
           <fieldset key={`${entry.moduleCode ?? "new"}-${index}`} className="grid gap-3 border-t border-[var(--line)] pt-4 sm:grid-cols-2 lg:grid-cols-3">
             <legend className="sr-only">Teaching session {index + 1}</legend>
             <label className="text-sm font-medium">Module code<input value={entry.moduleCode ?? ""} onChange={(event) => update(index, { moduleCode: event.target.value || null })} className={inputClassName} placeholder="CS301" /></label>
-            <label className="text-sm font-medium sm:col-span-1 lg:col-span-2">Module name<input value={entry.moduleName} onChange={(event) => update(index, { moduleName: event.target.value })} className={inputClassName} placeholder="Software Engineering" /></label>
+            <label className="text-sm font-medium sm:col-span-1 lg:col-span-2">Module name<input value={entry.moduleName ?? ""} onChange={(event) => update(index, { moduleName: event.target.value || null })} className={inputClassName} placeholder="Software Engineering" /></label>
             <label className="text-sm font-medium">Day<select value={entry.day} onChange={(event) => update(index, { day: event.target.value as TimetableWeekday })} className={inputClassName}>{weekdays.map((day) => <option key={day} value={day}>{day}</option>)}</select></label>
             <label className="text-sm font-medium">Start<input value={entry.start} onChange={(event) => update(index, { start: event.target.value })} className={inputClassName} type="time" /></label>
             <label className="text-sm font-medium">End<input value={entry.end} onChange={(event) => update(index, { end: event.target.value })} className={inputClassName} type="time" /></label>

@@ -91,16 +91,17 @@ describe("timetable analysis contract", () => {
     warnings: [],
   };
 
-  it("accepts a reviewable entry with a missing module code and all supported session types", () => {
+  it("accepts a reviewable entry with missing module identity and all supported session types", () => {
     const result = validateTimetableAnalysis({
       ...timetableAnalysis,
       entries: [
-        { ...timetableAnalysis.entries[0], moduleCode: null, sessionType: "other" },
+        { ...timetableAnalysis.entries[0], moduleCode: null, moduleName: null, sessionType: "other" },
         { ...timetableAnalysis.entries[0], day: "Sunday", start: "11:00", end: "12:00", sessionType: "tutorial" },
       ],
     });
 
     expect(result.entries[0].moduleCode).toBeNull();
+    expect(result.entries[0].moduleName).toBeNull();
     expect(result.entries[0].sessionType).toBe("other");
     expect(result.entries[1].day).toBe("Sunday");
   });

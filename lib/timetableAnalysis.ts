@@ -6,7 +6,7 @@ export type TimetableAnalysisSessionType = "lecture" | "lab" | "tutorial" | "oth
 
 export type TimetableAnalysisEntry = {
   moduleCode: string | null;
-  moduleName: string;
+  moduleName: string | null;
   day: TimetableWeekday;
   start: string;
   end: string;
@@ -39,7 +39,7 @@ export function createTimetableImageAnalysisPrompt() {
   "entries": [
     {
       "moduleCode": string | null,
-      "moduleName": string,
+      "moduleName": string | null,
       "day": "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday",
       "start": "HH:MM",
       "end": "HH:MM",
@@ -80,7 +80,7 @@ function validateEntry(value: unknown, index: number): TimetableAnalysisEntry {
   const entry = asRecord(value);
   if (!entry) throw new Error(`entry ${index + 1} was malformed.`);
   const moduleCode = nullableText(entry.moduleCode, `entry ${index + 1} module code`, 40);
-  const moduleName = requiredText(entry.moduleName, `entry ${index + 1} module name`, 160);
+  const moduleName = nullableText(entry.moduleName, `entry ${index + 1} module name`, 160);
   const day = entry.day;
   if (typeof day !== "string" || !timetableWeekdays.includes(day as TimetableWeekday)) throw new Error(`entry ${index + 1} has an invalid weekday.`);
   const start = requiredText(entry.start, `entry ${index + 1} start`, 5);
@@ -95,7 +95,7 @@ function validateEntry(value: unknown, index: number): TimetableAnalysisEntry {
 }
 
 function entryKey(entry: TimetableAnalysisEntry) {
-  return [entry.moduleCode?.trim().toLocaleLowerCase() ?? "", entry.moduleName.trim().toLocaleLowerCase(), entry.day, entry.start, entry.end, entry.sessionType].join("\u0000");
+  return [entry.moduleCode?.trim().toLocaleLowerCase() ?? "", entry.moduleName?.trim().toLocaleLowerCase() ?? "", entry.day, entry.start, entry.end, entry.sessionType].join("\u0000");
 }
 
 export function validateTimetableAnalysis(value: unknown): TimetableAnalysis {

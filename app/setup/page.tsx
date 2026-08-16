@@ -4,9 +4,9 @@ import { SetupWorkspace } from "@/components/SetupWorkspace";
 export default function SetupPage() {
   return (
     <AppShell
-      eyebrow="Your recurring week"
-      title="Start with the week you actually have."
-      description="Bring in your semester timetable, then keep classes and personal commitments together in one calendar. Your study plan will use it as a real-world boundary."
+      eyebrow="Calendar"
+      title="Your actual week, in one place."
+      description="Bring in your semester timetable, then keep classes and personal commitments together in the calendar your study plan will use."
     >
       <SetupWorkspace />
     </AppShell>
