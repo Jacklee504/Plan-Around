@@ -1,7 +1,7 @@
 import {
   MAX_BRIEF_CHARACTERS,
   type AssignmentAnalysisResponse,
-  validateAssignmentAnalysis,
+  validateAssignmentAnalysisResponse,
 } from "@/lib/assignmentAnalysis";
 
 const ANALYZER_TIMEOUT_MS = 35_000;
@@ -52,9 +52,9 @@ export async function analyzeAssignmentBrief(briefText: string): Promise<Assignm
     clearTimeout(timeout);
   }
 
-  if (!payload.analysis || (payload.provider !== "local-ollama" && payload.provider !== "featherless") || typeof payload.model !== "string") {
+  try {
+    return validateAssignmentAnalysisResponse(payload);
+  } catch {
     throw new Error("The analyser returned an unsupported response. You can still enter the rubric manually.");
   }
-
-  return { analysis: validateAssignmentAnalysis(payload.analysis), provider: payload.provider, model: payload.model };
 }

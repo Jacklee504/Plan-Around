@@ -1,6 +1,7 @@
 import {
   analysisSystemPrompt,
   createAnalysisPrompt,
+  createTextAnalysisProvenance,
   MAX_BRIEF_CHARACTERS,
   type AssignmentAnalysis,
   type AssignmentAnalysisResponse,
@@ -203,7 +204,7 @@ async function requestProviderOnce(
         "X-Title": "PlanAround",
       },
       body: JSON.stringify({
-        model: env.AI_MODEL,
+        model: env.AI_PRIMARY_MODEL,
         temperature: 0.1,
         max_tokens: 1200,
         response_format: { type: "json_object" },
@@ -309,7 +310,13 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
         );
         const briefText = parseBriefRequest(requestBody);
         const analysis = await analyseBrief(briefText, env, upstreamFetch, pause);
-        const response: AssignmentAnalysisResponse = { analysis, provider: "featherless", model: env.AI_MODEL };
+        const response: AssignmentAnalysisResponse = {
+          analysis,
+          provenance: createTextAnalysisProvenance(briefText, analysis),
+          provider: "featherless",
+          model: env.AI_PRIMARY_MODEL,
+          verifier: { used: false, model: null, reasons: [] },
+        };
         return jsonResponse(response, 200, origin, env);
       } catch (error) {
         if (error instanceof ClientInputError) return jsonResponse({ error: error.message }, 400, origin, env);

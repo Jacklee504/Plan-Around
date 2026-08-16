@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import {
   analysisSystemPrompt,
   createAnalysisPrompt,
+  createTextAnalysisProvenance,
   MAX_BRIEF_CHARACTERS,
   type AssignmentAnalysis,
   validateAssignmentAnalysis,
@@ -87,7 +88,13 @@ const server = createServer(async (request, response) => {
   try {
     const { briefText } = await readJsonBody(request);
     const analysis = await analyseWithRetry(briefText);
-    return respond(response, 200, { analysis, provider: "local-ollama", model });
+    return respond(response, 200, {
+      analysis,
+      provenance: createTextAnalysisProvenance(briefText, analysis),
+      provider: "local-ollama",
+      model,
+      verifier: { used: false, model: null, reasons: [] },
+    });
   } catch {
     return respond(response, 502, { error: "Analysis unavailable" });
   }

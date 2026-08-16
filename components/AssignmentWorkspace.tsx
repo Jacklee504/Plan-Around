@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { analyzeAssignmentBrief } from "@/lib/assignmentAnalyzer";
-import type { AssignmentAnalysisResponse } from "@/lib/assignmentAnalysis";
+import type { AssignmentAnalysisResponse, GroundedField } from "@/lib/assignmentAnalysis";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import type { Assignment, AssignmentTask, Module } from "@/types";
 import { WorkloadBreakdown } from "@/components/WorkloadBreakdown";
@@ -52,6 +52,21 @@ function formatDeadline(date: string) {
 
 function formatAnalysisProvider(provider: AssignmentAnalysisResponse["provider"]) {
   return provider === "local-ollama" ? "Local AI" : "Featherless AI";
+}
+
+function sourceStatus(field: GroundedField) {
+  if (field.state === "verified-text") return "Verified from text";
+  if (field.state === "evidence-mismatch") return "Source excerpt needs review";
+  return "Needs confirmation";
+}
+
+function EvidenceDetail({ field }: { field: GroundedField }) {
+  return (
+    <details className="mt-2 text-xs leading-5 text-[var(--muted-ink)]">
+      <summary className="cursor-pointer font-semibold text-[var(--accent-strong)]">{sourceStatus(field)}</summary>
+      {field.evidence ? <p className="mt-1">“{field.evidence}”</p> : <p className="mt-1">No exact source excerpt was found for this suggestion.</p>}
+    </details>
+  );
 }
 
 export function AssignmentWorkspace() {
@@ -338,14 +353,14 @@ export function AssignmentWorkspace() {
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Review suggestions</p>
                       <h4 className="mt-1 text-base font-semibold">Nothing is added until you use these suggestions.</h4>
                     </div>
-                    <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-strong)]">{formatAnalysisProvider(analysisResult.provider)} review</span>
+                    <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-strong)]">{formatAnalysisProvider(analysisResult.provider)} · {analysisResult.model}</span>
                   </div>
                   <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                    <div><dt className="text-[var(--muted-ink)]">Title</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.title ?? "Not found"}</dd></div>
-                    <div><dt className="text-[var(--muted-ink)]">Deadline</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.deadline ? formatDeadline(analysisResult.analysis.deadline) : "Not found"}</dd></div>
-                    <div><dt className="text-[var(--muted-ink)]">Module weighting</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.moduleWeight ? `${analysisResult.analysis.moduleWeight}%` : "Not found"}</dd></div>
+                    <div><dt className="text-[var(--muted-ink)]">Title</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.title ?? "Not found"}</dd><EvidenceDetail field={analysisResult.provenance.fields.title} /></div>
+                    <div><dt className="text-[var(--muted-ink)]">Deadline</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.deadline ? formatDeadline(analysisResult.analysis.deadline) : "Not found"}</dd><EvidenceDetail field={analysisResult.provenance.fields.deadline} /></div>
+                    <div><dt className="text-[var(--muted-ink)]">Module weighting</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.moduleWeight ? `${analysisResult.analysis.moduleWeight}%` : "Not found"}</dd><EvidenceDetail field={analysisResult.provenance.fields.moduleWeight} /></div>
                   </dl>
-                  {analysisResult.analysis.tasks.length ? <ul className="mt-5 divide-y divide-[var(--line)] border-y border-[var(--line)]">{analysisResult.analysis.tasks.map((task) => <li key={`${task.name}-${task.marks}`} className="py-3"><p className="font-semibold">{task.name}</p><p className="mt-1 text-sm text-[var(--muted-ink)]">{task.marks === null ? "Marks need confirmation" : `${task.marks} marks`} · {task.complexity === 1 ? "Low" : task.complexity === 2 ? "Medium" : "High"} complexity</p>{task.requirements.length ? <ul className="mt-2 space-y-1 text-sm leading-6 text-[var(--muted-ink)]">{task.requirements.map((requirement) => <li key={requirement}>• {requirement}</li>)}</ul> : null}</li>)}</ul> : <p className="mt-4 text-sm leading-6 text-[var(--muted-ink)]">No clear rubric tasks were found. You can still use any title, deadline or weighting suggestion.</p>}
+                  {analysisResult.analysis.tasks.length ? <ul className="mt-5 divide-y divide-[var(--line)] border-y border-[var(--line)]">{analysisResult.analysis.tasks.map((task, index) => <li key={`${task.name}-${task.marks}`} className="py-3"><p className="font-semibold">{task.name}</p><p className="mt-1 text-sm text-[var(--muted-ink)]">{task.marks === null ? "Marks need confirmation" : `${task.marks} marks`} · {task.complexity === 1 ? "Low" : task.complexity === 2 ? "Medium" : "High"} complexity</p><p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]"><span className="font-semibold text-[var(--ink)]">Why this complexity?</span> {task.complexityRationale}</p><EvidenceDetail field={task.marks === null ? analysisResult.provenance.tasks[index].name : analysisResult.provenance.tasks[index].marks} />{task.requirements.length ? <ul className="mt-2 space-y-1 text-sm leading-6 text-[var(--muted-ink)]">{task.requirements.map((requirement) => <li key={requirement}>• {requirement}</li>)}</ul> : null}</li>)}</ul> : <p className="mt-4 text-sm leading-6 text-[var(--muted-ink)]">No clear rubric tasks were found. You can still use any title, deadline or weighting suggestion.</p>}
                   {analysisResult.analysis.warnings.length ? <ul className="mt-4 space-y-1 text-sm leading-6 text-[var(--muted-ink)]">{analysisResult.analysis.warnings.map((warning) => <li key={warning}>• {warning}</li>)}</ul> : null}
                   {needsReplacementConfirmation ? <p className="mt-4 rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">Using the task suggestions will replace the {tasks.length} task{tasks.length === 1 ? "" : "s"} currently in this form.</p> : null}
                   <div className="mt-5 flex flex-wrap gap-3">
