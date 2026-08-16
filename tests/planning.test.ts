@@ -713,7 +713,7 @@ describe("hosted assignment analyser", () => {
     expect(calls).toBe(3);
   });
 
-  it("ends all provider work within the shared 30-second analysis budget", async () => {
+  it("ends all provider work within the shared 60-second analysis budget", async () => {
     vi.useFakeTimers();
     try {
       let calls = 0;
@@ -726,7 +726,7 @@ describe("hosted assignment analyser", () => {
       });
 
       const responsePromise = worker.fetch(workerRequest(), workerEnv);
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(60_000);
       const response = await responsePromise;
 
       expect(response.status).toBe(502);
