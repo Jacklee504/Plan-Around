@@ -14,7 +14,6 @@ export const MIN_STUDY_SESSION_MINUTES = 60;
 export const PREFERRED_STUDY_SESSION_MINUTES = 90;
 export const MAX_STUDY_SESSION_MINUTES = 120;
 export const DAILY_ASSIGNMENT_TARGET_MINUTES = 180;
-export const DEADLINE_BUFFER_HOURS = 24;
 
 type TimeRange = { start: number; end: number };
 
