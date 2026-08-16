@@ -24,6 +24,7 @@ import type {
   CommitmentCategory,
   DatedCommitment,
   Module,
+  StudyBlock,
   TimetableAttendance,
   TimetableEntry,
 } from "@/types";
@@ -83,12 +84,19 @@ function getWeekKey(date = new Date()) {
   monday.setHours(0, 0, 0, 0);
   return localDateKey(monday);
 }
+function getCalendarWeekStart(date = new Date()) {
+  const sunday = new Date(date);
+  sunday.setDate(sunday.getDate() - sunday.getDay());
+  sunday.setHours(0, 0, 0, 0);
+  return localDateKey(sunday);
+}
 function plusHour(time: string) {
   const [hour, minute] = time.split(":").map(Number);
   const endMinutes = Math.min(hour * 60 + minute + 60, 22 * 60);
   return `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
 }
 const currentWeekKey = getWeekKey();
+const currentCalendarWeekStart = getCalendarWeekStart();
 
 function EventDialog({
   draft,
@@ -315,9 +323,10 @@ function SetupWorkspaceContent({
   onResetOnboarding,
 }: SetupWorkspaceContentProps) {
   const [modules, setModules] = useState<Module[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [commitments, setCommitments] = useState<Commitment[]>([]);
-  const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
+const [assignments, setAssignments] = useState<Assignment[]>([]);
+const [studyBlocks, setStudyBlocks] = useState<StudyBlock[]>([]);
+const [commitments, setCommitments] = useState<Commitment[]>([]);
+const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
     [],
   );
   const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>(
@@ -352,6 +361,9 @@ function SetupWorkspaceContent({
       setModules(readStoredValue<Module[]>(storageKeys.modules, []));
       setAssignments(
         readStoredValue<Assignment[]>(storageKeys.assignments, []),
+      );
+      setStudyBlocks(
+        readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []),
       );
       setCommitments(
         readStoredValue<Commitment[]>(storageKeys.commitments, []),
@@ -989,8 +1001,9 @@ async function importTimetable(file: File | undefined) {
                 timetableEntries={timetableEntries}
                 commitments={commitments}
                 datedCommitments={onboardingCompleted ? datedCommitments : []}
+                studyBlocks={onboardingCompleted ? studyBlocks : []}
                 visibleWeekStart={
-                  onboardingCompleted ? currentWeekKey : undefined
+                  onboardingCompleted ? currentCalendarWeekStart : undefined
                 }
                 selectedEntryId={selectedEntryId}
                 isEntrySkipped={

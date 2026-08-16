@@ -8,7 +8,12 @@ import {
   calendarBlockDensity,
   HOUR_HEIGHT,
 } from "@/lib/calendarLayout";
-import type { Commitment, DatedCommitment, TimetableEntry } from "@/types";
+import type {
+  Commitment,
+  DatedCommitment,
+  StudyBlock,
+  TimetableEntry,
+} from "@/types";
 
 const days = [
   "Sunday",
@@ -32,6 +37,7 @@ type WeeklyCalendarProps = {
   timetableEntries: TimetableEntry[];
   commitments: Commitment[];
   datedCommitments?: DatedCommitment[];
+  studyBlocks?: StudyBlock[];
   visibleWeekStart?: string;
   selectedEntryId?: string | null;
   isEntrySkipped?: (entry: TimetableEntry) => boolean;
@@ -45,9 +51,9 @@ const calendarHeight = (CALENDAR_END_HOUR - CALENDAR_START_HOUR) * HOUR_HEIGHT;
 
 function dateForDay(visibleWeekStart: string | undefined, dayOfWeek: number) {
   if (!visibleWeekStart) return undefined;
-  const monday = new Date(`${visibleWeekStart}T12:00:00`);
-  monday.setDate(monday.getDate() + ((dayOfWeek + 6) % 7));
-  return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+  const sunday = new Date(`${visibleWeekStart}T12:00:00`);
+  sunday.setDate(sunday.getDate() + dayOfWeek);
+  return `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, "0")}-${String(sunday.getDate()).padStart(2, "0")}`;
 }
 
 function snappedTime(offsetY: number) {
@@ -83,6 +89,7 @@ export function WeeklyCalendar({
   timetableEntries,
   commitments,
   datedCommitments = [],
+  studyBlocks = [],
   visibleWeekStart,
   selectedEntryId = null,
   isEntrySkipped = () => false,
@@ -283,6 +290,27 @@ export function WeeklyCalendar({
                             )}
                           >
                             {content}
+                          </div>
+                        );
+                      })}
+                      {studyBlocks
+                      .filter((block) => block.date === currentDate)
+                      .map((block) => {
+                        const density = calendarBlockDensity(
+                          block.start,
+                          block.end,
+                        );
+
+                        return (
+                          <div
+                            key={block.id}
+                            className={`absolute left-1 right-1 z-20 overflow-hidden rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] text-left text-[var(--accent-strong)] ${cardPadding(density)}`}
+                            style={blockPosition(block.start, block.end)}
+                          >
+                            <CalendarCard
+                              label={block.taskName}
+                              detail="Study plan"
+                            />
                           </div>
                         );
                       })}

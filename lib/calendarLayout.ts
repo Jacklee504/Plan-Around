@@ -1,7 +1,7 @@
 export const CALENDAR_START_HOUR = 8;
 export const CALENDAR_END_HOUR = 22;
 export const HOUR_HEIGHT = 64;
-export const CALENDAR_DAYS = [1, 2, 3, 4, 5, 6, 0] as const;
+export const CALENDAR_DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 const CALENDAR_START_MINUTES = CALENDAR_START_HOUR * 60;
 
