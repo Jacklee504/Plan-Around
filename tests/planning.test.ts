@@ -224,7 +224,7 @@ describe("assignment analysis contract", () => {
 
     expect(result.tasks).toHaveLength(12);
     expect(analysisSystemPrompt).toContain('"evidence": { "name": string | null, "marks": string | null }');
-    expect(MAX_ANALYSIS_COMPLETION_TOKENS).toBe(2400);
+    expect(MAX_ANALYSIS_COMPLETION_TOKENS).toBe(1600);
   });
 
   it("rejects overly long complexity rationales and inconsistent null evidence", () => {
@@ -749,20 +749,37 @@ describe("hosted assignment analyser", () => {
     expect(calls).toBe(1);
   });
 
-  it("adds the invalid first response to the repair request", async () => {
+  it("retries invalid output without replaying malformed model content", async () => {
     const providerBodies: string[] = [];
+
     const worker = createWorker(async (_input, init) => {
       providerBodies.push(String(init?.body));
-      return providerBodies.length === 1 ? providerResponse({ invalid: true }) : providerResponse(workerAnalysis);
+
+      return providerBodies.length === 1
+        ? providerResponse({ invalid: true })
+        : providerResponse(workerAnalysis);
     });
 
     const response = await worker.fetch(workerRequest(), workerEnv);
 
     expect(response.status).toBe(200);
-    const retryMessages = JSON.parse(providerBodies[1]).messages;
-    expect(retryMessages.at(-2)).toEqual({ role: "assistant", content: JSON.stringify({ invalid: true }) });
-  });
 
+    const retryMessages = JSON.parse(providerBodies[1]).messages;
+
+    expect(retryMessages).toHaveLength(3);
+
+    expect(retryMessages.at(-1)).toEqual({
+      role: "user",
+      content:
+        "The previous attempt was invalid or too long. Start again. Return only compact valid JSON matching the schema. Keep rationales under 25 words, use at most 4 short requirements per task, use YYYY-MM-DD for the deadline, and do not add commentary.",
+    });
+
+    expect(
+      retryMessages.some(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toBe(false);
+  });
   it("fails cleanly after a second invalid model response", async () => {
     let calls = 0;
     const worker = createWorker(async () => {

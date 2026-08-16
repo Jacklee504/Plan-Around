@@ -25,14 +25,6 @@ const sessionLabels = {
   tutorial: "Tutorial",
   other: "Class",
 } as const;
-const categoryLabels = {
-  class: "Class",
-  work: "Work",
-  gym: "Gym",
-  meal: "Meal",
-  social: "Social",
-  other: "Other",
-} as const;
 
 export type CalendarSlot = { dayOfWeek: number; date?: string; start: string };
 

@@ -37,14 +37,6 @@ const days = [
   "Friday",
   "Saturday",
 ];
-const categoryLabels: Record<CommitmentCategory, string> = {
-  class: "Class",
-  work: "Work",
-  gym: "Gym",
-  meal: "Meal",
-  social: "Social",
-  other: "Other",
-};
 const sessionLabels = {
   lecture: "Lecture",
   lab: "Lab",
