@@ -450,7 +450,7 @@ const workerEnv: Env = {
   AI_BASE_URL: "https://api.featherless.ai/v1",
   AI_PRIMARY_MODEL: "Qwen/Qwen3.5-9B",
   AI_VERIFIER_MODEL: "Qwen/Qwen3.5-397B-A17B",
-  ALLOWED_PRODUCTION_ORIGIN: "https://jacklee504.github.io",
+  "ALLOWED_PRODUCTION_ORIGIN": "https://plan-around.vercel.app",
   FEATHERLESS_API_KEY: "test-key",
   ANALYZE_CLIENT_RATE_LIMITER: allowsRateLimit,
   ANALYZE_GLOBAL_RATE_LIMITER: allowsRateLimit,
