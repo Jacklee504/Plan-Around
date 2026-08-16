@@ -10,7 +10,9 @@ const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 const calendarDays = [1, 2, 3, 4, 5];
 const calendarStartHour = 8;
 const calendarEndHour = 22;
-const hourHeight = 52;
+const HOUR_HEIGHT = 64;
+const calendarStartMinutes = calendarStartHour * 60;
+const calendarHeight = (calendarEndHour - calendarStartHour) * HOUR_HEIGHT;
 
 const categoryLabels: Record<CommitmentCategory, string> = {
   class: "Class",
@@ -60,13 +62,19 @@ type LegacyTimetableEntry = Omit<TimetableEntry, "attendance" | "skippedWeeks"> 
   skippedWeeks?: string[];
 };
 
+function minuteToPixel(time: string) {
+  return ((minutesFromTime(time) - calendarStartMinutes) / 60) * HOUR_HEIGHT;
+}
+
 function blockPosition(start: string, end: string) {
-  const startOffset = Math.max(0, minutesFromTime(start) - calendarStartHour * 60);
-  const duration = Math.max(30, minutesFromTime(end) - minutesFromTime(start));
   return {
-    top: `${(startOffset / 60) * hourHeight + 3}px`,
-    height: `${Math.max(30, (duration / 60) * hourHeight - 6)}px`,
+    top: `${minuteToPixel(start)}px`,
+    height: `${minuteToPixel(end) - minuteToPixel(start)}px`,
   };
+}
+
+function isCompactCalendarBlock(start: string, end: string) {
+  return minutesFromTime(end) - minutesFromTime(start) < 60;
 }
 
 export function SetupWorkspace() {
@@ -293,30 +301,60 @@ export function SetupWorkspace() {
                   <div />
                   {calendarDays.map((dayOfWeek) => <div key={dayOfWeek} className="px-3 py-3 text-sm font-semibold">{days[dayOfWeek]}</div>)}
                 </div>
-                <div className="grid grid-cols-[3.5rem_repeat(5,minmax(8rem,1fr))]">
-                  <div className="border-r border-[var(--line)] text-xs text-[var(--muted-ink)]">
-                    {Array.from({ length: calendarEndHour - calendarStartHour + 1 }, (_, index) => <div key={index} className="pr-2 text-right" style={{ height: index === calendarEndHour - calendarStartHour ? 0 : hourHeight }}>{`${calendarStartHour + index}:00`}</div>)}
+                <div className="grid grid-cols-[3.5rem_minmax(0,1fr)]">
+                  <div className="relative border-r border-[var(--line)] text-xs text-[var(--muted-ink)]" style={{ height: calendarHeight }}>
+                    {Array.from({ length: calendarEndHour - calendarStartHour + 1 }, (_, index) => (
+                      <span key={index} className="absolute right-2 tabular-nums" style={{ top: index * HOUR_HEIGHT }}>
+                        {`${calendarStartHour + index}:00`}
+                      </span>
+                    ))}
                   </div>
-                  {calendarDays.map((dayOfWeek) => (
-                    <div key={dayOfWeek} className="relative border-r border-[var(--line)] last:border-r-0" style={{ height: (calendarEndHour - calendarStartHour) * hourHeight, backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent 57px, var(--line) 58px)" }}>
-                      {timetableEntries.filter((entry) => entry.dayOfWeek === dayOfWeek).map((entry) => {
-                        const isSkipped = isSkippedThisWeek(entry);
-                        return (
-                          <button key={entry.id} type="button" onClick={() => setSelectedEntryId(entry.id)} className={`absolute left-1 right-1 overflow-hidden rounded-lg border px-2 py-1.5 text-left text-xs leading-4 transition-colors ${isSkipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : "border-[var(--accent-soft)] bg-[var(--accent-soft)] text-[var(--ink)] hover:border-[var(--accent)]"}`} style={blockPosition(entry.start, entry.end)}>
-                            <span className="block truncate font-bold">{entry.moduleCode}</span>
-                            <span className="block truncate">{sessionLabels[entry.sessionType]}</span>
-                            <span className="block tabular-nums">{entry.start} to {entry.end}</span>
-                          </button>
-                        );
-                      })}
-                      {commitments.filter((commitment) => commitment.dayOfWeek === dayOfWeek).map((commitment) => (
-                        <div key={commitment.id} className="absolute left-1 right-1 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 py-1.5 text-left text-xs leading-4 text-[var(--ink)] shadow-sm" style={blockPosition(commitment.start, commitment.end)}>
-                          <span className="block truncate font-bold">{commitment.label}</span>
-                          <span className="block truncate text-[var(--muted-ink)]">{categoryLabels[commitment.category]}</span>
+                  <div className="relative" style={{ height: calendarHeight }}>
+                    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+                      {Array.from({ length: calendarEndHour - calendarStartHour + 1 }, (_, index) => (
+                        <div key={index} className="absolute inset-x-0 border-t border-[var(--line)]" style={{ top: index * HOUR_HEIGHT }} />
+                      ))}
+                    </div>
+                    <div className="relative grid h-full grid-cols-5">
+                      {calendarDays.map((dayOfWeek) => (
+                        <div key={dayOfWeek} className="relative border-r border-[var(--line)] last:border-r-0">
+                          {timetableEntries.filter((entry) => entry.dayOfWeek === dayOfWeek).map((entry) => {
+                            const isSkipped = isSkippedThisWeek(entry);
+                            const isCompact = isCompactCalendarBlock(entry.start, entry.end);
+                            return (
+                              <button key={entry.id} type="button" onClick={() => setSelectedEntryId(entry.id)} className={`absolute left-1 right-1 z-10 overflow-hidden rounded-lg border text-left transition-colors ${isCompact ? "px-1.5 py-0 text-[10px] leading-[14px]" : "px-2 py-1 text-[11px] leading-[14px]"} ${isSkipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : "border-[var(--accent-soft)] bg-[var(--accent-soft)] text-[var(--ink)] hover:border-[var(--accent)]"}`} style={blockPosition(entry.start, entry.end)}>
+                                {isCompact ? (
+                                  <span className="block truncate font-bold tabular-nums">{entry.moduleCode} · {entry.start}–{entry.end}</span>
+                                ) : (
+                                  <>
+                                    <span className="block truncate font-bold">{entry.moduleCode}</span>
+                                    <span className="block truncate">{sessionLabels[entry.sessionType]}</span>
+                                    <span className="block tabular-nums">{entry.start}–{entry.end}</span>
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })}
+                          {commitments.filter((commitment) => commitment.dayOfWeek === dayOfWeek).map((commitment) => {
+                            const isCompact = isCompactCalendarBlock(commitment.start, commitment.end);
+                            return (
+                              <div key={commitment.id} className={`absolute left-1 right-1 z-10 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] text-left text-[11px] leading-[14px] text-[var(--ink)] shadow-sm ${isCompact ? "px-1.5 py-0 text-[10px]" : "px-2 py-1"}`} style={blockPosition(commitment.start, commitment.end)}>
+                                {isCompact ? (
+                                  <span className="block truncate font-bold tabular-nums">{commitment.label} · {commitment.start}–{commitment.end}</span>
+                                ) : (
+                                  <>
+                                    <span className="block truncate font-bold">{commitment.label}</span>
+                                    <span className="block truncate text-[var(--muted-ink)]">{categoryLabels[commitment.category]}</span>
+                                    <span className="block tabular-nums text-[var(--muted-ink)]">{commitment.start}–{commitment.end}</span>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
               </div>
             </div>

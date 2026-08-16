@@ -56,7 +56,7 @@ Timetable → local parser → constraints
 
 Assignment brief
 → Cloudflare Worker
-→ Featherless + Qwen3.5-9B
+→ Featherless + Qwen3.5-397B-A17B
 → reviewed, editable rubric
 
 Assignment + rubric
@@ -79,7 +79,7 @@ The first release supports the supplied timetable PDF format and extracts its re
 - localStorage
 - GitHub Pages frontend hosting
 - Cloudflare Worker AI boundary
-- Featherless + Qwen3.5-9B for brief interpretation
+- Featherless + Qwen3.5-397B-A17B for text and screenshot interpretation
 - Deterministic scheduling and workload logic
 
 ## Run locally
@@ -95,7 +95,7 @@ For the demo, download `Semester 1 timetable` from the app, then select the down
 
 ### AI-assisted brief review
 
-The live prototype sends an assignment brief to a Cloudflare Worker, which uses Featherless with `Qwen/Qwen3.5-9B` to produce a structured draft rubric. The student reviews and edits that draft before it affects the assignment. The AI never calculates workload hours, creates study sessions, or bypasses the review step.
+The live prototype sends an assignment brief or screenshot to a Cloudflare Worker, which uses Featherless with `Qwen/Qwen3.5-397B-A17B` to produce a structured draft rubric. The student reviews and edits that draft before it affects the assignment. The AI never calculates workload hours, creates study sessions, or bypasses the review step.
 
 For local development, Ollama remains an optional provider. With Ollama running and the `qwen3.5:9b` model installed, use a second terminal:
 

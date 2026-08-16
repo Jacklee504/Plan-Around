@@ -6,8 +6,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "AI_BASE_URL": "https://api.featherless.ai/v1",
-    "AI_PRIMARY_MODEL": "Qwen/Qwen3.5-9B",
-    "AI_VERIFIER_MODEL": "Qwen/Qwen3.5-397B-A17B",
+    "AI_PRIMARY_MODEL": "Qwen/Qwen3.5-397B-A17B",
+    "AI_VERIFIER_MODEL": "moonshotai/Kimi-K3",
     "ALLOWED_PRODUCTION_ORIGIN": "https://plan-around.vercel.app"
   },
   "secrets": {

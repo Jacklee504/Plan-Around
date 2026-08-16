@@ -448,8 +448,8 @@ const allowsRateLimit = { limit: async () => ({ success: true }) } satisfies Rat
 
 const workerEnv: Env = {
   AI_BASE_URL: "https://api.featherless.ai/v1",
-  AI_PRIMARY_MODEL: "Qwen/Qwen3.5-9B",
-  AI_VERIFIER_MODEL: "Qwen/Qwen3.5-397B-A17B",
+  AI_PRIMARY_MODEL: "Qwen/Qwen3.5-397B-A17B",
+  AI_VERIFIER_MODEL: "moonshotai/Kimi-K3",
   ALLOWED_PRODUCTION_ORIGIN: "https://plan-around.vercel.app",
   FEATHERLESS_API_KEY: "test-key",
   ANALYZE_CLIENT_RATE_LIMITER: allowsRateLimit,
@@ -522,7 +522,7 @@ describe("hosted assignment analyser", () => {
     expect(response.status).toBe(200);
     expect(payload).toMatchObject({
       provider: "featherless",
-      model: "Qwen/Qwen3.5-9B",
+      model: "Qwen/Qwen3.5-397B-A17B",
       analysis: workerAnalysis,
       verifier: { used: false, model: null, reasons: [] },
     });
