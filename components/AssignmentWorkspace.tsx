@@ -197,7 +197,7 @@ export function AssignmentWorkspace() {
     }
 
     if (hasUnconfirmedSelection) {
-      setError("Confirm this module's ECTS in Timetable before saving an assignment for it.");
+      setError("Confirm this module's ECTS in Calendar before saving an assignment for it.");
       return;
     }
 
@@ -233,7 +233,7 @@ export function AssignmentWorkspace() {
   function loadDemo() {
     const demoModule = modules.find((module) => module.code === "CS301") ?? modules[0];
     if (!demoModule) {
-      setError("Import a timetable or add a module before loading the demo assignment.");
+      setError("Import your teaching week or add a module before loading the demo assignment.");
       return;
     }
 
@@ -357,9 +357,9 @@ export function AssignmentWorkspace() {
 
       {!modules.length && isLoaded ? (
         <section className="border-y border-[var(--line)] bg-[var(--surface-soft)] px-5 py-6 text-sm leading-6 text-[var(--muted-ink)]">
-          <p className="font-semibold text-[var(--ink)]">Add your timetable first.</p>
+          <p className="font-semibold text-[var(--ink)]">Set up your Calendar first.</p>
           <p className="mt-1">Its modules are used to connect an assignment to the week you actually have.</p>
-          <Link href="/setup" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Go to timetable</Link>
+          <Link href="/setup" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Go to Calendar</Link>
         </section>
       ) : (
         <form onSubmit={saveAssignment} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.58fr)]">
@@ -386,7 +386,7 @@ export function AssignmentWorkspace() {
               </label>
             </div>
 
-            {hasUnconfirmedSelection ? <p className="rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">This module still needs its ECTS confirmed in <Link href="/setup" className="font-semibold text-[var(--accent-strong)] underline underline-offset-2">Timetable</Link>.</p> : null}
+            {hasUnconfirmedSelection ? <p className="rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">This module still needs its ECTS confirmed in <Link href="/setup" className="font-semibold text-[var(--accent-strong)] underline underline-offset-2">Calendar</Link>.</p> : null}
 
             <section className="border-t border-[var(--line)] pt-6" aria-labelledby="analysis-heading">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -407,7 +407,7 @@ export function AssignmentWorkspace() {
                   <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void selectAnalysisImage(event.target.files?.[0])} disabled={!canAnalyseScreenshot || isPreparingImage} className="sr-only" />
                   {isPreparingImage ? "Preparing screenshot…" : "Upload screenshot"}
                 </label>
-                <p className="text-sm text-[var(--muted-ink)]">PNG, JPEG or WebP, up to 8 MB. It stays in this browser tab.</p>
+                <p className="text-sm text-[var(--muted-ink)]">PNG, JPEG or WebP, up to 8 MB. Prepared locally and sent to the hosted analyser only when you click Analyse.</p>
               </div>
               {analysisImage ? <div className="mt-3 flex flex-wrap items-center gap-3 border-y border-[var(--line)] py-3 text-sm"><p className="font-semibold text-[var(--ink)]">Screenshot ready: {analysisImage.filename}</p><p className="text-[var(--muted-ink)]">Prepared for analysis, not saved.</p><button type="button" onClick={clearAnalysisImage} className="min-h-10 font-semibold text-[var(--accent-strong)] underline underline-offset-2">Remove screenshot</button></div> : null}
               {!canAnalyseScreenshot ? <p className="mt-3 text-sm leading-6 text-[var(--muted-ink)]">Screenshot analysis uses the hosted analyser. Use the deployed app or configure <code>NEXT_PUBLIC_ANALYZER_URL</code> locally.</p> : null}

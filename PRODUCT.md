@@ -10,7 +10,7 @@ University students who need to make a realistic plan for an assignment around c
 
 ## Product Purpose
 
-PlanAround is a mobile-first assignment scheduler. It turns assignment details and a student's weekly constraints into an explainable workload breakdown and a proposed set of study sessions before the deadline. The first prototype must demonstrate this complete flow reliably.
+PlanAround is a Next.js/TypeScript web app for visual assignment planning. It turns assignment details and a student's weekly constraints into an explainable workload breakdown and a proposed set of study sessions before the deadline. The first prototype must demonstrate this complete flow reliably.
 
 ## Brand Personality
 
@@ -26,7 +26,7 @@ Avoid generic to-do-list styling, visually dense calendar grids, and AI-tutor or
 2. Explain recommendations rather than presenting them as opaque automation.
 3. Treat a student's real commitments as first-class constraints.
 4. Prioritise a reliable end-to-end demo over feature breadth.
-5. Design mobile-first, while keeping the bootstrap web layout comfortable on desktop.
+5. Prioritise a polished desktop planning experience for the prototype.
 
 ## Accessibility & Inclusion
 

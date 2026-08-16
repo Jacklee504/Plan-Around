@@ -174,7 +174,7 @@ export function PlanWorkspace() {
       <section className="border-y border-[var(--line)] bg-[var(--surface-soft)] px-5 py-7" aria-labelledby="plan-empty-heading">
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Ready to schedule</p>
         <h2 id="plan-empty-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Add an assignment first.</h2>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround needs an assignment linked to one of your timetable modules before it can find focused study periods.</p>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround needs an assignment linked to one of your Calendar modules before it can find focused study periods.</p>
         <Link href="/assignment" className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Go to assignment</Link>
       </section>
     );
@@ -188,7 +188,7 @@ export function PlanWorkspace() {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Assignment plan</p>
           <h2 id="plan-controls-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Make room for the work.</h2>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround checks the timetable and commitments you entered, then places the workload into the remaining time before the deadline.</p>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround checks the Calendar and commitments you entered, then places the workload into the remaining time before the deadline.</p>
         </div>
         <label className="text-sm font-medium">
           Assignment
@@ -225,7 +225,7 @@ export function PlanWorkspace() {
             </ul>
           </section>
 
-          {isStoredPlanStale ? <section className="border-y border-amber-200 bg-amber-50 px-5 py-4 text-amber-950" role="status"><p className="font-semibold">Your inputs changed. Regenerate this plan.</p><p className="mt-1 text-sm leading-6">The saved study blocks are hidden because they may no longer fit your timetable, commitments or workload.</p></section> : null}
+          {isStoredPlanStale ? <section className="border-y border-amber-200 bg-amber-50 px-5 py-4 text-amber-950" role="status"><p className="font-semibold">Your inputs changed. Regenerate this plan.</p><p className="mt-1 text-sm leading-6">The saved study blocks are hidden because they may no longer fit your Calendar, commitments or workload.</p></section> : null}
 
           {result && selectedStatus ? (
             <>
@@ -247,7 +247,7 @@ export function PlanWorkspace() {
               </dl>
 
               {result.status === "tight" ? <p className="text-sm leading-6 text-[var(--muted-ink)]">The plan uses the deadline date because the earlier window has {formatHours(result.bufferedAvailableHours)} available and the assignment needs {formatHours(result.requiredHours)}.</p> : null}
-              {result.status === "not-enough-time" ? <p className="text-sm leading-6 text-[var(--muted-ink)]">There are {formatHours(result.deadlineAvailableHours)} available through the deadline date, so {formatHours(result.unscheduledHours)} remains unplaced. Reduce the workload estimate or free up time in Timetable.</p> : null}
+              {result.status === "not-enough-time" ? <p className="text-sm leading-6 text-[var(--muted-ink)]">There are {formatHours(result.deadlineAvailableHours)} available through the deadline date, so {formatHours(result.unscheduledHours)} remains unplaced. Reduce the workload estimate or free up time in Calendar.</p> : null}
 
               <section aria-labelledby="study-blocks-heading">
                 <div className="flex flex-wrap items-end justify-between gap-3">
@@ -274,7 +274,7 @@ export function PlanWorkspace() {
                       </section>
                     ))}
                   </div>
-                ) : <p className="mt-5 border-y border-[var(--line)] py-5 text-sm leading-6 text-[var(--muted-ink)]">No suitable study periods were found. Check the deadline and the commitments in your timetable.</p>}
+                ) : <p className="mt-5 border-y border-[var(--line)] py-5 text-sm leading-6 text-[var(--muted-ink)]">No suitable study periods were found. Check the deadline and commitments in Calendar.</p>}
               </section>
             </>
           ) : !isStoredPlanStale ? <section className="border-y border-[var(--line)] bg-[var(--surface-soft)] px-5 py-6 text-sm leading-6 text-[var(--muted-ink)]"><p className="font-semibold text-[var(--ink)]">Ready to build a realistic plan.</p><p className="mt-1">It will use sessions of roughly 60 to 120 minutes, avoid your recurring commitments, and aim to finish before the deadline date when capacity allows it.</p></section> : null}

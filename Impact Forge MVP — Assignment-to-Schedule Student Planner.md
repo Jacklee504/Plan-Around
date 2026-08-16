@@ -1,6 +1,6 @@
 # Project overview
 
-Build a **mobile-first responsive web app/PWA** for students that converts an assignment brief into a realistic study plan based on:
+Build a **desktop-focused web app** for students that converts an assignment brief into a realistic study plan based on:
 
 1. The module's ECTS credits.
 2. The percentage of the module grade represented by the assignment.
@@ -135,7 +135,7 @@ Use a simple three-step indicator at the top:
 1 Setup → 2 Assignment → 3 Plan
 ```
 
-Design mobile-first but ensure it works comfortably on desktop.
+Prioritise a polished desktop demo experience for the prototype.
 
 ---
 
