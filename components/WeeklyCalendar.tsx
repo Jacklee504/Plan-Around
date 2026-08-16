@@ -76,7 +76,7 @@ function CalendarCard({
   className,
 }: {
   label: string;
-  detail: string;
+  detail?: string;
   start: string;
   end: string;
   density: ReturnType<typeof calendarBlockDensity>;
@@ -91,10 +91,7 @@ function CalendarCard({
   return (
     <span className={className}>
       <span className="block truncate font-bold">{label}</span>
-      <span className="block truncate">{detail}</span>
-      <span className="block tabular-nums">
-        {start}–{end}
-      </span>
+        {detail ? <span className="block truncate">{detail}</span> : null}
     </span>
   );
 }
@@ -248,7 +245,6 @@ export function WeeklyCalendar({
                         const content = (
                           <CalendarCard
                             label={commitment.label}
-                            detail={categoryLabels[commitment.category]}
                             start={commitment.start}
                             end={commitment.end}
                             density={density}
