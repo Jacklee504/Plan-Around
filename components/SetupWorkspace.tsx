@@ -59,6 +59,7 @@ type CalendarEventDraft = {
   id?: string;
   label: string;
   dayOfWeek: number;
+  selectedDays?: number[];
   date: string;
   start: string;
   end: string;
@@ -405,15 +406,22 @@ function SetupWorkspaceContent({
       mode: onboardingCompleted ? "dated" : "recurring",
       label: "",
       dayOfWeek: slot.dayOfWeek,
+      selectedDays: [slot.dayOfWeek],
       date: onboardingCompleted ? (slot.date ?? "") : "",
       start: slot.start,
       end: plusHour(slot.start),
       category: "other",
     });
   }
+
   function openNewEvent() {
-    openSlot({ dayOfWeek: 1, date: currentWeekKey, start: "16:00" });
+    openSlot({
+      dayOfWeek: 1,
+      date: currentWeekKey,
+      start: "16:00",
+    });
   }
+
   function openRecurringCommitment(commitment: Commitment) {
     setSelectedEntryId(null);
     setEventError("");
@@ -422,6 +430,7 @@ function SetupWorkspaceContent({
       id: commitment.id,
       label: commitment.label,
       dayOfWeek: commitment.dayOfWeek,
+      selectedDays: [commitment.dayOfWeek],
       date: "",
       start: commitment.start,
       end: commitment.end,
@@ -453,22 +462,43 @@ function SetupWorkspaceContent({
       setEventError("Add a label and valid start and end time.");
       return;
     }
-    if (eventDraft.mode === "recurring") {
+  if (eventDraft.mode === "recurring") {
+    if (eventDraft.id) {
       const next: Commitment = {
-        id: eventDraft.id ?? createId(),
+        id: eventDraft.id,
         label,
         dayOfWeek: eventDraft.dayOfWeek,
         start: eventDraft.start,
         end: eventDraft.end,
         category: eventDraft.category,
       };
+
       setCommitments((current) =>
-        eventDraft.id
-          ? current.map((item) => (item.id === eventDraft.id ? next : item))
-          : [...current, next],
+        current.map((item) => (item.id === eventDraft.id ? next : item)),
       );
     } else {
-      const next: DatedCommitment = {
+      const selectedDays = [
+        ...new Set(eventDraft.selectedDays ?? [eventDraft.dayOfWeek]),
+      ];
+
+      if (!selectedDays.length) {
+        setEventError("Select at least one day.");
+        return;
+      }
+
+      const newCommitments: Commitment[] = selectedDays.map((dayOfWeek) => ({
+        id: createId(),
+        label,
+        dayOfWeek,
+        start: eventDraft.start,
+        end: eventDraft.end,
+        category: eventDraft.category,
+      }));
+
+      setCommitments((current) => [...current, ...newCommitments]);
+    }
+  } else {
+  const next: DatedCommitment = {
         id: eventDraft.id ?? createId(),
         label,
         date: eventDraft.date,
@@ -1019,16 +1049,17 @@ function SetupWorkspaceContent({
                 <button
                   type="button"
                   onClick={() =>
-                    setEventDraft({
-                      mode: "recurring",
-                      label: "",
-                      dayOfWeek: 1,
-                      date: "",
-                      start: "16:00",
-                      end: "17:00",
-                      category: "other",
-                    })
-                  }
+                  setEventDraft({
+                    mode: "recurring",
+                    label: "",
+                    dayOfWeek: 1,
+                    selectedDays: [1],
+                    date: "",
+                    start: "16:00",
+                    end: "17:00",
+                    category: "other",
+                  })
+                }
                   className="mt-4 min-h-11 rounded-xl border border-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
                 >
                   + Add recurring commitment
