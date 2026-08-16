@@ -136,7 +136,7 @@ export function WeeklyCalendar({
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-[3.25rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] py-4">
           <div
             className="relative border-r border-[var(--line)] text-xs text-[var(--muted-ink)]"
             style={{ height: calendarHeight }}

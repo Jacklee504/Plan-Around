@@ -395,6 +395,8 @@ function SetupWorkspaceContent({
   const totalBlockedTime = timetableEntries.length + commitments.length;
   const hasBaseline = totalBlockedTime > 0;
   const canCompleteSetup = hasBaseline && unconfirmedCreditCount === 0;
+  const shouldShowImporter =
+    !reviewEntries && (showImporter || !timetableEntries.length);
 
   function openSlot(slot: CalendarSlot) {
     setSelectedEntryId(null);
@@ -860,6 +862,19 @@ function SetupWorkspaceContent({
           {timetableAnalysisError}
         </p>
       ) : null}
+    </>
+  );
+
+  if (!isLoaded)
+    return (
+      <div
+        className="h-96 animate-pulse border-y border-[var(--line)] bg-[var(--surface-soft)]"
+        aria-label="Loading calendar"
+      />
+    );
+  return (
+    <div className="space-y-8">
+      {shouldShowImporter ? importControls : null}
       {reviewEntries ? (
         <TimetableReview
           entries={reviewEntries}
@@ -877,20 +892,7 @@ function SetupWorkspaceContent({
           }}
         />
       ) : null}
-    </>
-  );
-
-  if (!isLoaded)
-    return (
-      <div
-        className="h-96 animate-pulse border-y border-[var(--line)] bg-[var(--surface-soft)]"
-        aria-label="Loading calendar"
-      />
-    );
-  return (
-    <div className="space-y-8">
-      {!onboardingCompleted || showImporter ? importControls : null}
-      {timetableEntries.length ? (
+      {!reviewEntries && timetableEntries.length ? (
         <>
           <section aria-labelledby="calendar-heading">
             <div className="flex flex-wrap items-end justify-between gap-4">
@@ -1133,12 +1135,12 @@ function SetupWorkspaceContent({
             </section>
           )}
         </>
-      ) : (
+      ) : !reviewEntries ? (
         <section className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--surface-soft)] px-5 py-8 text-sm leading-6 text-[var(--muted-ink)]">
           Import a timetable screenshot, or use the supported sample PDF, to
           start your editable Semester 1 calendar.
         </section>
-      )}
+      ) : null}
       {eventDraft ? (
         <EventDialog
           draft={eventDraft}
