@@ -17,7 +17,7 @@ const statusCopy: Record<PlanStatus, { label: string; detail: string; className:
   },
   tight: {
     label: "Tight",
-    detail: "The work fits only by using time inside the final 24 hours before the deadline.",
+    detail: "The work fits only by using time on the deadline date.",
     className: "bg-amber-50 text-amber-900",
   },
   "not-enough-time": {
@@ -192,8 +192,8 @@ export function PlanWorkspace() {
                 <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:pl-5"><dt className="text-sm text-[var(--muted-ink)]">Still unplaced</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{formatHours(result.unscheduledHours)}</dd></div>
               </dl>
 
-              {result.status === "tight" ? <p className="text-sm leading-6 text-[var(--muted-ink)]">The plan uses the final day before the deadline because the earlier window has {formatHours(result.bufferedAvailableHours)} available and the assignment needs {formatHours(result.requiredHours)}.</p> : null}
-              {result.status === "not-enough-time" ? <p className="text-sm leading-6 text-[var(--muted-ink)]">There are {formatHours(result.deadlineAvailableHours)} available before the deadline, so {formatHours(result.unscheduledHours)} remains unplaced. Reduce the workload estimate or free up time in Timetable.</p> : null}
+              {result.status === "tight" ? <p className="text-sm leading-6 text-[var(--muted-ink)]">The plan uses the deadline date because the earlier window has {formatHours(result.bufferedAvailableHours)} available and the assignment needs {formatHours(result.requiredHours)}.</p> : null}
+              {result.status === "not-enough-time" ? <p className="text-sm leading-6 text-[var(--muted-ink)]">There are {formatHours(result.deadlineAvailableHours)} available through the deadline date, so {formatHours(result.unscheduledHours)} remains unplaced. Reduce the workload estimate or free up time in Timetable.</p> : null}
 
               <section aria-labelledby="study-blocks-heading">
                 <div className="flex flex-wrap items-end justify-between gap-3">

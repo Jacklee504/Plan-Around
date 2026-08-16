@@ -154,6 +154,40 @@ function nextTask(tasks: TaskRemaining[]) {
   return tasks.find((task) => task.remainingMinutes > 0) ?? null;
 }
 
+function canMergeBlocks(first: StudyBlock, second: StudyBlock) {
+  return first.assignmentId === second.assignmentId
+    && first.taskId === second.taskId
+    && first.date === second.date
+    && first.end === second.start
+    && minutesFromTime(second.end) - minutesFromTime(first.start) <= MAX_STUDY_SESSION_MINUTES;
+}
+
+function absorbShortBlocks(blocks: StudyBlock[]) {
+  const normalized: StudyBlock[] = [];
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    const duration = minutesFromTime(block.end) - minutesFromTime(block.start);
+    const previous = normalized.at(-1);
+
+    if (duration === 30 && previous && canMergeBlocks(previous, block)) {
+      previous.end = block.end;
+      continue;
+    }
+
+    const next = blocks[index + 1];
+    if (duration === 30 && next && canMergeBlocks(block, next)) {
+      normalized.push({ ...next, start: block.start, id: block.id });
+      index += 1;
+      continue;
+    }
+
+    normalized.push({ ...block });
+  }
+
+  return normalized;
+}
+
 function fillStudyBlocks(availability: DatedAvailability[], assignment: Assignment, workload: WorkloadBreakdown) {
   const tasks = workload.taskHours.map((task) => ({ ...task, remainingMinutes: Math.round(task.recommendedHours * 60) }));
   const studyBlocks: StudyBlock[] = [];
@@ -175,7 +209,15 @@ function fillStudyBlocks(availability: DatedAvailability[], assignment: Assignme
         if (rangeRemaining < MIN_STUDY_SESSION_MINUTES && !isFinalHalfHour) break;
 
         const preferredLength = Math.min(PREFERRED_STUDY_SESSION_MINUTES, MAX_STUDY_SESSION_MINUTES, dailyRemaining, rangeRemaining);
-        const duration = Math.min(preferredLength, task.remainingMinutes);
+        let duration = Math.min(preferredLength, task.remainingMinutes);
+
+        // Keep the final half-hour attached to a normal session whenever the
+        // current free period allows it. If it cannot be extended, leave a full
+        // hour for a later eligible period instead of creating a 30-minute block.
+        if (task.remainingMinutes - duration === 30) {
+          const expandedDuration = Math.min(task.remainingMinutes, MAX_STUDY_SESSION_MINUTES, dailyRemaining, rangeRemaining);
+          duration = expandedDuration > duration ? expandedDuration : duration >= 90 ? duration - 30 : duration;
+        }
 
         if (duration < MIN_STUDY_SESSION_MINUTES && !isFinalHalfHour) break;
         if (duration === 0) break;
@@ -205,7 +247,7 @@ function fillStudyBlocks(availability: DatedAvailability[], assignment: Assignme
     availability.forEach((day) => fillDay(day, DAY_MINUTES));
   }
 
-  return studyBlocks;
+  return absorbShortBlocks(studyBlocks);
 }
 
 function totalBlockMinutes(blocks: StudyBlock[]) {
@@ -215,9 +257,9 @@ function totalBlockMinutes(blocks: StudyBlock[]) {
 export function generateStudySchedule({ assignment, workload, timetableEntries, commitments, now = new Date() }: SchedulerInput): ScheduleResult {
   const deadline = dateFromKey(assignment.deadline);
   const scheduleStart = startOfDay(now);
-  const deadlineBufferStart = addDays(deadline, -1);
-  const fullAvailability = buildAvailability(scheduleStart, deadline, timetableEntries, commitments);
-  const bufferedAvailability = buildAvailability(scheduleStart, deadlineBufferStart, timetableEntries, commitments);
+  const dayAfterDeadline = addDays(deadline, 1);
+  const fullAvailability = buildAvailability(scheduleStart, dayAfterDeadline, timetableEntries, commitments);
+  const bufferedAvailability = buildAvailability(scheduleStart, deadline, timetableEntries, commitments);
   removePastAvailability(fullAvailability, now);
   removePastAvailability(bufferedAvailability, now);
   const requiredMinutes = Math.round(workload.usableHours * 60);
