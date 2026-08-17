@@ -9,6 +9,14 @@ import {
   writeStoredValue,
 } from "@/lib/storage";
 import { CALENDAR_DAYS } from "@/lib/calendarLayout";
+import {
+  addCalendarWeeks,
+  calendarDateForDay,
+  dateFromDateKey,
+  getCalendarWeekStart,
+  getMondayWeekKeyForDate,
+  getMondayWeekKeyForDateKey,
+} from "@/lib/calendarWeek";
 import { WeeklyCalendar, type CalendarSlot } from "@/components/WeeklyCalendar";
 import { initialOnboardingState, useOnboardingState } from "@/lib/onboarding";
 import {
@@ -75,28 +83,29 @@ const createId = () =>
   window.crypto?.randomUUID?.() ??
   `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-function localDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-function getWeekKey(date = new Date()) {
-  const monday = new Date(date);
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-  monday.setHours(0, 0, 0, 0);
-  return localDateKey(monday);
-}
-function getCalendarWeekStart(date = new Date()) {
-  const sunday = new Date(date);
-  sunday.setDate(sunday.getDate() - sunday.getDay());
-  sunday.setHours(0, 0, 0, 0);
-  return localDateKey(sunday);
-}
 function plusHour(time: string) {
   const [hour, minute] = time.split(":").map(Number);
   const endMinutes = Math.min(hour * 60 + minute + 60, 22 * 60);
   return `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
 }
-const currentWeekKey = getWeekKey();
-const currentCalendarWeekStart = getCalendarWeekStart();
+const weekRangeDayFormatter = new Intl.DateTimeFormat("en-IE", { day: "numeric" });
+const weekRangeMonthFormatter = new Intl.DateTimeFormat("en-IE", { day: "numeric", month: "short" });
+const weekRangeMonthYearFormatter = new Intl.DateTimeFormat("en-IE", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+function formatVisibleWeekRange(weekStart: string) {
+  const start = dateFromDateKey(weekStart);
+  const end = dateFromDateKey(calendarDateForDay(weekStart, 6));
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+  const startLabel = sameMonth ? weekRangeDayFormatter.format(start) : weekRangeMonthFormatter.format(start);
+  return `${startLabel}–${weekRangeMonthYearFormatter.format(end)}`;
+}
+// The real current Monday-based week key, used only to migrate legacy
+// "skip-this-week" data on load. Skip/attendance actions elsewhere use the
+// key for the week currently being viewed, not this fixed value.
+const currentWeekKey = getMondayWeekKeyForDate(new Date());
 
 function EventDialog({
   draft,
@@ -333,6 +342,9 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
     [],
   );
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [visibleCalendarWeekStart, setVisibleCalendarWeekStart] = useState(() =>
+    getCalendarWeekStart(),
+  );
   const [eventDraft, setEventDraft] = useState<CalendarEventDraft | null>(null);
   const [eventError, setEventError] = useState("");
   const [showImporter, setShowImporter] = useState(!onboardingCompleted);
@@ -408,12 +420,20 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
 
   const selectedEntry =
     timetableEntries.find((entry) => entry.id === selectedEntryId) ?? null;
+  // The recurring class shown as "selected" can appear in any displayed week, so its
+  // one-week skip exception is keyed off the visible week, not the real current week.
+  const selectedEntryDate = selectedEntry
+    ? calendarDateForDay(visibleCalendarWeekStart, selectedEntry.dayOfWeek)
+    : null;
+  const selectedEntryWeekKey = selectedEntryDate
+    ? getMondayWeekKeyForDateKey(selectedEntryDate)
+    : null;
   const importedModuleCount = new Set(
     timetableEntries.map((entry) => entry.moduleCode),
   ).size;
-  const isSkippedThisWeek = (entry: TimetableEntry) =>
+  const isEntrySkippedOnDate = (entry: TimetableEntry, date?: string) =>
     entry.attendance === "skip-every-week" ||
-    entry.skippedWeeks.includes(currentWeekKey);
+    (date ? entry.skippedWeeks.includes(getMondayWeekKeyForDateKey(date)) : false);
   const unconfirmedCreditCount = modules.filter(
     (module) => module.creditsConfirmed !== true,
   ).length;
@@ -441,7 +461,7 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
   function openNewEvent() {
     openSlot({
       dayOfWeek: 1,
-      date: currentWeekKey,
+      date: calendarDateForDay(visibleCalendarWeekStart, 1),
       start: "16:00",
     });
   }
@@ -745,7 +765,7 @@ async function importTimetable(file: File | undefined) {
   }
 
   function updateAttendance(attendance: TimetableAttendance) {
-    if (!selectedEntry) return;
+    if (!selectedEntry || !selectedEntryWeekKey) return;
     setTimetableEntries((current) =>
       current.map((entry) =>
         entry.id === selectedEntry.id
@@ -754,7 +774,7 @@ async function importTimetable(file: File | undefined) {
               attendance,
               skippedWeeks:
                 attendance === "attending"
-                  ? entry.skippedWeeks.filter((week) => week !== currentWeekKey)
+                  ? entry.skippedWeeks.filter((week) => week !== selectedEntryWeekKey)
                   : entry.skippedWeeks,
             }
           : entry,
@@ -762,16 +782,16 @@ async function importTimetable(file: File | undefined) {
     );
   }
   function skipSelectedEntryThisWeek() {
-    if (!selectedEntry) return;
+    if (!selectedEntry || !selectedEntryWeekKey) return;
     setTimetableEntries((current) =>
       current.map((entry) =>
         entry.id === selectedEntry.id
           ? {
               ...entry,
               attendance: "attending",
-              skippedWeeks: entry.skippedWeeks.includes(currentWeekKey)
+              skippedWeeks: entry.skippedWeeks.includes(selectedEntryWeekKey)
                 ? entry.skippedWeeks
-                : [...entry.skippedWeeks, currentWeekKey],
+                : [...entry.skippedWeeks, selectedEntryWeekKey],
             }
           : entry,
       ),
@@ -996,6 +1016,42 @@ async function importTimetable(file: File | undefined) {
                 </span>
               )}
             </div>
+            {onboardingCompleted ? (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <div className="inline-flex items-center gap-1 rounded-xl border border-[var(--line)] p-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVisibleCalendarWeekStart((current) => addCalendarWeeks(current, -1))
+                    }
+                    className="min-h-9 min-w-9 rounded-lg text-sm font-semibold text-[var(--muted-ink)] hover:bg-[var(--surface-soft)]"
+                    aria-label="Previous week"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCalendarWeekStart(getCalendarWeekStart())}
+                    className="min-h-9 rounded-lg px-3 text-sm font-semibold text-[var(--muted-ink)] hover:bg-[var(--surface-soft)]"
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVisibleCalendarWeekStart((current) => addCalendarWeeks(current, 1))
+                    }
+                    className="min-h-9 min-w-9 rounded-lg text-sm font-semibold text-[var(--muted-ink)] hover:bg-[var(--surface-soft)]"
+                    aria-label="Next week"
+                  >
+                    ›
+                  </button>
+                </div>
+                <span className="text-sm font-semibold text-[var(--muted-ink)]">
+                  {formatVisibleWeekRange(visibleCalendarWeekStart)}
+                </span>
+              </div>
+            ) : null}
             <div className="mt-5">
               <WeeklyCalendar
                 timetableEntries={timetableEntries}
@@ -1003,11 +1059,11 @@ async function importTimetable(file: File | undefined) {
                 datedCommitments={onboardingCompleted ? datedCommitments : []}
                 studyBlocks={onboardingCompleted ? studyBlocks : []}
                 visibleWeekStart={
-                  onboardingCompleted ? currentCalendarWeekStart : undefined
+                  onboardingCompleted ? visibleCalendarWeekStart : undefined
                 }
                 selectedEntryId={selectedEntryId}
                 isEntrySkipped={
-                  onboardingCompleted ? isSkippedThisWeek : () => false
+                  onboardingCompleted ? isEntrySkippedOnDate : () => false
                 }
                 onSelectEntry={
                   onboardingCompleted
@@ -1051,7 +1107,7 @@ async function importTimetable(file: File | undefined) {
                   <button
                     type="button"
                     onClick={skipSelectedEntryThisWeek}
-                    className={`min-h-10 rounded-lg px-3 text-sm font-semibold ${selectedEntry.skippedWeeks.includes(currentWeekKey) ? "bg-[var(--ink)] text-white" : "border border-[var(--line)]"}`}
+                    className={`min-h-10 rounded-lg px-3 text-sm font-semibold ${selectedEntryWeekKey && selectedEntry.skippedWeeks.includes(selectedEntryWeekKey) ? "bg-[var(--ink)] text-white" : "border border-[var(--line)]"}`}
                   >
                     Not going this week
                   </button>

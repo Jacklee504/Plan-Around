@@ -8,6 +8,7 @@ import {
   calendarBlockDensity,
   HOUR_HEIGHT,
 } from "@/lib/calendarLayout";
+import { calendarDateForDay } from "@/lib/calendarWeek";
 import type {
   Commitment,
   DatedCommitment,
@@ -40,7 +41,7 @@ type WeeklyCalendarProps = {
   studyBlocks?: StudyBlock[];
   visibleWeekStart?: string;
   selectedEntryId?: string | null;
-  isEntrySkipped?: (entry: TimetableEntry) => boolean;
+  isEntrySkipped?: (entry: TimetableEntry, date?: string) => boolean;
   onSelectEntry?: (entry: TimetableEntry) => void;
   onSelectCommitment?: (commitment: Commitment) => void;
   onSelectDatedCommitment?: (commitment: DatedCommitment) => void;
@@ -50,10 +51,7 @@ type WeeklyCalendarProps = {
 const calendarHeight = (CALENDAR_END_HOUR - CALENDAR_START_HOUR) * HOUR_HEIGHT;
 
 function dateForDay(visibleWeekStart: string | undefined, dayOfWeek: number) {
-  if (!visibleWeekStart) return undefined;
-  const sunday = new Date(`${visibleWeekStart}T12:00:00`);
-  sunday.setDate(sunday.getDate() + dayOfWeek);
-  return `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, "0")}-${String(sunday.getDate()).padStart(2, "0")}`;
+  return visibleWeekStart ? calendarDateForDay(visibleWeekStart, dayOfWeek) : undefined;
 }
 
 function snappedTime(offsetY: number) {
@@ -103,17 +101,25 @@ export function WeeklyCalendar({
       <div className="min-w-[42rem] lg:min-w-0">
         <div className="grid grid-cols-[3.25rem_repeat(7,minmax(0,1fr))] border-b border-[var(--line)] bg-[var(--surface-soft)]">
           <div />
-          {CALENDAR_DAYS.map((dayOfWeek) => (
-            <div
-              key={dayOfWeek}
-              className="min-w-0 px-1 py-3 text-center text-xs font-semibold sm:px-2 sm:text-sm"
-            >
-              {days[dayOfWeek].slice(0, 3)}
-              <span className="hidden xl:inline">
-                {days[dayOfWeek].slice(3)}
-              </span>
-            </div>
-          ))}
+          {CALENDAR_DAYS.map((dayOfWeek) => {
+            const headerDate = dateForDay(visibleWeekStart, dayOfWeek);
+            return (
+              <div
+                key={dayOfWeek}
+                className="min-w-0 px-1 py-3 text-center text-xs font-semibold sm:px-2 sm:text-sm"
+              >
+                {days[dayOfWeek].slice(0, 3)}
+                <span className="hidden xl:inline">
+                  {days[dayOfWeek].slice(3)}
+                </span>
+                {headerDate ? (
+                  <span className="mt-0.5 block text-[11px] font-normal text-[var(--muted-ink)]">
+                    {Number(headerDate.slice(-2))}
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
         <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] py-4">
           <div
@@ -176,7 +182,7 @@ export function WeeklyCalendar({
                           entry.start,
                           entry.end,
                         );
-                        const skipped = isEntrySkipped(entry);
+                        const skipped = isEntrySkipped(entry, currentDate);
                         const selected = selectedEntryId === entry.id;
                         const className = `absolute left-1 right-1 z-10 overflow-hidden rounded-lg border text-left transition-colors ${cardPadding(density)} ${skipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : selected ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--ink)]" : "border-[var(--accent-soft)] bg-[var(--accent-soft)] text-[var(--ink)] hover:border-[var(--accent)]"}`;
                         const content = (
