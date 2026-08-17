@@ -6,6 +6,7 @@ import { createPlanFingerprint, getReservableStudyBlocks } from "@/lib/planSnaps
 import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
+import { completedMinutes, studyBlockMinutes } from "@/lib/studyProgress";
 import { OnboardingRequired } from "@/components/OnboardingRequired";
 import { useOnboardingState } from "@/lib/onboarding";
 import type { Assignment, Commitment, DatedCommitment, Module, ScheduleResult, StudyBlock, TimetableEntry } from "@/types";
@@ -43,19 +44,12 @@ function formatDeadline(date: string) {
 }
 
 function blockDuration(block: StudyBlock) {
-  const [startHours, startMinutes] = block.start.split(":").map(Number);
-  const [endHours, endMinutes] = block.end.split(":").map(Number);
-  const minutes = endHours * 60 + endMinutes - (startHours * 60 + startMinutes);
-  return formatHours(minutes / 60);
+  return formatHours(studyBlockMinutes(block) / 60);
 }
 
 function getResultForExistingBlocks(blocks: StudyBlock[], recalculatedResult: ScheduleResult): ScheduleResult | null {
   if (!blocks.length) return null;
-  const scheduledHours = blocks.reduce((total, block) => {
-    const [startHours, startMinutes] = block.start.split(":").map(Number);
-    const [endHours, endMinutes] = block.end.split(":").map(Number);
-    return total + (endHours * 60 + endMinutes - (startHours * 60 + startMinutes)) / 60;
-  }, 0);
+  const scheduledHours = blocks.reduce((total, block) => total + studyBlockMinutes(block) / 60, 0);
 
   return {
     ...recalculatedResult,
@@ -113,6 +107,11 @@ export function PlanWorkspace() {
   const selectedModule = selectedAssignment ? modules.find((module) => module.id === selectedAssignment.moduleId) ?? null : null;
   const workload = selectedAssignment && selectedModule ? calculateWorkloadBreakdown(selectedModule.credits, selectedAssignment) : null;
   const storedSelectedBlocks = selectedAssignment ? studyBlocks.filter((block) => block.assignmentId === selectedAssignment.id) : [];
+  const focusedMinutes = workload ? Math.round(workload.usableHours * 60) : 0;
+  // Clamp so legacy or edge-case data can't show completed time exceeding the
+  // current focused-work recommendation, or a negative remainder.
+  const completedFocusedMinutes = Math.min(focusedMinutes, completedMinutes(storedSelectedBlocks));
+  const remainingFocusedHours = Math.max(0, (focusedMinutes - completedFocusedMinutes) / 60);
   const reservedBlocks = selectedAssignment && selectedModule
     ? getReservableStudyBlocks({
       currentAssignmentId: selectedAssignment.id,
@@ -139,7 +138,12 @@ export function PlanWorkspace() {
     : null;
   const existingResult = recalculatedResult && !isStoredPlanStale ? getResultForExistingBlocks(storedSelectedBlocks, recalculatedResult) : null;
   const result = generatedResult ?? existingResult;
-  const groupedBlocks = (result?.studyBlocks ?? []).reduce<Record<string, StudyBlock[]>>((groups, block) => {
+  // `result.studyBlocks` can be a snapshot taken at generation time, so completion
+  // toggles (which only update the `studyBlocks` state) would not appear here
+  // without re-reading each block's current state by id.
+  const liveBlocksById = new Map(studyBlocks.map((block) => [block.id, block]));
+  const groupedBlocks = (result?.studyBlocks ?? []).reduce<Record<string, StudyBlock[]>>((groups, resultBlock) => {
+    const block = liveBlocksById.get(resultBlock.id) ?? resultBlock;
     (groups[block.date] ??= []).push(block);
     return groups;
   }, {});
@@ -161,6 +165,16 @@ export function PlanWorkspace() {
   function chooseAssignment(id: string) {
     setSelectedAssignmentId(id);
     setGeneratedResult(null);
+  }
+
+  function toggleStudyBlockCompletion(blockId: string) {
+    setStudyBlocks((current) =>
+      current.map((block) =>
+        block.id === blockId
+          ? { ...block, completedAt: block.completedAt ? undefined : new Date().toISOString() }
+          : block,
+      ),
+    );
   }
 
   if (!isLoaded || !isOnboardingLoaded) {
@@ -218,6 +232,15 @@ export function PlanWorkspace() {
             <div className="border-t border-[var(--line)] py-4 sm:border-t-0 sm:pl-5"><dt className="text-sm text-[var(--muted-ink)]">Focused work scheduled</dt><dd className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{result ? formatHours(result.scheduledHours) : "Not yet"}</dd></div>
           </dl>
 
+          <section className="border-b border-[var(--line)] pb-5" aria-labelledby="plan-progress-heading">
+            <h3 id="plan-progress-heading" className="text-sm font-semibold">Progress</h3>
+            <dl className="mt-3 grid gap-4 sm:grid-cols-3">
+              <div><dt className="text-sm text-[var(--muted-ink)]">Focused work</dt><dd className="mt-1 text-xl font-semibold tracking-[-0.03em]">{formatHours(workload.usableHours)}</dd></div>
+              <div><dt className="text-sm text-[var(--muted-ink)]">Completed</dt><dd className="mt-1 text-xl font-semibold tracking-[-0.03em]">{formatHours(completedFocusedMinutes / 60)}</dd></div>
+              <div><dt className="text-sm text-[var(--muted-ink)]">Remaining</dt><dd className="mt-1 text-xl font-semibold tracking-[-0.03em]">{formatHours(remainingFocusedHours)}</dd></div>
+            </dl>
+          </section>
+
           <section className="border-b border-[var(--line)] pb-5" aria-labelledby="plan-task-summary-heading">
             <h3 id="plan-task-summary-heading" className="text-sm font-semibold">Work split</h3>
             <ul className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
@@ -264,10 +287,17 @@ export function PlanWorkspace() {
                         <h3 className="text-sm font-semibold">{formatDate(date)}</h3>
                         <ul className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
                           {blocks.map((block) => (
-                            <li key={block.id} className="grid gap-1 py-3 sm:grid-cols-[8rem_minmax(0,1fr)_auto] sm:items-center">
+                            <li key={block.id} className={`grid gap-1 py-3 sm:grid-cols-[8rem_minmax(0,1fr)_auto_auto] sm:items-center ${block.completedAt ? "text-[var(--muted-ink)]" : ""}`}>
                               <p className="font-semibold tabular-nums">{block.start}–{block.end}</p>
                               <p className="text-sm text-[var(--muted-ink)]">{block.taskName}</p>
                               <p className="text-sm font-semibold tabular-nums sm:text-right">{blockDuration(block)}</p>
+                              <button
+                                type="button"
+                                onClick={() => toggleStudyBlockCompletion(block.id)}
+                                className={`min-h-9 rounded-lg px-3 text-xs font-semibold sm:justify-self-end ${block.completedAt ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-[var(--accent)]"}`}
+                              >
+                                {block.completedAt ? "Completed" : "Mark complete"}
+                              </button>
                             </li>
                           ))}
                         </ul>

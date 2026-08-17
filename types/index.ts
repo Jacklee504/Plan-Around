@@ -95,6 +95,7 @@ export type StudyBlock = {
   end: string;
   taskId: string;
   taskName: string;
+  completedAt?: string;
 };
 
 export type ScheduleStatus = "on-track" | "tight" | "not-enough-time";

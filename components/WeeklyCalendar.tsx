@@ -306,16 +306,17 @@ export function WeeklyCalendar({
                           block.start,
                           block.end,
                         );
+                        const completed = Boolean(block.completedAt);
 
                         return (
                           <div
                             key={block.id}
-                            className={`absolute left-1 right-1 z-20 overflow-hidden rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] text-left text-[var(--accent-strong)] ${cardPadding(density)}`}
+                            className={`absolute left-1 right-1 z-20 overflow-hidden rounded-lg border text-left ${cardPadding(density)} ${completed ? "border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)]" : "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"}`}
                             style={blockPosition(block.start, block.end)}
                           >
                             <CalendarCard
                               label={block.taskName}
-                              detail="Study plan"
+                              detail={completed ? "Completed" : "Study plan"}
                             />
                           </div>
                         );

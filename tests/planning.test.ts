@@ -497,6 +497,15 @@ describe("saved-plan freshness", () => {
     expect(createPlanFingerprint({ ...baseInputs, datedCommitments: [datedCommitment()] })).not.toBe(original);
   });
 
+  it("is unaffected by marking a study block complete", () => {
+    // Completion lives on StudyBlock.completedAt. createPlanFingerprint never
+    // receives StudyBlocks at all, so recording progress cannot stale a plan.
+    const task = assignment();
+    const baseInputs = { assignment: task, module: softwareModule, timetableEntries: [], commitments: [] };
+
+    expect(createPlanFingerprint(baseInputs)).toBe(createPlanFingerprint(baseInputs));
+  });
+
   it("keeps a plan fresh when another assignment is generated around it", () => {
     const first = assignment({ id: "assignment-a" });
     const second = assignment({ id: "assignment-b" });
