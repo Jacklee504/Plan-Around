@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateRemainingWorkload,
   completedMinutes,
   completedMinutesByTask,
   completedStudyBlocks,
   incompleteStudyBlocks,
+  replaceIncompleteBlocksForAssignment,
   studyBlockMinutes,
 } from "../lib/studyProgress";
-import type { StudyBlock } from "../types";
+import type { StudyBlock, WorkloadBreakdown } from "../types";
 
 function block(overrides: Partial<StudyBlock> = {}): StudyBlock {
   return {
@@ -64,5 +66,130 @@ describe("studyProgress", () => {
     expect(completedStudyBlocks([legacyBlock])).toEqual([]);
     expect(incompleteStudyBlocks([legacyBlock])).toEqual([legacyBlock]);
     expect(completedMinutes([legacyBlock])).toBe(0);
+  });
+});
+
+function workload(taskRecommendedHours: Record<string, number>): WorkloadBreakdown {
+  const usableHours = Object.values(taskRecommendedHours).reduce((total, hours) => total + hours, 0);
+  const taskIds = Object.keys(taskRecommendedHours);
+
+  return {
+    totalHours: usableHours + 1,
+    bufferHours: 1,
+    usableHours,
+    moduleWorkloadHours: 225,
+    assessmentPoolHours: 90,
+    calculatedTotalHours: usableHours + 1,
+    isOverridden: false,
+    taskHours: taskIds.map((id) => ({
+      id,
+      name: id,
+      marks: 50,
+      complexity: 2,
+      requirements: [],
+      recommendedHours: taskRecommendedHours[id],
+      adjustedWeight: 1,
+      proportion: 1 / taskIds.length,
+    })),
+  };
+}
+
+describe("calculateRemainingWorkload", () => {
+  it("returns the original workload unchanged when nothing is completed", () => {
+    const original = workload({ implementation: 4, testing: 2 });
+
+    const remaining = calculateRemainingWorkload(original, []);
+
+    expect(remaining.usableHours).toBe(6);
+    expect(remaining.taskHours.map((task) => task.recommendedHours)).toEqual([4, 2]);
+  });
+
+  it("reduces only the completed task, not the total spread across every task", () => {
+    const original = workload({ implementation: 4, testing: 2 });
+    const completed = [block({ id: "a", taskId: "implementation", start: "09:00", end: "11:00", completedAt: "2026-08-17T11:00:00.000Z" })];
+
+    const remaining = calculateRemainingWorkload(original, completed);
+
+    expect(remaining.taskHours.find((task) => task.id === "implementation")?.recommendedHours).toBe(2);
+    expect(remaining.taskHours.find((task) => task.id === "testing")?.recommendedHours).toBe(2);
+    expect(remaining.usableHours).toBe(4);
+  });
+
+  it("clamps a fully completed task to zero", () => {
+    const original = workload({ implementation: 4, testing: 2 });
+    const completed = [block({ id: "a", taskId: "implementation", start: "09:00", end: "13:00", completedAt: "2026-08-17T13:00:00.000Z" })];
+
+    const remaining = calculateRemainingWorkload(original, completed);
+
+    expect(remaining.taskHours.find((task) => task.id === "implementation")?.recommendedHours).toBe(0);
+    expect(remaining.usableHours).toBe(2);
+  });
+
+  it("sums completed minutes across multiple tasks", () => {
+    const original = workload({ implementation: 4, testing: 2 });
+    const completed = [
+      block({ id: "a", taskId: "implementation", start: "09:00", end: "10:00", completedAt: "2026-08-17T10:00:00.000Z" }),
+      block({ id: "b", taskId: "testing", start: "10:00", end: "11:00", completedAt: "2026-08-17T11:00:00.000Z" }),
+    ];
+
+    const remaining = calculateRemainingWorkload(original, completed);
+
+    expect(remaining.taskHours.find((task) => task.id === "implementation")?.recommendedHours).toBe(3);
+    expect(remaining.taskHours.find((task) => task.id === "testing")?.recommendedHours).toBe(1);
+    expect(remaining.usableHours).toBe(4);
+  });
+
+  it("never goes negative from excess completed time, and ignores completed time for a task no longer in the workload", () => {
+    const original = workload({ implementation: 1, testing: 3 });
+    const completed = [
+      // Over-completed relative to its own recommendation - must not offset "testing".
+      block({ id: "a", taskId: "implementation", start: "09:00", end: "12:00", completedAt: "2026-08-17T12:00:00.000Z" }),
+      // Belongs to a task the current workload no longer has (e.g. an edited rubric).
+      block({ id: "b", taskId: "removed-task", start: "13:00", end: "14:00", completedAt: "2026-08-17T14:00:00.000Z" }),
+    ];
+
+    const remaining = calculateRemainingWorkload(original, completed);
+
+    expect(remaining.taskHours.find((task) => task.id === "implementation")?.recommendedHours).toBe(0);
+    expect(remaining.taskHours.find((task) => task.id === "testing")?.recommendedHours).toBe(3);
+    expect(remaining.usableHours).toBe(3);
+  });
+
+  it("preserves explanatory source values from the original workload", () => {
+    const original = workload({ implementation: 4 });
+
+    const remaining = calculateRemainingWorkload(original, []);
+
+    expect(remaining.totalHours).toBe(original.totalHours);
+    expect(remaining.bufferHours).toBe(original.bufferHours);
+    expect(remaining.moduleWorkloadHours).toBe(original.moduleWorkloadHours);
+    expect(remaining.assessmentPoolHours).toBe(original.assessmentPoolHours);
+    expect(remaining.calculatedTotalHours).toBe(original.calculatedTotalHours);
+    expect(remaining.isOverridden).toBe(original.isOverridden);
+  });
+});
+
+describe("replaceIncompleteBlocksForAssignment", () => {
+  it("preserves completed blocks and every other assignment's blocks, replacing only the selected assignment's incomplete blocks", () => {
+    const completedForSelected = block({ id: "completed", assignmentId: "assignment-1", completedAt: "2026-08-17T10:00:00.000Z" });
+    const staleIncompleteForSelected = block({ id: "stale", assignmentId: "assignment-1" });
+    const otherAssignmentBlock = block({ id: "other", assignmentId: "assignment-2" });
+    const newBlock = block({ id: "new", assignmentId: "assignment-1", start: "14:00", end: "15:00" });
+
+    const result = replaceIncompleteBlocksForAssignment(
+      [completedForSelected, staleIncompleteForSelected, otherAssignmentBlock],
+      "assignment-1",
+      [newBlock],
+    );
+
+    expect(result).toEqual([completedForSelected, otherAssignmentBlock, newBlock]);
+  });
+
+  it("does not duplicate completed blocks when replanning with no new blocks", () => {
+    const completedForSelected = block({ id: "completed", assignmentId: "assignment-1", completedAt: "2026-08-17T10:00:00.000Z" });
+
+    const result = replaceIncompleteBlocksForAssignment([completedForSelected], "assignment-1", []);
+
+    expect(result).toEqual([completedForSelected]);
   });
 });

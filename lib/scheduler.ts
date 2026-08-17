@@ -53,7 +53,7 @@ function timeFromMinutes(minutes: number) {
   return `${hours}:${remainder}`;
 }
 
-function hoursFromMinutes(minutes: number) {
+export function hoursFromMinutes(minutes: number) {
   return Math.round((minutes / 60) * 10) / 10;
 }
 
@@ -289,11 +289,15 @@ export function generateStudySchedule({
   const deadline = dateFromKey(assignment.deadline);
   const scheduleStart = startOfDay(now);
   const dayAfterDeadline = addDays(deadline, 1);
-  // Callers should already pass only other assignments, but this makes regeneration
-  // safe even if an old plan is supplied accidentally.
-  const otherAssignmentBlocks = reservedBlocks.filter((block) => block.assignmentId !== assignment.id);
-  const fullAvailability = buildAvailability(scheduleStart, dayAfterDeadline, timetableEntries, commitments, datedCommitments, otherAssignmentBlocks);
-  const bufferedAvailability = buildAvailability(scheduleStart, deadline, timetableEntries, commitments, datedCommitments, otherAssignmentBlocks);
+  // An incomplete block for this same assignment is stale planning output
+  // about to be replaced, so it must not reserve time against its own
+  // replacement. A completed block for this assignment is different: it is
+  // finished history at a real, already-used time, so replanning must not
+  // place a new session on top of it - besides being wrong, that would
+  // regenerate the exact same date/time/task id as the preserved block.
+  const occupiedBlocks = reservedBlocks.filter((block) => block.assignmentId !== assignment.id || block.completedAt);
+  const fullAvailability = buildAvailability(scheduleStart, dayAfterDeadline, timetableEntries, commitments, datedCommitments, occupiedBlocks);
+  const bufferedAvailability = buildAvailability(scheduleStart, deadline, timetableEntries, commitments, datedCommitments, occupiedBlocks);
   removePastAvailability(fullAvailability, now);
   removePastAvailability(bufferedAvailability, now);
   const requiredMinutes = Math.round(workload.usableHours * 60);

@@ -6,7 +6,7 @@ import { createPlanFingerprint, getReservableStudyBlocks } from "@/lib/planSnaps
 import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
-import { completedMinutes, studyBlockMinutes } from "@/lib/studyProgress";
+import { calculateRemainingWorkload, completedMinutes, replaceIncompleteBlocksForAssignment, studyBlockMinutes } from "@/lib/studyProgress";
 import { OnboardingRequired } from "@/components/OnboardingRequired";
 import { useOnboardingState } from "@/lib/onboarding";
 import type { Assignment, Commitment, DatedCommitment, Module, ScheduleResult, StudyBlock, TimetableEntry } from "@/types";
@@ -107,11 +107,19 @@ export function PlanWorkspace() {
   const selectedModule = selectedAssignment ? modules.find((module) => module.id === selectedAssignment.moduleId) ?? null : null;
   const workload = selectedAssignment && selectedModule ? calculateWorkloadBreakdown(selectedModule.credits, selectedAssignment) : null;
   const storedSelectedBlocks = selectedAssignment ? studyBlocks.filter((block) => block.assignmentId === selectedAssignment.id) : [];
+  const completedSelectedBlocks = storedSelectedBlocks.filter((block) => block.completedAt);
   const focusedMinutes = workload ? Math.round(workload.usableHours * 60) : 0;
   // Clamp so legacy or edge-case data can't show completed time exceeding the
   // current focused-work recommendation, or a negative remainder.
   const completedFocusedMinutes = Math.min(focusedMinutes, completedMinutes(storedSelectedBlocks));
-  const remainingFocusedHours = Math.max(0, (focusedMinutes - completedFocusedMinutes) / 60);
+  // Remaining is computed per task (see calculateRemainingWorkload), not by a
+  // single global subtraction: a task completed ahead of schedule must not
+  // offset an unrelated task that still needs its full recommended time.
+  const remainingWorkload = workload ? calculateRemainingWorkload(workload, completedSelectedBlocks) : null;
+  const remainingFocusedHours = remainingWorkload?.usableHours ?? 0;
+  const isFullyCompleted = !remainingWorkload
+    ? false
+    : Math.round(remainingWorkload.usableHours * 60) <= 0 && completedSelectedBlocks.length > 0;
   const reservedBlocks = selectedAssignment && selectedModule
     ? getReservableStudyBlocks({
       currentAssignmentId: selectedAssignment.id,
@@ -124,6 +132,10 @@ export function PlanWorkspace() {
       datedCommitments,
     })
     : [];
+  // The scheduler only exempts a same-assignment block from reserving time
+  // when it is completed (finished history at a real time), so this assignment's
+  // own completed sessions must be included here alongside other assignments'.
+  const assignmentReservedBlocks = [...reservedBlocks, ...completedSelectedBlocks];
   const currentFingerprint = selectedAssignment && selectedModule
     ? createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments })
     : null;
@@ -134,10 +146,15 @@ export function PlanWorkspace() {
       && planSnapshots[selectedAssignment.id] !== currentFingerprint,
   );
   const recalculatedResult = selectedAssignment && workload
-    ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks })
+    ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks: assignmentReservedBlocks })
     : null;
-  const existingResult = recalculatedResult && !isStoredPlanStale ? getResultForExistingBlocks(storedSelectedBlocks, recalculatedResult) : null;
+  // While stale, only completed sessions remain valid history - obsolete
+  // incomplete sessions are hidden until the user replans the remainder.
+  const existingResult = recalculatedResult
+    ? getResultForExistingBlocks(isStoredPlanStale ? completedSelectedBlocks : storedSelectedBlocks, recalculatedResult)
+    : null;
   const result = generatedResult ?? existingResult;
+  const isCompletedHistoryOnly = isStoredPlanStale && !generatedResult;
   // `result.studyBlocks` can be a snapshot taken at generation time, so completion
   // toggles (which only update the `studyBlocks` state) would not appear here
   // without re-reading each block's current state by id.
@@ -147,19 +164,45 @@ export function PlanWorkspace() {
     (groups[block.date] ??= []).push(block);
     return groups;
   }, {});
+  const planActionLabel = !storedSelectedBlocks.length && !generatedResult
+    ? "Generate plan"
+    : isFullyCompleted
+      ? "Regenerate plan"
+      : isStoredPlanStale || completedSelectedBlocks.length > 0
+        ? "Replan remaining work"
+        : "Regenerate plan";
 
-  function generatePlan() {
-    if (!selectedAssignment || !workload) return;
-    const nextResult = generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks });
-    setStudyBlocks((current) => [
-      ...current.filter((block) => block.assignmentId !== selectedAssignment.id),
-      ...nextResult.studyBlocks,
-    ]);
+  function generateOrReplan() {
+    if (!selectedAssignment || !selectedModule || !remainingWorkload) return;
+
+    // Scheduling only the remaining workload naturally covers every case: a
+    // fresh assignment (remaining equals the full recommendation), a plain
+    // regenerate (no completed work to preserve), and a true replan (some
+    // work done, only the rest gets rescheduled). A remaining workload of
+    // zero simply produces no new blocks, so completed history stands alone.
+    const scheduled = generateStudySchedule({
+      assignment: selectedAssignment,
+      workload: remainingWorkload,
+      timetableEntries,
+      commitments,
+      datedCommitments,
+      reservedBlocks: assignmentReservedBlocks,
+    });
+    // The scheduler only returns newly placed blocks, so completed history
+    // is added back in for display - the same blocks already preserved in
+    // storage below - to avoid a stale-looking list until the next reload.
+    const allPlacedBlocks = [...completedSelectedBlocks, ...scheduled.studyBlocks];
+
+    setStudyBlocks((current) => replaceIncompleteBlocksForAssignment(current, selectedAssignment.id, scheduled.studyBlocks));
     setPlanSnapshots((current) => ({
       ...current,
-      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule!, timetableEntries, commitments, datedCommitments }),
+      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments }),
     }));
-    setGeneratedResult(nextResult);
+    setGeneratedResult({
+      ...scheduled,
+      studyBlocks: allPlacedBlocks,
+      scheduledHours: allPlacedBlocks.reduce((total, block) => total + studyBlockMinutes(block) / 60, 0),
+    });
   }
 
   function chooseAssignment(id: string) {
@@ -220,8 +263,8 @@ export function PlanWorkspace() {
               <h2 id="plan-summary-heading" className="mt-1 text-2xl font-semibold tracking-[-0.035em]">{selectedAssignment.title}</h2>
               <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">Due {formatDeadline(selectedAssignment.deadline)}. Finish before the deadline date where possible.</p>
             </div>
-            <button type="button" onClick={generatePlan} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">
-              {result || isStoredPlanStale ? "Regenerate plan" : "Generate plan"}
+            <button type="button" onClick={generateOrReplan} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">
+              {planActionLabel}
             </button>
           </section>
 
@@ -248,9 +291,17 @@ export function PlanWorkspace() {
             </ul>
           </section>
 
-          {isStoredPlanStale ? <section className="border-y border-amber-200 bg-amber-50 px-5 py-4 text-amber-950" role="status"><p className="font-semibold">Your inputs changed. Regenerate this plan.</p><p className="mt-1 text-sm leading-6">The saved study blocks are hidden because they may no longer fit your Calendar, commitments or workload.</p></section> : null}
+          {isStoredPlanStale ? <section className="border-y border-amber-200 bg-amber-50 px-5 py-4 text-amber-950" role="status"><p className="font-semibold">Your availability changed.</p><p className="mt-1 text-sm leading-6">Replan the remaining work to keep this schedule realistic. Completed study time will be preserved.</p></section> : null}
 
-          {result && selectedStatus ? (
+          {isFullyCompleted ? (
+            <section className="border-y border-[var(--line)] bg-[var(--accent-soft)] px-5 py-5 text-[var(--accent-strong)]" aria-live="polite">
+              <p className="text-xs font-bold uppercase tracking-[0.14em]">Schedule status</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-[-0.035em]">All done</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6">Every focused hour for this assignment is marked complete.</p>
+            </section>
+          ) : null}
+
+          {result && selectedStatus && !isCompletedHistoryOnly && !isFullyCompleted ? (
             <>
               <section className={`border-y border-[var(--line)] px-5 py-5 ${selectedStatus.className}`} aria-live="polite">
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -271,42 +322,44 @@ export function PlanWorkspace() {
 
               {result.status === "tight" ? <p className="text-sm leading-6 text-[var(--muted-ink)]">The plan uses the deadline date because the earlier window has {formatHours(result.bufferedAvailableHours)} available and the assignment needs {formatHours(result.requiredHours)}.</p> : null}
               {result.status === "not-enough-time" ? <p className="text-sm leading-6 text-[var(--muted-ink)]">There are {formatHours(result.deadlineAvailableHours)} available through the deadline date, so {formatHours(result.unscheduledHours)} remains unplaced. Reduce the workload estimate or free up time in Calendar.</p> : null}
-
-              <section aria-labelledby="study-blocks-heading">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Generated sessions</p>
-                    <h2 id="study-blocks-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Your study blocks</h2>
-                  </div>
-                  <p className="text-sm text-[var(--muted-ink)]">Up to 3 hours a day where possible</p>
-                </div>
-                {Object.keys(groupedBlocks).length ? (
-                  <div className="mt-5 space-y-6">
-                    {Object.entries(groupedBlocks).sort(([first], [second]) => first.localeCompare(second)).map(([date, blocks]) => (
-                      <section key={date} className="border-t border-[var(--line)] pt-4" aria-label={formatDate(date)}>
-                        <h3 className="text-sm font-semibold">{formatDate(date)}</h3>
-                        <ul className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
-                          {blocks.map((block) => (
-                            <li key={block.id} className={`grid gap-1 py-3 sm:grid-cols-[8rem_minmax(0,1fr)_auto_auto] sm:items-center ${block.completedAt ? "text-[var(--muted-ink)]" : ""}`}>
-                              <p className="font-semibold tabular-nums">{block.start}–{block.end}</p>
-                              <p className="text-sm text-[var(--muted-ink)]">{block.taskName}</p>
-                              <p className="text-sm font-semibold tabular-nums sm:text-right">{blockDuration(block)}</p>
-                              <button
-                                type="button"
-                                onClick={() => toggleStudyBlockCompletion(block.id)}
-                                className={`min-h-9 rounded-lg px-3 text-xs font-semibold sm:justify-self-end ${block.completedAt ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-[var(--accent)]"}`}
-                              >
-                                {block.completedAt ? "Completed" : "Mark complete"}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    ))}
-                  </div>
-                ) : <p className="mt-5 border-y border-[var(--line)] py-5 text-sm leading-6 text-[var(--muted-ink)]">No suitable study periods were found. Check the deadline and commitments in Calendar.</p>}
-              </section>
             </>
+          ) : null}
+
+          {result ? (
+            <section aria-labelledby="study-blocks-heading">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Generated sessions</p>
+                  <h2 id="study-blocks-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Your study blocks</h2>
+                </div>
+                <p className="text-sm text-[var(--muted-ink)]">Up to 3 hours a day where possible</p>
+              </div>
+              {Object.keys(groupedBlocks).length ? (
+                <div className="mt-5 space-y-6">
+                  {Object.entries(groupedBlocks).sort(([first], [second]) => first.localeCompare(second)).map(([date, blocks]) => (
+                    <section key={date} className="border-t border-[var(--line)] pt-4" aria-label={formatDate(date)}>
+                      <h3 className="text-sm font-semibold">{formatDate(date)}</h3>
+                      <ul className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+                        {blocks.map((block) => (
+                          <li key={block.id} className={`grid gap-1 py-3 sm:grid-cols-[8rem_minmax(0,1fr)_auto_auto] sm:items-center ${block.completedAt ? "text-[var(--muted-ink)]" : ""}`}>
+                            <p className="font-semibold tabular-nums">{block.start}–{block.end}</p>
+                            <p className="text-sm text-[var(--muted-ink)]">{block.taskName}</p>
+                            <p className="text-sm font-semibold tabular-nums sm:text-right">{blockDuration(block)}</p>
+                            <button
+                              type="button"
+                              onClick={() => toggleStudyBlockCompletion(block.id)}
+                              className={`min-h-9 rounded-lg px-3 text-xs font-semibold sm:justify-self-end ${block.completedAt ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-[var(--accent)]"}`}
+                            >
+                              {block.completedAt ? "Completed" : "Mark complete"}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
+              ) : <p className="mt-5 border-y border-[var(--line)] py-5 text-sm leading-6 text-[var(--muted-ink)]">No suitable study periods were found. Check the deadline and commitments in Calendar.</p>}
+            </section>
           ) : !isStoredPlanStale ? <section className="border-y border-[var(--line)] bg-[var(--surface-soft)] px-5 py-6 text-sm leading-6 text-[var(--muted-ink)]"><p className="font-semibold text-[var(--ink)]">Ready to build a realistic plan.</p><p className="mt-1">It will use sessions of roughly 60 to 120 minutes, avoid your recurring commitments, and aim to finish before the deadline date when capacity allows it.</p></section> : null}
         </>
       ) : null}

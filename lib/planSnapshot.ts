@@ -108,5 +108,7 @@ export function getReservableStudyBlocks({
       .map((assignment) => assignment.id),
   );
 
-  return studyBlocks.filter((block) => reservableAssignmentIds.has(block.assignmentId));
+  // A completed block is finished history, not a future obligation, so it
+  // should not reserve time away from a different assignment's plan.
+  return studyBlocks.filter((block) => reservableAssignmentIds.has(block.assignmentId) && !block.completedAt);
 }

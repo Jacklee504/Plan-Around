@@ -477,6 +477,46 @@ describe("scheduler", () => {
 
     expect(result.studyBlocks.some((block) => block.date === "2026-08-31")).toBe(true);
   });
+
+  it("does not place a new block over an already-completed block for the same assignment", () => {
+    const task = assignment({ workloadOverrideHours: 3 });
+    const completedBlock: StudyBlock = {
+      id: "assignment-1-2026-08-17-08:00-implementation",
+      assignmentId: task.id,
+      date: "2026-08-17",
+      start: "08:00",
+      end: "09:30",
+      taskId: "implementation",
+      taskName: "Implementation",
+      completedAt: "2026-08-17T09:30:00.000Z",
+    };
+    const result = generateStudySchedule({
+      assignment: task,
+      workload: calculateWorkloadBreakdown(softwareModule.credits, task),
+      timetableEntries: [],
+      commitments: [],
+      reservedBlocks: [completedBlock],
+      now: new Date(2026, 7, 17, 7),
+    });
+
+    expect(result.studyBlocks.some((block) => block.date === "2026-08-17" && block.start === "08:00")).toBe(false);
+    expect(result.studyBlocks.some((block) => block.id === completedBlock.id)).toBe(false);
+  });
+
+  it("creates no new study blocks when the workload has zero remaining hours", () => {
+    const task = assignment({ workloadOverrideHours: 3 });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const result = generateStudySchedule({
+      assignment: task,
+      workload: { ...workload, usableHours: 0, taskHours: workload.taskHours.map((taskHour) => ({ ...taskHour, recommendedHours: 0 })) },
+      timetableEntries: [],
+      commitments: [],
+      now: new Date(2026, 7, 17, 7),
+    });
+
+    expect(result.studyBlocks).toEqual([]);
+    expect(result.status).toBe("on-track");
+  });
 });
 
 describe("saved-plan freshness", () => {
@@ -563,6 +603,43 @@ describe("saved-plan freshness", () => {
     expect(getReservableStudyBlocks(base)).toEqual([block]);
     expect(getReservableStudyBlocks({ ...base, assignments: [] })).toEqual([]);
     expect(getReservableStudyBlocks({ ...base, commitments: [commitment()] })).toEqual([]);
+  });
+
+  it("does not reserve completed blocks from another assignment's current plan", () => {
+    const first = assignment({ id: "assignment-a", workloadOverrideHours: 3 });
+    const completedBlock: StudyBlock = {
+      id: "assignment-a-2026-08-17-08:00-implementation",
+      assignmentId: first.id,
+      date: "2026-08-17",
+      start: "08:00",
+      end: "10:00",
+      taskId: "implementation",
+      taskName: "Implementation",
+      completedAt: "2026-08-17T10:00:00.000Z",
+    };
+    const incompleteBlock: StudyBlock = {
+      id: "assignment-a-2026-08-17-10:00-implementation",
+      assignmentId: first.id,
+      date: "2026-08-17",
+      start: "10:00",
+      end: "10:30",
+      taskId: "implementation",
+      taskName: "Implementation",
+    };
+    const snapshots = {
+      [first.id]: createPlanFingerprint({ assignment: first, module: softwareModule, timetableEntries: [], commitments: [] }),
+    };
+    const base = {
+      currentAssignmentId: "assignment-b",
+      assignments: [first],
+      modules: [softwareModule],
+      studyBlocks: [completedBlock, incompleteBlock],
+      planSnapshots: snapshots,
+      timetableEntries: [],
+      commitments: [],
+    };
+
+    expect(getReservableStudyBlocks(base)).toEqual([incompleteBlock]);
   });
 });
 

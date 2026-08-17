@@ -36,7 +36,16 @@ No application behaviour changed in this phase.
 
 ## Adaptive replanning
 
-**Status:** Not yet implemented.
+**Status:** Implemented.
+
+- Added `lib/studyProgress.ts#calculateRemainingWorkload`: subtracts completed minutes from the deterministic workload per task (not globally), so a task finished ahead of schedule never offsets an unrelated task that still needs its full recommended time. Excess completed time clamps to zero rather than going negative; completed time for a task no longer present in the workload (an edited rubric) is simply ignored, not clawed back from another task.
+- Added `lib/studyProgress.ts#replaceIncompleteBlocksForAssignment`: replaces only an assignment's incomplete study blocks, preserving its completed blocks and every other assignment's blocks untouched.
+- `PlanWorkspace`'s single `generatePlan` action became `generateOrReplan`: it always schedules the *remaining* workload rather than the full one, which naturally covers first generation, a plain regenerate (nothing completed yet) and a true replan (some sessions done, only the rest gets rescheduled) with one code path instead of three.
+- `lib/scheduler.ts#generateStudySchedule` now treats a same-assignment block as occupied time when it is completed (previously all same-assignment blocks were exempt, since the old model discarded and replaced every block on every generation). Discovered via interactive browser testing: without this, replanning could regenerate a new session at the exact same date/time/task as an already-completed one, producing a duplicate `StudyBlock` id that silently hid the completed session's status in the list. Reproducing this needs only a session dated ahead of "now" and marked complete early - not a contrived edge case.
+- `lib/planSnapshot.ts#getReservableStudyBlocks` now excludes completed blocks: a finished session no longer reserves time away from a different assignment's plan.
+- Stale-plan display now distinguishes completed history from obsolete incomplete work: while stale, only completed sessions remain visible (still counted, per the fingerprint-independence rule from the study-progress phase); incomplete stored sessions are hidden until the user explicitly replans.
+- Added an explicit "All done" state (`PlanWorkspace`) for when the remaining workload reaches zero, rather than presenting a zero-required "on track" schedule as if it were an active one.
+- Deterministic; no AI involvement.
 
 ## Plan-change explanations
 
