@@ -6,7 +6,7 @@ PlanAround helps students turn an assignment brief and their real weekly schedul
 
 It uses AI to interpret timetable screenshots and assignment briefs, while workload estimation and scheduling remain deterministic and explainable.
 
-**Live demo:** https://plan-around.vercel.app/
+**Live demo:** https://planaround.vercel.app/ (also mirrored at https://jacklee504.github.io/Plan-Around/)
 
 ## What it does
 

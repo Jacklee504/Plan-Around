@@ -619,10 +619,14 @@ describe("hosted assignment analyser", () => {
     const worker = createWorker(async () => providerResponse(workerAnalysis));
     const production = await worker.fetch(workerRequest("/analyze", undefined, "https://jacklee504.github.io"), workerEnv);
     const local = await worker.fetch(workerRequest("/analyze", undefined, "http://localhost:3000"), workerEnv);
+    const ha1Vercel = await worker.fetch(workerRequest("/analyze", undefined, "https://plan-around.vercel.app"), workerEnv);
+    const ha2Vercel = await worker.fetch(workerRequest("/analyze", undefined, "https://planaround.vercel.app"), workerEnv);
     const unapproved = await worker.fetch(workerRequest("/analyze", undefined, "https://untrusted.example"), workerEnv);
 
     expect(production.headers.get("Access-Control-Allow-Origin")).toBe("https://jacklee504.github.io");
     expect(local.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:3000");
+    expect(ha1Vercel.headers.get("Access-Control-Allow-Origin")).toBe("https://plan-around.vercel.app");
+    expect(ha2Vercel.headers.get("Access-Control-Allow-Origin")).toBe("https://planaround.vercel.app");
     expect(unapproved.status).toBe(403);
     expect(unapproved.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });

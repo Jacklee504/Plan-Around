@@ -105,7 +105,10 @@ function corsHeaders(origin: string | null, env: Env) {
 function isAllowedOrigin(origin: string, env: Env) {
   return (
     origin === env.ALLOWED_PRODUCTION_ORIGIN ||
+    // HA1 production origin.
     origin === "https://plan-around.vercel.app" ||
+    // HA2 production origin.
+    origin === "https://planaround.vercel.app" ||
     origin === "https://jacklee504.github.io" ||
     origin === "http://localhost:3000"
   );
