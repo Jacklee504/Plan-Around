@@ -6,3 +6,5 @@ out/
 .idea/
 worker/.dev.vars
 *.tsbuildinfo
+.DS_Store
+planaround-docs/
