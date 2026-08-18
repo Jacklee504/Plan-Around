@@ -2,13 +2,15 @@
 
 **Fit assignments around your actual week.**
 
-PlanAround helps students turn an assignment brief and their real weekly schedule into a realistic study plan.
+## Live demo
 
-It uses AI to interpret timetable screenshots and assignment briefs, while workload estimation and scheduling remain deterministic and explainable.
+https://planaround.vercel.app/ (also mirrored at https://jacklee504.github.io/Plan-Around/)
 
-**Live demo:** https://planaround.vercel.app/ (also mirrored at https://jacklee504.github.io/Plan-Around/)
+## Problem
 
-## What it does
+Students usually know when an assignment is due, but not how much time it deserves, which parts matter most, or where that work actually fits around lectures, work and other commitments. Calendars show availability; task lists show what needs doing. Neither answers both questions together.
+
+## What PlanAround does
 
 - Import a timetable screenshot and review the detected classes.
 - Add recurring and one-off commitments.
@@ -16,17 +18,51 @@ It uses AI to interpret timetable screenshots and assignment briefs, while workl
 - Estimate workload from ECTS, assignment weighting and rubric structure.
 - Schedule study sessions around the student's actual availability.
 
-## Why PlanAround?
+## Adaptive planning flow
 
-Calendars can show when a student is free, but they do not answer **how much work an assignment deserves** or **how that work should be distributed before the deadline**.
+The plan is no longer a one-shot output:
 
-PlanAround combines both problems into one planning workflow.
+- the Calendar can navigate to any week, not only the current one;
+- study sessions can be marked completed;
+- changed availability (timetable, commitments, module or assignment edits) stales an existing plan;
+- completed work is preserved across a replan and is never regenerated or lost;
+- remaining, not total, work is what gets replanned;
+- the app explains why a plan changed and what was rescheduled, without using AI to make that decision.
+
+See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full detail on each of these.
+
+## AI vs deterministic boundary
+
+AI is used only to interpret unstructured input: timetable screenshots and assignment briefs. It never calculates workload, decides study times, or changes calendar data automatically, and nothing it extracts is auto-accepted.
+
+Workload calculation, scheduling, stale-plan detection, replanning and plan-change explanations are all deterministic TypeScript.
+
+## Architecture
+
+```text
+Timetable screenshot / assignment screenshot or text
+                    ↓
+              Browser UI
+                    ↓
+           Cloudflare Worker
+                    ↓
+              Featherless
+                    ↓
+ Qwen/Qwen3-VL-30B-A3B-Instruct
+                    ↓
+        validated structured draft
+                    ↓
+              user review
+                    ↓
+       deterministic TypeScript
+      workload + schedule + replan
+                    ↓
+       localStorage + Calendar UI
+```
 
 ## Built with
 
-Next.js · TypeScript · Tailwind CSS · Cloudflare Workers · Featherless
-
-AI handles interpretation. Workload calculation and scheduling are deterministic.
+Next.js · React · TypeScript · Tailwind CSS · Cloudflare Workers · Featherless · Vercel
 
 ## Run locally
 
@@ -35,6 +71,20 @@ npm install
 npm run dev
 ```
 
-## More detail
+## Tests
 
-See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the workload model, scheduling rules, architecture and prototype scope.
+```bash
+npm test
+npm run lint
+npm run build
+```
+
+## Baseline disclosure
+
+This repository is a continuation of a project originally built for a separate hackathon, entirely within that hackathon's timeline. See [BASELINE.md](BASELINE.md) for exactly what was inherited, and [CHANGES.md](CHANGES.md) for every change made since.
+
+Full product detail (workload model, scheduling rules, architecture, prototype scope) is in [PROJECT_BRIEF.md](PROJECT_BRIEF.md).
+
+## Licence
+
+[MIT](LICENSE)

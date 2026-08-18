@@ -96,10 +96,12 @@ Production AI flow:
 Browser
 → Cloudflare Worker
 → Featherless
-→ Qwen3.5-397B-A17B
+→ Qwen/Qwen3-VL-30B-A3B-Instruct
 → validated structured draft
 → user review
-``` 
+```
+
+A larger model (Qwen3.5-397B-A17B) was evaluated earlier in development but is not used in the production workflow; the Worker's `AI_PRIMARY_MODEL` is `Qwen/Qwen3-VL-30B-A3B-Instruct`. A verifier/second-model path exists in the Worker response shape but is not active in the live product (`verifier.used` is always `false`).
 
 ## Planning Approach
 
@@ -128,6 +130,32 @@ The result is shown as:
 
 If relevant inputs change, the existing plan is treated as outdated and must be regenerated.
 
+## Progress
+
+A StudyBlock can record completion through an optional `completedAt` timestamp. Study blocks generated before this feature have no `completedAt`, so they load as incomplete without any storage migration.
+
+Completed minutes are tracked per task, and progress is shown against the assignment's recommended workload rather than a raw block count.
+
+## Replanning
+
+- Completed work remains historical: it is never removed or regenerated, and it is excluded from what counts as "stale."
+- Incomplete stale blocks are replaceable: once a plan's inputs change, its remaining incomplete sessions can be discarded and rebuilt.
+- Remaining workload is calculated per rubric task, not as a single global subtraction, so finishing one task early does not reduce time recommended for a different task.
+- Other valid incomplete assignment blocks reserve time, so replanning one assignment does not overwrite another assignment's plan; a completed block frees the time it occupied instead of reserving it forever.
+- Replanning is explicit: it happens when the student generates or regenerates a plan, never silently in the background.
+
+## Explainability
+
+- Stale reasons come from a deterministic comparison of the current plan inputs against the inputs snapshot stored when the plan was made (assignment, module workload, timetable, recurring commitments, dated commitments).
+- Replan summaries compare the old and new scheduled study blocks to report how many sessions were replaced and how much remaining time moved.
+- AI is not used to explain or choose schedule changes; both the stale reasons and the replan summary are plain deterministic TypeScript.
+
+## Multi-week Calendar
+
+Calendar displays a Sunday-first week and can navigate to any week, not only the current one.
+
+Attendance state ("not going this week") uses a separate Monday-based week key, independent of which week is currently being viewed, so marking a class skipped while browsing a future week does not affect the real current week.
+
 ## Technology
 
 PlanAround uses:
@@ -140,7 +168,7 @@ PlanAround uses:
 - Vercel
 - Cloudflare Workers
 - Featherless
-- Qwen3.5-397B-A17B
+- Qwen/Qwen3-VL-30B-A3B-Instruct
 
 Workload calculation and scheduling are implemented as deterministic TypeScript logic outside the AI layer.
 
