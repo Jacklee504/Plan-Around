@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPlanFingerprint, getReservableStudyBlocks } from "../lib/planSnapshot";
+import { createPlanFingerprint, getPlanChangeReasons, getReservableStudyBlocks } from "../lib/planSnapshot";
 import {
   assignmentAnalysisInputKey,
   analysisSystemPrompt,
@@ -640,6 +640,68 @@ describe("saved-plan freshness", () => {
     };
 
     expect(getReservableStudyBlocks(base)).toEqual([incompleteBlock]);
+  });
+});
+
+describe("plan change reasons", () => {
+  const baseInputs = { assignment: assignment(), module: softwareModule, timetableEntries: [timetableEntry()], commitments: [commitment()], datedCommitments: [datedCommitment()] };
+  const storedFingerprint = createPlanFingerprint(baseInputs);
+
+  it("reports no reasons when nothing changed", () => {
+    expect(getPlanChangeReasons(storedFingerprint, baseInputs)).toEqual([]);
+  });
+
+  it("reports an assignment reason when the deadline changes", () => {
+    const changed = { ...baseInputs, assignment: assignment({ deadline: "2026-09-01" }) };
+
+    expect(getPlanChangeReasons(storedFingerprint, changed)).toEqual(["assignment"]);
+  });
+
+  it("reports a module-workload reason when module credits change", () => {
+    const changed = { ...baseInputs, module: { ...softwareModule, credits: 5 } };
+
+    expect(getPlanChangeReasons(storedFingerprint, changed)).toEqual(["module-workload"]);
+  });
+
+  it("reports a timetable reason when attendance or skipped weeks change", () => {
+    const changed = { ...baseInputs, timetableEntries: [timetableEntry({ skippedWeeks: ["2026-08-17"] })] };
+
+    expect(getPlanChangeReasons(storedFingerprint, changed)).toEqual(["timetable"]);
+  });
+
+  it("reports a recurring-commitments reason when a commitment is added", () => {
+    const changed = { ...baseInputs, commitments: [commitment(), commitment({ id: "gym", label: "Gym", dayOfWeek: 2 })] };
+
+    expect(getPlanChangeReasons(storedFingerprint, changed)).toEqual(["recurring-commitments"]);
+  });
+
+  it("reports a dated-commitments reason when a one-off commitment is added", () => {
+    const changed = { ...baseInputs, datedCommitments: [datedCommitment(), datedCommitment({ id: "checkup", label: "Checkup", date: "2026-08-20" })] };
+
+    expect(getPlanChangeReasons(storedFingerprint, changed)).toEqual(["dated-commitments"]);
+  });
+
+  it("does not report a false reason when equivalent arrays are reordered", () => {
+    const reorderedInputs = {
+      ...baseInputs,
+      commitments: [commitment({ id: "b", label: "B", dayOfWeek: 3 }), commitment({ id: "a", label: "A", dayOfWeek: 1 })],
+    };
+    const reorderedFingerprint = createPlanFingerprint({
+      ...baseInputs,
+      commitments: [commitment({ id: "a", label: "A", dayOfWeek: 1 }), commitment({ id: "b", label: "B", dayOfWeek: 3 })],
+    });
+
+    expect(getPlanChangeReasons(reorderedFingerprint, reorderedInputs)).toEqual([]);
+  });
+
+  it("falls back to a conservative reason instead of crashing on a malformed fingerprint", () => {
+    expect(() => getPlanChangeReasons("not valid json", baseInputs)).not.toThrow();
+    expect(getPlanChangeReasons("not valid json", baseInputs)).toEqual(["assignment"]);
+    expect(getPlanChangeReasons(JSON.stringify({ unexpected: "shape" }), baseInputs)).toEqual(["assignment"]);
+  });
+
+  it("returns no reasons when there is no stored fingerprint yet", () => {
+    expect(getPlanChangeReasons(undefined, baseInputs)).toEqual([]);
   });
 });
 

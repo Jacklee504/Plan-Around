@@ -49,7 +49,13 @@ No application behaviour changed in this phase.
 
 ## Plan-change explanations
 
-**Status:** Not yet implemented.
+**Status:** Implemented.
+
+- Added `lib/planSnapshot.ts#getPlanChangeReasons`: compares the stored plan fingerprint against current inputs category by category (assignment, module workload, timetable, recurring commitments, dated commitments) rather than as an opaque string diff. Reuses the same snapshot shape `createPlanFingerprint` already produces, so comparisons stay order-insensitive wherever the snapshot already is. A malformed or unrecognised stored fingerprint falls back to the broadest reason instead of crashing.
+- Added `lib/replanSummary.ts#summarizeReplan`: a pure, deterministic comparison of an assignment's incomplete StudyBlocks before and after a replan, matched by a semantic key (`taskId + date + start + end`) rather than block id, since ids can change with placement. Completed blocks are excluded from both sides - they're history, not something that was replanned. Rescheduled time is reported conservatively as the smaller of removed-work and added-work minutes, never claiming a specific old session "moved to" a specific new one.
+- The stale-plan banner now names what actually changed (e.g. "Reason: Recurring commitments changed") instead of a generic "your inputs changed."
+- After a regenerate or replan, a "Plan updated" summary shows how many sessions were replaced, how much remaining time was rescheduled, the same change reasons, and the resulting schedule status - or, when the fingerprint changed but no session placement did, says so explicitly rather than inventing movement. Shown only for a regenerate/replan; a first-time "Generate plan" has no prior plan to compare against, so no summary is shown. Component state only, reset on assignment switch; nothing new persisted to localStorage.
+- Deterministic; no AI involvement, per the phase's explicit no-AI-for-explanations rule.
 
 ## Documentation / deployment
 

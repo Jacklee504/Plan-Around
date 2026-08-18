@@ -1,6 +1,6 @@
 import type { Assignment, Commitment, DatedCommitment, Module, StudyBlock, TimetableEntry } from "@/types";
 
-type PlanInputs = {
+export type PlanInputs = {
   assignment: Assignment;
   module: Module;
   timetableEntries: TimetableEntry[];
@@ -111,4 +111,48 @@ export function getReservableStudyBlocks({
   // A completed block is finished history, not a future obligation, so it
   // should not reserve time away from a different assignment's plan.
   return studyBlocks.filter((block) => reservableAssignmentIds.has(block.assignmentId) && !block.completedAt);
+}
+
+export type PlanChangeReason =
+  | "assignment"
+  | "module-workload"
+  | "timetable"
+  | "recurring-commitments"
+  | "dated-commitments";
+
+function parseStoredSnapshot(storedFingerprint: string): ReturnType<typeof createPlanInputSnapshot> | null {
+  try {
+    const parsed: unknown = JSON.parse(storedFingerprint);
+    if (parsed && typeof parsed === "object" && "assignment" in parsed) {
+      return parsed as ReturnType<typeof createPlanInputSnapshot>;
+    }
+  } catch {
+    // Malformed JSON - handled the same as an unrecognised shape below.
+  }
+  return null;
+}
+
+/**
+ * Explains why a stored plan is stale by comparing the stored fingerprint
+ * against the current inputs category by category, reusing the same
+ * snapshot shape createPlanFingerprint already produces. Deterministic only
+ * - no AI call.
+ */
+export function getPlanChangeReasons(storedFingerprint: string | undefined, currentInputs: PlanInputs): PlanChangeReason[] {
+  if (!storedFingerprint) return [];
+
+  const currentSnapshot = createPlanInputSnapshot(currentInputs);
+  const storedSnapshot = parseStoredSnapshot(storedFingerprint);
+  // A legacy or corrupted fingerprint can't be compared field by field, so
+  // fall back to the broadest, most conservative reason instead of crashing.
+  if (!storedSnapshot) return ["assignment"];
+
+  const reasons: PlanChangeReason[] = [];
+  if (JSON.stringify(storedSnapshot.assignment) !== JSON.stringify(currentSnapshot.assignment)) reasons.push("assignment");
+  if (JSON.stringify(storedSnapshot.module) !== JSON.stringify(currentSnapshot.module)) reasons.push("module-workload");
+  if (JSON.stringify(storedSnapshot.timetableEntries) !== JSON.stringify(currentSnapshot.timetableEntries)) reasons.push("timetable");
+  if (JSON.stringify(storedSnapshot.commitments) !== JSON.stringify(currentSnapshot.commitments)) reasons.push("recurring-commitments");
+  if (JSON.stringify(storedSnapshot.datedCommitments) !== JSON.stringify(currentSnapshot.datedCommitments)) reasons.push("dated-commitments");
+
+  return reasons;
 }

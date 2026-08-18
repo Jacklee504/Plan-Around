@@ -2,16 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { createPlanFingerprint, getReservableStudyBlocks } from "@/lib/planSnapshot";
+import { createPlanFingerprint, getPlanChangeReasons, getReservableStudyBlocks, type PlanChangeReason } from "@/lib/planSnapshot";
 import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
 import { calculateRemainingWorkload, completedMinutes, replaceIncompleteBlocksForAssignment, studyBlockMinutes } from "@/lib/studyProgress";
+import { summarizeReplan, type ReplanSummary } from "@/lib/replanSummary";
 import { OnboardingRequired } from "@/components/OnboardingRequired";
 import { useOnboardingState } from "@/lib/onboarding";
 import type { Assignment, Commitment, DatedCommitment, Module, ScheduleResult, StudyBlock, TimetableEntry } from "@/types";
 
 type PlanStatus = ScheduleResult["status"];
+
+const planChangeReasonCopy: Record<PlanChangeReason, string> = {
+  assignment: "Assignment details changed",
+  "module-workload": "Module workload changed",
+  timetable: "Timetable availability changed",
+  "recurring-commitments": "Recurring commitments changed",
+  "dated-commitments": "One-off availability changed",
+};
+
+type ReplanUpdate = { summary: ReplanSummary; reasons: PlanChangeReason[]; status: PlanStatus };
 
 const statusCopy: Record<PlanStatus, { label: string; detail: string; className: string }> = {
   "on-track": {
@@ -70,6 +81,7 @@ export function PlanWorkspace() {
   const [planSnapshots, setPlanSnapshots] = useState<Record<string, string>>({});
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
   const [generatedResult, setGeneratedResult] = useState<ScheduleResult | null>(null);
+  const [lastReplanUpdate, setLastReplanUpdate] = useState<ReplanUpdate | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -145,6 +157,12 @@ export function PlanWorkspace() {
       && currentFingerprint
       && planSnapshots[selectedAssignment.id] !== currentFingerprint,
   );
+  // Deterministic, not AI-derived: compares the stored fingerprint against
+  // current inputs category by category so the stale banner can say what
+  // actually changed instead of just that something did.
+  const staleReasons = isStoredPlanStale && selectedAssignment && selectedModule
+    ? getPlanChangeReasons(planSnapshots[selectedAssignment.id], { assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments })
+    : [];
   const recalculatedResult = selectedAssignment && workload
     ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks: assignmentReservedBlocks })
     : null;
@@ -203,11 +221,19 @@ export function PlanWorkspace() {
       studyBlocks: allPlacedBlocks,
       scheduledHours: allPlacedBlocks.reduce((total, block) => total + studyBlockMinutes(block) / 60, 0),
     });
+    // Only a regenerate or replan is an "update" - a first-time generate has
+    // no prior plan to compare against, so there is nothing to explain yet.
+    setLastReplanUpdate(
+      storedSelectedBlocks.length
+        ? { summary: summarizeReplan(storedSelectedBlocks, scheduled.studyBlocks), reasons: staleReasons, status: scheduled.status }
+        : null,
+    );
   }
 
   function chooseAssignment(id: string) {
     setSelectedAssignmentId(id);
     setGeneratedResult(null);
+    setLastReplanUpdate(null);
   }
 
   function toggleStudyBlockCompletion(blockId: string) {
@@ -291,7 +317,29 @@ export function PlanWorkspace() {
             </ul>
           </section>
 
-          {isStoredPlanStale ? <section className="border-y border-amber-200 bg-amber-50 px-5 py-4 text-amber-950" role="status"><p className="font-semibold">Your availability changed.</p><p className="mt-1 text-sm leading-6">Replan the remaining work to keep this schedule realistic. Completed study time will be preserved.</p></section> : null}
+          {isStoredPlanStale ? (
+            <section className="border-y border-amber-200 bg-amber-50 px-5 py-4 text-amber-950" role="status">
+              <p className="font-semibold">Your availability changed.</p>
+              <p className="mt-1 text-sm leading-6">Replan the remaining work to keep this schedule realistic. Completed study time will be preserved.</p>
+              {staleReasons.length ? <p className="mt-1 text-sm leading-6">Reason: {staleReasons.map((reason) => planChangeReasonCopy[reason]).join(", ")}</p> : null}
+            </section>
+          ) : null}
+
+          {lastReplanUpdate ? (
+            <section className="border-y border-[var(--line)] bg-[var(--surface-soft)] px-5 py-4 text-sm leading-6" role="status" aria-live="polite">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Plan updated</p>
+              {lastReplanUpdate.summary.removedBlocks === 0 && lastReplanUpdate.summary.addedBlocks === 0 ? (
+                <p className="mt-1">The plan was checked and recalculated with no change to session placement.</p>
+              ) : (
+                <>
+                  <p className="mt-1">{lastReplanUpdate.summary.removedBlocks} old session{lastReplanUpdate.summary.removedBlocks === 1 ? "" : "s"} replaced with {lastReplanUpdate.summary.addedBlocks} new session{lastReplanUpdate.summary.addedBlocks === 1 ? "" : "s"}.</p>
+                  <p>{formatHours(lastReplanUpdate.summary.rescheduledMinutes / 60)} of remaining study time was rescheduled.</p>
+                </>
+              )}
+              {lastReplanUpdate.reasons.length ? <p>Reason: {lastReplanUpdate.reasons.map((reason) => planChangeReasonCopy[reason]).join(", ")}</p> : null}
+              <p>Status: {statusCopy[lastReplanUpdate.status].label}</p>
+            </section>
+          ) : null}
 
           {isFullyCompleted ? (
             <section className="border-y border-[var(--line)] bg-[var(--accent-soft)] px-5 py-5 text-[var(--accent-strong)]" aria-live="polite">
