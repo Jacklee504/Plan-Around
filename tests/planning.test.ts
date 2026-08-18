@@ -15,6 +15,8 @@ import { generateStudySchedule } from "../lib/scheduler";
 import { calendarBlockDensity } from "../lib/calendarLayout";
 import { MAX_TIMETABLE_COMPLETION_TOKENS, validateTimetableAnalysis } from "../lib/timetableAnalysis";
 import { calculateWorkloadBreakdown } from "../lib/workload";
+import { DEFAULT_PLANNING_PREFERENCES } from "../lib/planningPreferences";
+import { studyBlockMinutes } from "../lib/studyProgress";
 import type { Assignment, Commitment, DatedCommitment, StudyBlock, TimetableEntry } from "../types";
 import { createWorker } from "../worker/src";
 
@@ -519,6 +521,261 @@ describe("scheduler", () => {
   });
 });
 
+describe("scheduler with planning preferences", () => {
+  it("produces the same schedule whether preferences are omitted or explicit defaults", () => {
+    const task = assignment({ workloadOverrideHours: 3 });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const now = new Date(2026, 7, 17, 7);
+    const withoutPreferences = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now });
+    const withDefaults = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now, preferences: DEFAULT_PLANNING_PREFERENCES });
+
+    expect(withDefaults).toEqual(withoutPreferences);
+  });
+
+  it("keeps generated blocks inside a narrowed study window", () => {
+    const task = assignment({ workloadOverrideHours: 4, deadline: "2026-08-25" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const preferences = { ...DEFAULT_PLANNING_PREFERENCES, studyStart: "10:00", studyEnd: "18:00" };
+    const result = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now: new Date(2026, 7, 17, 7), preferences });
+
+    expect(result.studyBlocks.length).toBeGreaterThan(0);
+    expect(result.studyBlocks.every((block) => block.start >= "10:00" && block.end <= "18:00")).toBe(true);
+  });
+
+  it("reduces available capacity to reflect a narrowed study window", () => {
+    const task = assignment({ workloadOverrideHours: 3 });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const now = new Date(2026, 7, 17, 7);
+    const wide = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now });
+    const narrow = generateStudySchedule({
+      assignment: task,
+      workload,
+      timetableEntries: [],
+      commitments: [],
+      now,
+      preferences: { ...DEFAULT_PLANNING_PREFERENCES, studyStart: "10:00", studyEnd: "18:00" },
+    });
+
+    expect(narrow.deadlineAvailableHours).toBeLessThan(wide.deadlineAvailableHours);
+  });
+
+  it("clips a commitment that crosses the study window boundary", () => {
+    const task = assignment({ workloadOverrideHours: 1, deadline: "2026-08-17" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const preferences = { ...DEFAULT_PLANNING_PREFERENCES, studyStart: "10:00", studyEnd: "18:00" };
+    const result = generateStudySchedule({
+      assignment: task,
+      workload,
+      timetableEntries: [],
+      commitments: [commitment({ start: "07:00", end: "11:00" })],
+      now: new Date(2026, 7, 17, 7),
+      preferences,
+    });
+
+    expect(result.studyBlocks.every((block) => block.start >= "11:00")).toBe(true);
+  });
+
+  it("places no new block on a disabled study day", () => {
+    const task = assignment({ workloadOverrideHours: 3, deadline: "2026-08-24" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const preferences = { ...DEFAULT_PLANNING_PREFERENCES, enabledStudyDays: [0, 2, 3, 4, 5, 6] };
+    const result = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now: new Date(2026, 7, 17, 7), preferences });
+
+    expect(result.studyBlocks.some((block) => new Date(`${block.date}T12:00:00`).getDay() === 1)).toBe(false);
+  });
+
+  it("schedules only on the single enabled study day until capacity or deadline runs out", () => {
+    const task = assignment({ workloadOverrideHours: 3, deadline: "2026-08-31" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const preferences = { ...DEFAULT_PLANNING_PREFERENCES, enabledStudyDays: [1] };
+    const result = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now: new Date(2026, 7, 17, 7), preferences });
+
+    expect(result.studyBlocks.length).toBeGreaterThan(0);
+    expect(result.studyBlocks.every((block) => new Date(`${block.date}T12:00:00`).getDay() === 1)).toBe(true);
+  });
+
+  it("does not crash and generates nothing new on a day disabled after a session there was completed", () => {
+    const task = assignment({ workloadOverrideHours: 3 });
+    const completedBlock: StudyBlock = {
+      id: "assignment-1-2026-08-17-08:00-implementation",
+      assignmentId: task.id,
+      date: "2026-08-17",
+      start: "08:00",
+      end: "09:30",
+      taskId: "implementation",
+      taskName: "Implementation",
+      completedAt: "2026-08-17T09:30:00.000Z",
+    };
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const preferences = { ...DEFAULT_PLANNING_PREFERENCES, enabledStudyDays: [0, 2, 3, 4, 5, 6] };
+    const result = generateStudySchedule({
+      assignment: task,
+      workload,
+      timetableEntries: [],
+      commitments: [],
+      reservedBlocks: [completedBlock],
+      now: new Date(2026, 7, 17, 7),
+      preferences,
+    });
+
+    expect(result.studyBlocks.some((block) => block.date === "2026-08-17")).toBe(false);
+  });
+
+  it("normally prefers 60-minute sessions under a 60-minute preference", () => {
+    const task = assignment({ workloadOverrideHours: 4, deadline: "2026-08-31" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const preferences = { ...DEFAULT_PLANNING_PREFERENCES, preferredSessionMinutes: 60 as const };
+    const result = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now: new Date(2026, 7, 17, 7), preferences });
+    const durations = result.studyBlocks.map(studyBlockMinutes);
+
+    expect(durations.some((duration) => duration === 60)).toBe(true);
+    expect(durations.every((duration) => duration <= 120)).toBe(true);
+  });
+
+  it("preserves current behaviour under the default 90-minute session preference", () => {
+    const task = assignment({ workloadOverrideHours: 4, deadline: "2026-08-31" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const now = new Date(2026, 7, 17, 7);
+    const withoutPreferences = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now });
+    const withDefaultSession = generateStudySchedule({
+      assignment: task,
+      workload,
+      timetableEntries: [],
+      commitments: [],
+      now,
+      preferences: { ...DEFAULT_PLANNING_PREFERENCES, preferredSessionMinutes: 90 },
+    });
+
+    expect(withDefaultSession).toEqual(withoutPreferences);
+  });
+
+  it("normally uses 120-minute sessions under a 120-minute preference when the range permits", () => {
+    const task = assignment({ workloadOverrideHours: 4, deadline: "2026-08-31" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const preferences = { ...DEFAULT_PLANNING_PREFERENCES, preferredSessionMinutes: 120 as const };
+    const result = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now: new Date(2026, 7, 17, 7), preferences });
+    const durations = result.studyBlocks.map(studyBlockMinutes);
+
+    expect(durations.some((duration) => duration === 120)).toBe(true);
+    expect(durations.every((duration) => duration <= 120)).toBe(true);
+  });
+
+  it("does not change total required workload when the daily target changes", () => {
+    const task = assignment({ workloadOverrideHours: 8, deadline: "2026-08-20" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const now = new Date(2026, 7, 17, 7);
+    const lowTarget = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now, preferences: { ...DEFAULT_PLANNING_PREFERENCES, dailyStudyTargetMinutes: 120 } });
+    const highTarget = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now, preferences: { ...DEFAULT_PLANNING_PREFERENCES, dailyStudyTargetMinutes: 300 } });
+
+    expect(lowTarget.requiredHours).toBe(highTarget.requiredHours);
+  });
+
+  it("spreads first-pass work across more days when the daily target is small", () => {
+    const task = assignment({ workloadOverrideHours: 8, deadline: "2026-09-15" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const now = new Date(2026, 7, 17, 7);
+    const lowTarget = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now, preferences: { ...DEFAULT_PLANNING_PREFERENCES, dailyStudyTargetMinutes: 120 } });
+    const highTarget = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now, preferences: { ...DEFAULT_PLANNING_PREFERENCES, dailyStudyTargetMinutes: 300 } });
+    const daysUsed = (blocks: StudyBlock[]) => new Set(blocks.map((block) => block.date)).size;
+
+    expect(daysUsed(lowTarget.studyBlocks)).toBeGreaterThan(daysUsed(highTarget.studyBlocks));
+    expect(lowTarget.scheduledHours).toBe(highTarget.scheduledHours);
+  });
+
+  it("lets the second pass exceed the daily target so a schedulable assignment still fits", () => {
+    const task = assignment({ workloadOverrideHours: 8, deadline: "2026-08-20" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const preferences = { ...DEFAULT_PLANNING_PREFERENCES, dailyStudyTargetMinutes: 120 as const };
+    const result = generateStudySchedule({ assignment: task, workload, timetableEntries: [], commitments: [], now: new Date(2026, 7, 17, 7), preferences });
+
+    expect(result.unscheduledHours).toBe(0);
+    const totalsByDate = result.studyBlocks.reduce<Record<string, number>>((totals, block) => {
+      totals[block.date] = (totals[block.date] ?? 0) + studyBlockMinutes(block);
+      return totals;
+    }, {});
+    expect(Object.values(totalsByDate).some((minutes) => minutes > 120)).toBe(true);
+  });
+
+  it("begins at the existing chronological time under no time-of-day preference", () => {
+    const task = assignment({ workloadOverrideHours: 1, deadline: "2026-08-17" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const result = generateStudySchedule({
+      assignment: task,
+      workload,
+      timetableEntries: [],
+      commitments: [],
+      now: new Date(2026, 7, 17, 7),
+      preferences: { ...DEFAULT_PLANNING_PREFERENCES, preferredTimeOfDay: "none" },
+    });
+
+    expect(result.studyBlocks[0].start).toBe("08:00");
+  });
+
+  it("selects the afternoon band first under an afternoon preference", () => {
+    const task = assignment({ workloadOverrideHours: 1, deadline: "2026-08-17" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const result = generateStudySchedule({
+      assignment: task,
+      workload,
+      timetableEntries: [],
+      commitments: [],
+      now: new Date(2026, 7, 17, 7),
+      preferences: { ...DEFAULT_PLANNING_PREFERENCES, preferredTimeOfDay: "afternoon" },
+    });
+
+    expect(result.studyBlocks[0].start).toBe("12:00");
+  });
+
+  it("selects the evening band first under an evening preference", () => {
+    const task = assignment({ workloadOverrideHours: 1, deadline: "2026-08-17" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const result = generateStudySchedule({
+      assignment: task,
+      workload,
+      timetableEntries: [],
+      commitments: [],
+      now: new Date(2026, 7, 17, 7),
+      preferences: { ...DEFAULT_PLANNING_PREFERENCES, preferredTimeOfDay: "evening" },
+    });
+
+    expect(result.studyBlocks[0].start).toBe("17:00");
+  });
+
+  it("falls back to another band when the preferred band is unavailable", () => {
+    const task = assignment({ workloadOverrideHours: 1, deadline: "2026-08-17" });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const result = generateStudySchedule({
+      assignment: task,
+      workload,
+      timetableEntries: [],
+      commitments: [commitment({ start: "08:00", end: "12:00" })],
+      now: new Date(2026, 7, 17, 7),
+      preferences: { ...DEFAULT_PLANNING_PREFERENCES, preferredTimeOfDay: "morning" },
+    });
+
+    expect(result.studyBlocks[0].start).toBe("12:00");
+  });
+
+  it("keeps total available capacity identical across every preferred-time-of-day value", () => {
+    const task = assignment({ workloadOverrideHours: 3 });
+    const workload = calculateWorkloadBreakdown(softwareModule.credits, task);
+    const now = new Date(2026, 7, 17, 7);
+    const capacities = (["none", "morning", "afternoon", "evening"] as const).map(
+      (preferredTimeOfDay) =>
+        generateStudySchedule({
+          assignment: task,
+          workload,
+          timetableEntries: [],
+          commitments: [],
+          now,
+          preferences: { ...DEFAULT_PLANNING_PREFERENCES, preferredTimeOfDay },
+        }).deadlineAvailableHours,
+    );
+
+    expect(new Set(capacities).size).toBe(1);
+  });
+});
+
 describe("saved-plan freshness", () => {
   it("changes the fingerprint when a scheduling input changes", () => {
     const task = assignment();
@@ -643,6 +900,98 @@ describe("saved-plan freshness", () => {
   });
 });
 
+describe("planning preferences fingerprinting", () => {
+  const task = assignment();
+  const baseInputs = { assignment: task, module: softwareModule, timetableEntries: [], commitments: [] };
+
+  it("produces the same fingerprint whether preferences are missing or explicit defaults", () => {
+    const missing = createPlanFingerprint(baseInputs);
+    const explicitDefaults = createPlanFingerprint({ ...baseInputs, planningPreferences: DEFAULT_PLANNING_PREFERENCES });
+
+    expect(explicitDefaults).toBe(missing);
+  });
+
+  it("changes the fingerprint when the study start changes", () => {
+    const original = createPlanFingerprint(baseInputs);
+    const changed = createPlanFingerprint({ ...baseInputs, planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, studyStart: "09:00" } });
+
+    expect(changed).not.toBe(original);
+  });
+
+  it("changes the fingerprint when the study end changes", () => {
+    const original = createPlanFingerprint(baseInputs);
+    const changed = createPlanFingerprint({ ...baseInputs, planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, studyEnd: "21:00" } });
+
+    expect(changed).not.toBe(original);
+  });
+
+  it("changes the fingerprint when the preferred session length changes", () => {
+    const original = createPlanFingerprint(baseInputs);
+    const changed = createPlanFingerprint({ ...baseInputs, planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, preferredSessionMinutes: 60 } });
+
+    expect(changed).not.toBe(original);
+  });
+
+  it("changes the fingerprint when the daily target changes", () => {
+    const original = createPlanFingerprint(baseInputs);
+    const changed = createPlanFingerprint({ ...baseInputs, planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, dailyStudyTargetMinutes: 240 } });
+
+    expect(changed).not.toBe(original);
+  });
+
+  it("changes the fingerprint when the preferred time of day changes", () => {
+    const original = createPlanFingerprint(baseInputs);
+    const changed = createPlanFingerprint({ ...baseInputs, planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, preferredTimeOfDay: "evening" } });
+
+    expect(changed).not.toBe(original);
+  });
+
+  it("changes the fingerprint when enabled study days change", () => {
+    const original = createPlanFingerprint(baseInputs);
+    const changed = createPlanFingerprint({ ...baseInputs, planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, enabledStudyDays: [1, 2, 3, 4, 5] } });
+
+    expect(changed).not.toBe(original);
+  });
+
+  it("does not change the fingerprint when the same enabled days are reordered", () => {
+    const first = createPlanFingerprint({ ...baseInputs, planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, enabledStudyDays: [1, 2, 3, 4, 5] } });
+    const second = createPlanFingerprint({ ...baseInputs, planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, enabledStudyDays: [5, 4, 3, 2, 1] } });
+
+    expect(second).toBe(first);
+  });
+
+  it("makes another assignment's reservation stale after a preference change", () => {
+    const first = assignment({ id: "assignment-a", workloadOverrideHours: 3 });
+    const block: StudyBlock = {
+      id: "assignment-a-2026-08-17-08:00-implementation",
+      assignmentId: first.id,
+      date: "2026-08-17",
+      start: "08:00",
+      end: "10:30",
+      taskId: "implementation",
+      taskName: "Implementation",
+    };
+    const base = {
+      currentAssignmentId: "assignment-b",
+      assignments: [first],
+      modules: [softwareModule],
+      studyBlocks: [block],
+      timetableEntries: [],
+      commitments: [],
+    };
+    const snapshots = {
+      [first.id]: createPlanFingerprint({ assignment: first, module: softwareModule, timetableEntries: [], commitments: [] }),
+    };
+
+    expect(getReservableStudyBlocks({ ...base, planSnapshots: snapshots })).toEqual([block]);
+    expect(getReservableStudyBlocks({
+      ...base,
+      planSnapshots: snapshots,
+      planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, preferredTimeOfDay: "evening" },
+    })).toEqual([]);
+  });
+});
+
 describe("plan change reasons", () => {
   const baseInputs = { assignment: assignment(), module: softwareModule, timetableEntries: [timetableEntry()], commitments: [commitment()], datedCommitments: [datedCommitment()] };
   const storedFingerprint = createPlanFingerprint(baseInputs);
@@ -679,6 +1028,12 @@ describe("plan change reasons", () => {
     const changed = { ...baseInputs, datedCommitments: [datedCommitment(), datedCommitment({ id: "checkup", label: "Checkup", date: "2026-08-20" })] };
 
     expect(getPlanChangeReasons(storedFingerprint, changed)).toEqual(["dated-commitments"]);
+  });
+
+  it("reports a planning-preferences reason when a study preference changes", () => {
+    const changed = { ...baseInputs, planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, preferredSessionMinutes: 60 as const } };
+
+    expect(getPlanChangeReasons(storedFingerprint, changed)).toEqual(["planning-preferences"]);
   });
 
   it("does not report a false reason when equivalent arrays are reordered", () => {

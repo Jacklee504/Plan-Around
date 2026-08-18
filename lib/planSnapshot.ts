@@ -1,4 +1,5 @@
-import type { Assignment, Commitment, DatedCommitment, Module, StudyBlock, TimetableEntry } from "@/types";
+import { arePlanningPreferencesDefault, normalizePlanningPreferences } from "./planningPreferences";
+import type { Assignment, Commitment, DatedCommitment, Module, PlanningPreferences, StudyBlock, TimetableEntry } from "@/types";
 
 export type PlanInputs = {
   assignment: Assignment;
@@ -6,6 +7,7 @@ export type PlanInputs = {
   timetableEntries: TimetableEntry[];
   commitments: Commitment[];
   datedCommitments?: DatedCommitment[];
+  planningPreferences?: PlanningPreferences;
 };
 
 function sortByValue<T>(items: T[]) {
@@ -17,7 +19,12 @@ function sortByValue<T>(items: T[]) {
  * IDs are intentionally omitted from recurring constraints so re-importing an
  * identical timetable does not invalidate a plan purely because entries were rebuilt.
  */
-function createPlanInputSnapshot({ assignment, module, timetableEntries, commitments, datedCommitments = [] }: PlanInputs) {
+function createPlanInputSnapshot({ assignment, module, timetableEntries, commitments, datedCommitments = [], planningPreferences }: PlanInputs) {
+  // Default preferences are omitted entirely so a plan saved before Settings
+  // existed produces the exact same fingerprint as one saved under explicit
+  // defaults afterwards - only a real preference change is detectable.
+  const normalizedPreferences = normalizePlanningPreferences(planningPreferences);
+
   return {
     assignment: {
       moduleId: assignment.moduleId,
@@ -51,6 +58,7 @@ function createPlanInputSnapshot({ assignment, module, timetableEntries, commitm
       end: commitment.end,
       category: commitment.category,
     }))),
+    ...(arePlanningPreferencesDefault(normalizedPreferences) ? {} : { planningPreferences: normalizedPreferences }),
   };
 }
 
@@ -67,7 +75,7 @@ export function createPlanFingerprint(inputs: PlanInputs) {
   return createPlanInputFingerprint(inputs);
 }
 
-type ReservableBlocksInput = Pick<PlanInputs, "timetableEntries" | "commitments" | "datedCommitments"> & {
+type ReservableBlocksInput = Pick<PlanInputs, "timetableEntries" | "commitments" | "datedCommitments" | "planningPreferences"> & {
   currentAssignmentId: string;
   assignments: Assignment[];
   modules: Module[];
@@ -76,9 +84,10 @@ type ReservableBlocksInput = Pick<PlanInputs, "timetableEntries" | "commitments"
 };
 
 /**
- * Only saved plans whose own assignment/module/timetable inputs are unchanged
- * reserve time. This prevents removed assignments and plans made stale by an
- * edited timetable, commitment, or workload from blocking a new plan.
+ * Only saved plans whose own assignment/module/timetable/preference inputs
+ * are unchanged reserve time. This prevents removed assignments and plans
+ * made stale by an edited timetable, commitment, workload, or planning
+ * preference from blocking a new plan.
  */
 export function getReservableStudyBlocks({
   currentAssignmentId,
@@ -89,6 +98,7 @@ export function getReservableStudyBlocks({
   timetableEntries,
   commitments,
   datedCommitments,
+  planningPreferences,
 }: ReservableBlocksInput) {
   const reservableAssignmentIds = new Set(
     assignments
@@ -103,6 +113,7 @@ export function getReservableStudyBlocks({
           timetableEntries,
           commitments,
           datedCommitments,
+          planningPreferences,
         });
       })
       .map((assignment) => assignment.id),
@@ -118,7 +129,8 @@ export type PlanChangeReason =
   | "module-workload"
   | "timetable"
   | "recurring-commitments"
-  | "dated-commitments";
+  | "dated-commitments"
+  | "planning-preferences";
 
 function parseStoredSnapshot(storedFingerprint: string): ReturnType<typeof createPlanInputSnapshot> | null {
   try {
@@ -153,6 +165,7 @@ export function getPlanChangeReasons(storedFingerprint: string | undefined, curr
   if (JSON.stringify(storedSnapshot.timetableEntries) !== JSON.stringify(currentSnapshot.timetableEntries)) reasons.push("timetable");
   if (JSON.stringify(storedSnapshot.commitments) !== JSON.stringify(currentSnapshot.commitments)) reasons.push("recurring-commitments");
   if (JSON.stringify(storedSnapshot.datedCommitments) !== JSON.stringify(currentSnapshot.datedCommitments)) reasons.push("dated-commitments");
+  if (JSON.stringify(storedSnapshot.planningPreferences) !== JSON.stringify(currentSnapshot.planningPreferences)) reasons.push("planning-preferences");
 
   return reasons;
 }

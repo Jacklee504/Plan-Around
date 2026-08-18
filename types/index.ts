@@ -98,6 +98,17 @@ export type StudyBlock = {
   completedAt?: string;
 };
 
+export type PreferredStudyTime = "none" | "morning" | "afternoon" | "evening";
+
+export type PlanningPreferences = {
+  studyStart: string;
+  studyEnd: string;
+  preferredSessionMinutes: 60 | 90 | 120;
+  dailyStudyTargetMinutes: 120 | 180 | 240 | 300;
+  preferredTimeOfDay: PreferredStudyTime;
+  enabledStudyDays: number[];
+};
+
 export type ScheduleStatus = "on-track" | "tight" | "not-enough-time";
 
 export type ScheduleResult = {

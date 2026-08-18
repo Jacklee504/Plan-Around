@@ -8,9 +8,10 @@ import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
 import { calculateRemainingWorkload, completedMinutes, replaceIncompleteBlocksForAssignment, studyBlockMinutes } from "@/lib/studyProgress";
 import { summarizeReplan, type ReplanSummary } from "@/lib/replanSummary";
+import { DEFAULT_PLANNING_PREFERENCES, normalizePlanningPreferences } from "@/lib/planningPreferences";
 import { OnboardingRequired } from "@/components/OnboardingRequired";
 import { useOnboardingState } from "@/lib/onboarding";
-import type { Assignment, Commitment, DatedCommitment, Module, ScheduleResult, StudyBlock, TimetableEntry } from "@/types";
+import type { Assignment, Commitment, DatedCommitment, Module, PlanningPreferences, ScheduleResult, StudyBlock, TimetableEntry } from "@/types";
 
 type PlanStatus = ScheduleResult["status"];
 
@@ -20,6 +21,7 @@ const planChangeReasonCopy: Record<PlanChangeReason, string> = {
   timetable: "Timetable availability changed",
   "recurring-commitments": "Recurring commitments changed",
   "dated-commitments": "One-off availability changed",
+  "planning-preferences": "Study preferences changed",
 };
 
 type ReplanUpdate = { summary: ReplanSummary; reasons: PlanChangeReason[]; status: PlanStatus };
@@ -79,6 +81,7 @@ export function PlanWorkspace() {
   const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
   const [studyBlocks, setStudyBlocks] = useState<StudyBlock[]>([]);
   const [planSnapshots, setPlanSnapshots] = useState<Record<string, string>>({});
+  const [planningPreferences, setPlanningPreferences] = useState<PlanningPreferences>(DEFAULT_PLANNING_PREFERENCES);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
   const [generatedResult, setGeneratedResult] = useState<ScheduleResult | null>(null);
   const [lastReplanUpdate, setLastReplanUpdate] = useState<ReplanUpdate | null>(null);
@@ -95,6 +98,7 @@ export function PlanWorkspace() {
       setTimetableEntries(readStoredValue<TimetableEntry[]>(storageKeys.timetableEntries, []));
       setStudyBlocks(readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []));
       setPlanSnapshots(readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {}));
+      setPlanningPreferences(normalizePlanningPreferences(readStoredValue<unknown>(storageKeys.planningPreferences, DEFAULT_PLANNING_PREFERENCES)));
       const latestSchedulableAssignment = [...storedAssignments].reverse().find((assignment) => storedModules.some((module) => module.id === assignment.moduleId));
       setSelectedAssignmentId(latestSchedulableAssignment?.id ?? "");
       setIsLoaded(true);
@@ -142,6 +146,7 @@ export function PlanWorkspace() {
       timetableEntries,
       commitments,
       datedCommitments,
+      planningPreferences,
     })
     : [];
   // The scheduler only exempts a same-assignment block from reserving time
@@ -149,7 +154,7 @@ export function PlanWorkspace() {
   // own completed sessions must be included here alongside other assignments'.
   const assignmentReservedBlocks = [...reservedBlocks, ...completedSelectedBlocks];
   const currentFingerprint = selectedAssignment && selectedModule
-    ? createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments })
+    ? createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments, planningPreferences })
     : null;
   const isStoredPlanStale = Boolean(
     selectedAssignment
@@ -161,10 +166,10 @@ export function PlanWorkspace() {
   // current inputs category by category so the stale banner can say what
   // actually changed instead of just that something did.
   const staleReasons = isStoredPlanStale && selectedAssignment && selectedModule
-    ? getPlanChangeReasons(planSnapshots[selectedAssignment.id], { assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments })
+    ? getPlanChangeReasons(planSnapshots[selectedAssignment.id], { assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments, planningPreferences })
     : [];
   const recalculatedResult = selectedAssignment && workload
-    ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks: assignmentReservedBlocks })
+    ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks: assignmentReservedBlocks, preferences: planningPreferences })
     : null;
   // While stale, only completed sessions remain valid history - obsolete
   // incomplete sessions are hidden until the user replans the remainder.
@@ -205,6 +210,7 @@ export function PlanWorkspace() {
       commitments,
       datedCommitments,
       reservedBlocks: assignmentReservedBlocks,
+      preferences: planningPreferences,
     });
     // The scheduler only returns newly placed blocks, so completed history
     // is added back in for display - the same blocks already preserved in
@@ -214,7 +220,7 @@ export function PlanWorkspace() {
     setStudyBlocks((current) => replaceIncompleteBlocksForAssignment(current, selectedAssignment.id, scheduled.studyBlocks));
     setPlanSnapshots((current) => ({
       ...current,
-      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments }),
+      [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments, planningPreferences }),
     }));
     setGeneratedResult({
       ...scheduled,

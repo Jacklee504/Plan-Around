@@ -16,6 +16,7 @@ const navigation = [
   { href: "/setup", label: "Calendar" },
   { href: "/assignment", label: "Assignments" },
   { href: "/plan", label: "Plan" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function AppShell({ children, eyebrow, title, description }: AppShellProps) {
@@ -40,7 +41,7 @@ export function AppShell({ children, eyebrow, title, description }: AppShellProp
       </header>
 
       {isOnboardingLoaded && onboarding.completed ? <nav aria-label="Product navigation" className="mt-6">
-        <ol className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
+        <ol className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
           {navigation.map((item) => {
             const isCurrent = pathname.startsWith(item.href);
 
