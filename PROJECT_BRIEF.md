@@ -24,7 +24,7 @@ Calendars show availability. Task lists show what needs to be done. PlanAround c
 
 ## Product Flow
 
-PlanAround has three main areas:
+PlanAround has four main areas:
 
 ### Calendar
 
@@ -76,6 +76,18 @@ The generated plan includes:
 - task-level workload split;
 - scheduled study blocks;
 - schedule status.
+
+### Settings
+
+The student can adjust how the scheduler places sessions without changing what work is required:
+
+- study window (earliest start, latest finish);
+- preferred session length (60, 90 or 120 minutes);
+- daily study target (2-5 hours, a soft first-pass portion size);
+- preferred time of day (morning, afternoon, evening or no preference);
+- which days study sessions can be placed on.
+
+Defaults reproduce the pre-Settings scheduler behaviour exactly. Preferences change where the scheduler places sessions - they never change the underlying ECTS-based workload, assignment weighting, buffer, task-mark weighting or complexity adjustment, and they never alter completed work.
 
 ## AI Boundary
 
@@ -146,7 +158,7 @@ Completed minutes are tracked per task, and progress is shown against the assign
 
 ## Explainability
 
-- Stale reasons come from a deterministic comparison of the current plan inputs against the inputs snapshot stored when the plan was made (assignment, module workload, timetable, recurring commitments, dated commitments).
+- Stale reasons come from a deterministic comparison of the current plan inputs against the inputs snapshot stored when the plan was made (assignment, module workload, timetable, recurring commitments, dated commitments, planning preferences).
 - Replan summaries compare the old and new scheduled study blocks to report how many sessions were replaced and how much remaining time moved.
 - AI is not used to explain or choose schedule changes; both the stale reasons and the replan summary are plain deterministic TypeScript.
 

@@ -21,11 +21,11 @@ No API keys, account identifiers, billing details or claim codes are recorded he
 Evaluated and deliberately left out of the running product, because none of them solve a real PlanAround requirement:
 
 - **Prelint** — a natural GitHub/spec-compliance review tool with no runtime product distortion, but connecting it requires installing a GitHub App through the GitHub UI, which is an account-level action for the repository owner rather than something a coding agent can do on their behalf.
-- **`.xyz` domain** — would improve the judge-facing production URL, but claiming and connecting it needs an out-of-repo claim step (Discord code, DNS setup in the Vercel dashboard) that has to be done by the repository owner.
+- **`.xyz` domain** — evaluated; not used because the existing Vercel URL is sufficient for this submission.
 - **DevSwarm Pro** — a Claude Code / git-worktree workflow tool, useful for development but never a runtime dependency; setup is an account/OAuth action outside this repository.
 - **Tin Computer** — explicitly positioned by the sponsor as post-submission growth tooling (landing page/SEO/analytics fixes). Reserved for after submission; not connected to `main` before then.
 - **YouCam** — image enhancement/generation APIs. PlanAround already has an image-preparation path and the production vision model already accepts screenshots directly; an extra remote image processor would only add latency, privacy surface and failure modes without solving a real problem.
-- **Hawkeye** — a developer search/navigation tool whose current release supports Windows only; the development machine is macOS, so there is no integration path.
+- **Hawkeye** — not used; no useful macOS fit for the development environment.
 
 ## Operational notes
 

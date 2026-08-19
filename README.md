@@ -17,6 +17,7 @@ Students usually know when an assignment is due, but not how much time it deserv
 - Analyse or manually enter an assignment.
 - Estimate workload from ECTS, assignment weighting and rubric structure.
 - Schedule study sessions around the student's actual availability.
+- Adjust scheduling preferences (study window, session length, daily target, time of day, study days) in Settings.
 
 ## Adaptive planning flow
 
@@ -24,7 +25,7 @@ The plan is no longer a one-shot output:
 
 - the Calendar can navigate to any week, not only the current one;
 - study sessions can be marked completed;
-- changed availability (timetable, commitments, module or assignment edits) stales an existing plan;
+- changed availability (timetable, commitments, module or assignment edits) or a changed scheduling preference in Settings stales an existing plan;
 - completed work is preserved across a replan and is never regenerated or lost;
 - remaining, not total, work is what gets replanned;
 - the app explains why a plan changed and what was rescheduled, without using AI to make that decision.
@@ -67,9 +68,16 @@ Next.js · React · TypeScript · Tailwind CSS · Cloudflare Workers · Featherl
 ## Run locally
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
+
+This starts the frontend UI only. Screenshot/text AI analysis calls `NEXT_PUBLIC_ANALYZER_URL`, which defaults to `http://localhost:8787/analyze` in development and is empty in a production build unless set explicitly - so a clean local checkout can browse the whole app, but AI analysis needs one of:
+
+- the hosted analyser: set `NEXT_PUBLIC_ANALYZER_URL=https://planaround-ai.0jacklee05.workers.dev/analyze` before `npm run dev`; or
+- a local analyser against a local Ollama model: `npm run ai:local` (see [scripts/localAnalyzer.ts](scripts/localAnalyzer.ts)), which listens on `http://localhost:8787/analyze` - the default the frontend already expects in development.
+
+`FEATHERLESS_API_KEY` is a Cloudflare Worker secret only. The frontend never reads it and it must never be prefixed with `NEXT_PUBLIC_`.
 
 ## Tests
 

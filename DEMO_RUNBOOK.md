@@ -24,13 +24,28 @@ marked **(run manually before recording)**.
 
 ## Demo sequence (~3 minutes)
 
+A StudyBlock cannot be marked complete before its scheduled local start time — this is an intentional
+product rule (`lib/studyProgress.ts#canCompleteStudyBlock`), not a bug. A plan generated moments before
+recording will normally have no session eligible to complete yet, so the progress/replan segment (steps
+7, 10, 11) needs a plan that was generated earlier, not one generated live in the same take. Prefer, in
+order:
+
+1. Generate the plan (steps 1-6) well before recording, so at least one scheduled session has genuinely
+   started or passed by the time steps 7-11 are recorded for real.
+2. Record steps 7-11 from a separate pre-prepared browser profile/state created earlier through the
+   normal UI, and cut to it in the edit.
+3. If the demo must be one completely fresh take, omit the completion-preservation segment (steps 7, 10,
+   11) rather than working around the completion rule.
+
+Do not edit localStorage, change the system clock, or add a demo-only bypass to force early completion.
+
 1. Show Calendar / a normal week.
 2. Import the sample timetable PDF (`public/semester-1-timetable.pdf`) if time permits.
 3. Add the sample assignment brief (`demo/sample-assignment.txt`) via paste-text and run AI analysis.
 4. Review the extracted structure (title, deadline, weighting, tasks, marks).
 5. Save it and generate the deterministic plan.
 6. Navigate to a future week in Calendar.
-7. Mark one study session complete.
+7. Mark a session complete once it is actually eligible (its scheduled start has passed — see the note above).
 8. Add a commitment that conflicts with an incomplete study block.
 9. Return to Plan and show the stale-plan reason.
 10. Replan remaining work.
