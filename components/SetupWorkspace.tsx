@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { parseTimetablePdf } from "@/lib/timetableParser";
+import { renderPdfToImageFile } from "@/lib/pdfDocument";
 import {
   clearPlanAroundStorage,
   readStoredValue,
@@ -621,13 +622,39 @@ async function importTimetable(file: File | undefined) {
     setImportMessage(
       `Read ${parsed.entries.length} teaching sessions across ${parsed.moduleCount} modules. Review them before saving.`,
     );
-  } catch (error) {
+    return;
+  } catch {
+    // Fall through to the visual fallback below rather than failing
+    // immediately - the deterministic parser only understands one specific
+    // text layout, so a PDF it can't read is not necessarily unreadable.
+  }
+
+  // The deterministic parser found no valid rows (compressed content stream,
+  // scanned/image-only page, or a different layout). Render the PDF locally
+  // and prepare it exactly like an uploaded screenshot, reusing the existing
+  // "ready to analyse" review step instead of failing outright.
+  const version = timetableImageVersion.current + 1;
+  timetableImageVersion.current = version;
+  setIsPreparingTimetableImage(true);
+  try {
+    const renderedImage = await renderPdfToImageFile(file);
+    const prepared = await prepareAnalysisImage(renderedImage);
+    if (timetableImageVersion.current !== version) return;
+    setPreparedTimetableImage(prepared);
+    setImportState("complete");
+    setImportMessage(
+      "This PDF's timetable text could not be read directly, so it was prepared as an image instead. Click Analyse timetable to read it with AI.",
+    );
+  } catch (renderError) {
+    if (timetableImageVersion.current !== version) return;
     setImportState("error");
     setImportMessage(
-      error instanceof Error
-        ? error.message
-        : "We could not read that timetable PDF.",
+      renderError instanceof Error
+        ? renderError.message
+        : "We could not read that timetable PDF, even as an image.",
     );
+  } finally {
+    if (timetableImageVersion.current === version) setIsPreparingTimetableImage(false);
   }
 }  async function selectTimetableImage(file: File | undefined) {
     if (!file) return;
@@ -639,6 +666,12 @@ async function importTimetable(file: File | undefined) {
     setReviewEntries(null);
     setReviewWarnings([]);
     setReviewError("");
+    // A direct image upload is its own attempt, not a continuation of a PDF's
+    // text-parse-then-visual-fallback attempt, so any message left over from
+    // that (shown alongside the shared "ready to analyse" section) must not
+    // carry over here.
+    setImportState("idle");
+    setImportMessage("");
     try {
       const prepared = await prepareAnalysisImage(file);
       if (timetableImageVersion.current === version)

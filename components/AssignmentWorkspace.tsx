@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { analyzeAssignmentBrief, imageAnalysisIsAvailable } from "@/lib/assignmentAnalyzer";
 import { prepareAnalysisImage, type PreparedAnalysisImage } from "@/lib/analysisImage";
+import { extractPdfEmbeddedText, hasUsefulEmbeddedText, isPdfFile, renderPdfToImageFile } from "@/lib/pdfDocument";
 import { assignmentAnalysisInputKey, type AssignmentAnalysisInput, type AssignmentAnalysisResponse, type GroundedField } from "@/lib/assignmentAnalysis";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { removeAssignmentPlanningState, restoreAssignmentPlanningState } from "@/lib/studyProgress";
@@ -164,7 +165,7 @@ export function AssignmentWorkspace() {
     setNeedsReplacementConfirmation(false);
   }
 
-  async function selectAnalysisImage(file: File | undefined) {
+  async function selectAnalysisFile(file: File | undefined) {
     if (!file) return;
     const version = imagePreparationVersion.current + 1;
     imagePreparationVersion.current = version;
@@ -176,6 +177,29 @@ export function AssignmentWorkspace() {
     setAnalysisResult(null);
     setNeedsReplacementConfirmation(false);
     try {
+      // A PDF is routed client-side, never sent to Featherless as raw bytes:
+      // embedded text goes through the existing text-analysis path, and only
+      // a scanned/image-only PDF is rendered locally into an image that then
+      // goes through the existing hosted image-analysis path unchanged.
+      if (isPdfFile(file)) {
+        const extractedText = await extractPdfEmbeddedText(file);
+        if (imagePreparationVersion.current !== version) return;
+        if (hasUsefulEmbeddedText(extractedText)) {
+          currentAnalysisInputKey.current = assignmentAnalysisInputKey({ kind: "text", text: extractedText });
+          setBriefText(extractedText);
+          setAnalysisImage(null);
+          return;
+        }
+        const renderedImage = await renderPdfToImageFile(file);
+        if (imagePreparationVersion.current !== version) return;
+        const image = await prepareAnalysisImage(renderedImage);
+        if (imagePreparationVersion.current !== version) return;
+        currentAnalysisInputKey.current = assignmentAnalysisInputKey(image);
+        setBriefText("");
+        setAnalysisImage(image);
+        return;
+      }
+
       const image = await prepareAnalysisImage(file);
       if (imagePreparationVersion.current !== version) return;
       currentAnalysisInputKey.current = assignmentAnalysisInputKey(image);
@@ -183,10 +207,10 @@ export function AssignmentWorkspace() {
       setAnalysisImage(image);
       setAnalysisResult(null);
       setNeedsReplacementConfirmation(false);
-    } catch (imageError) {
+    } catch (fileError) {
       if (imagePreparationVersion.current !== version) return;
       setAnalysisImage(null);
-      setAnalysisError(imageError instanceof Error ? imageError.message : "This screenshot could not be prepared.");
+      setAnalysisError(fileError instanceof Error ? fileError.message : "This file could not be prepared.");
     } finally {
       if (imagePreparationVersion.current === version) setIsPreparingImage(false);
       if (imageInput.current) imageInput.current.value = "";
@@ -438,10 +462,10 @@ export function AssignmentWorkspace() {
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-ink)]">or</span>
                 <label className={`inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] ${!canAnalyseScreenshot || isPreparingImage ? "cursor-not-allowed opacity-60" : ""}`}>
-                  <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void selectAnalysisImage(event.target.files?.[0])} disabled={!canAnalyseScreenshot || isPreparingImage} className="sr-only" />
-                  {isPreparingImage ? "Preparing screenshot…" : "Upload screenshot"}
+                  <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" onChange={(event) => void selectAnalysisFile(event.target.files?.[0])} disabled={!canAnalyseScreenshot || isPreparingImage} className="sr-only" />
+                  {isPreparingImage ? "Preparing file…" : "Upload screenshot or PDF"}
                 </label>
-                <p className="text-sm text-[var(--muted-ink)]">PNG, JPEG or WebP, up to 8 MB. Prepared locally and sent to the hosted analyser only when you click Analyse.</p>
+                <p className="text-sm text-[var(--muted-ink)]">PNG, JPEG, WebP or PDF, up to 8 MB (15 MB for PDF). A PDF&apos;s text is read locally first; a scanned PDF is prepared as an image instead. Sent to the hosted analyser only when you click Analyse.</p>
               </div>
               {analysisImage ? <div className="mt-3 flex flex-wrap items-center gap-3 border-y border-[var(--line)] py-3 text-sm"><p className="font-semibold text-[var(--ink)]">Screenshot ready: {analysisImage.filename}</p><p className="text-[var(--muted-ink)]">Prepared for analysis, not saved.</p><button type="button" onClick={clearAnalysisImage} className="min-h-10 font-semibold text-[var(--accent-strong)] underline underline-offset-2">Remove screenshot</button></div> : null}
               {!canAnalyseScreenshot ? <p className="mt-3 text-sm leading-6 text-[var(--muted-ink)]">Screenshot analysis uses the hosted analyser. Use the deployed app or configure <code>NEXT_PUBLIC_ANALYZER_URL</code> locally.</p> : null}
