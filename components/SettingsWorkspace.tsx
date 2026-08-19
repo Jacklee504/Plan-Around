@@ -178,7 +178,7 @@ export function SettingsWorkspace() {
           </button>
           <p className="text-sm text-[var(--muted-ink)]">Saved on this device</p>
         </div>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Planning preferences are stored in this browser with the rest of your PlanAround prototype data. This only resets scheduling preferences - your Calendar, assignments and study progress are untouched.</p>
+        <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Planning preferences are stored in this browser with the rest of your PlanAround data. This only resets scheduling preferences - your Calendar, assignments and study progress are untouched.</p>
       </section>
     </div>
   );

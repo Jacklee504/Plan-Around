@@ -35,9 +35,6 @@ export function AppShell({ children, eyebrow, title, description }: AppShellProp
             <span className="block text-xs text-[var(--muted-ink)]">Fit assignments around your actual week.</span>
           </span>
         </Link>
-        <span className="hidden rounded-full bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-medium text-[var(--muted-ink)] sm:inline-flex">
-          Prototype workspace
-        </span>
       </header>
 
       {isOnboardingLoaded && onboarding.completed ? <nav aria-label="Product navigation" className="mt-6">
