@@ -816,6 +816,18 @@ async function importTimetable(file: File | undefined) {
     setImportState("idle");
     setUploadedFileName("");
     setImportMessage("");
+    // A prepared screenshot or in-progress review is in-memory only, but it
+    // must not survive a reset until reload - it would otherwise still show
+    // an importer/review step that no longer matches the wiped stored data.
+    timetableImageVersion.current += 1;
+    setPreparedTimetableImage(null);
+    setIsPreparingTimetableImage(false);
+    setIsAnalysingTimetable(false);
+    setTimetableAnalysisError("");
+    setReviewEntries(null);
+    setReviewWarnings([]);
+    setReviewError("");
+    if (timetableImageInput.current) timetableImageInput.current.value = "";
     onResetOnboarding();
   }
 

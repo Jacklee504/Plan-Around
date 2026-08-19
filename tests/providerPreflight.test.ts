@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { interpretModelAvailability, interpretPlan, modelPassesPreflight } from "../scripts/providerPreflight";
+import { interpretModelAvailability, interpretPlan, modelPassesPreflight, planPassesPreflight } from "../scripts/providerPreflight";
 
 describe("interpretModelAvailability", () => {
   it("passes when the model is present and available_on_current_plan is true", () => {
@@ -65,5 +65,19 @@ describe("interpretPlan", () => {
   it("reports undefined fields as undefined rather than throwing on a bare response", () => {
     const summary = interpretPlan({});
     expect(summary).toEqual({ name: undefined, contextCeiling: undefined, concurrency: undefined });
+  });
+});
+
+describe("planPassesPreflight", () => {
+  it("fails on an empty/malformed plan response with no name or id", () => {
+    expect(planPassesPreflight(interpretPlan({}))).toBe(false);
+  });
+
+  it("passes when the plan reports a name", () => {
+    expect(planPassesPreflight(interpretPlan({ name: "pro" }))).toBe(true);
+  });
+
+  it("passes when the plan reports only an id", () => {
+    expect(planPassesPreflight(interpretPlan({ id: "plan_123" }))).toBe(true);
   });
 });

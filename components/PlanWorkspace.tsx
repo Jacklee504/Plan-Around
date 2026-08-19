@@ -6,7 +6,7 @@ import { createPlanFingerprint, getPlanChangeReasons, getReservableStudyBlocks, 
 import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
-import { calculateRemainingWorkload, canCompleteStudyBlock, completedMinutes, replaceIncompleteBlocksForAssignment, studyBlockMinutes } from "@/lib/studyProgress";
+import { calculateRemainingWorkload, canCompleteStudyBlock, completedMinutes, replaceIncompleteBlocksForAssignment, studyBlockMinutes, studyBlockScheduledStart } from "@/lib/studyProgress";
 import { summarizeReplan, type ReplanSummary } from "@/lib/replanSummary";
 import { DEFAULT_PLANNING_PREFERENCES, normalizePlanningPreferences } from "@/lib/planningPreferences";
 import { OnboardingRequired } from "@/components/OnboardingRequired";
@@ -86,6 +86,7 @@ export function PlanWorkspace() {
   const [generatedResult, setGeneratedResult] = useState<ScheduleResult | null>(null);
   const [lastReplanUpdate, setLastReplanUpdate] = useState<ReplanUpdate | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
@@ -114,6 +115,21 @@ export function PlanWorkspace() {
   useEffect(() => {
     if (isLoaded) writeStoredValue(storageKeys.planSnapshots, planSnapshots);
   }, [isLoaded, planSnapshots]);
+
+  // Re-renders the moment the nearest not-yet-completable session's scheduled
+  // start passes, instead of leaving it stuck on "Scheduled" until something
+  // else happens to trigger a render.
+  useEffect(() => {
+    const nextBoundary = studyBlocks.reduce<number | null>((earliest, block) => {
+      if (block.completedAt) return earliest;
+      const startMs = studyBlockScheduledStart(block).getTime();
+      if (startMs <= now.getTime()) return earliest;
+      return earliest === null ? startMs : Math.min(earliest, startMs);
+    }, null);
+    if (nextBoundary === null) return;
+    const timer = window.setTimeout(() => setNow(new Date()), nextBoundary - now.getTime() + 1000);
+    return () => window.clearTimeout(timer);
+  }, [studyBlocks, now]);
 
   const schedulableAssignments = useMemo(
     () => assignments.filter((assignment) => modules.some((module) => module.id === assignment.moduleId)),

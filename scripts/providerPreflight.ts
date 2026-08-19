@@ -72,6 +72,13 @@ export function modelPassesPreflight(model: ModelAvailability) {
   return model.found && model.available !== false;
 }
 
+// A malformed or empty `/plan` body (e.g. `{}`) must also fail: it means the
+// provider did not actually return recognizable account state, which is just
+// as unusable for a release check as a request that errored outright.
+export function planPassesPreflight(plan: PlanSummary) {
+  return Boolean(plan.name);
+}
+
 function reportPlan(plan: PlanSummary) {
   console.log("Plan:");
   console.log(`  name/id: ${plan.name ?? "(not reported)"}`);
@@ -98,7 +105,13 @@ async function main() {
   console.log("");
 
   try {
-    reportPlan(interpretPlan(await fetchJson("/plan")));
+    const plan = interpretPlan(await fetchJson("/plan"));
+    reportPlan(plan);
+    if (!planPassesPreflight(plan)) {
+      console.error("");
+      console.error("Plan response did not include a recognizable name or id.");
+      process.exitCode = 1;
+    }
   } catch (error) {
     console.error(`Could not read plan/account state: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;

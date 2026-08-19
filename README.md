@@ -75,7 +75,7 @@ npm run dev
 This starts the frontend UI only. Screenshot/text AI analysis calls `NEXT_PUBLIC_ANALYZER_URL`, which defaults to `http://localhost:8787/analyze` in development and is empty in a production build unless set explicitly - so a clean local checkout can browse the whole app, but AI analysis needs one of:
 
 - the hosted analyser: set `NEXT_PUBLIC_ANALYZER_URL=https://planaround-ai.0jacklee05.workers.dev/analyze` before `npm run dev`; or
-- a local analyser against a local Ollama model: `npm run ai:local` (see [scripts/localAnalyzer.ts](scripts/localAnalyzer.ts)), which listens on `http://localhost:8787/analyze` - the default the frontend already expects in development.
+- a local analyser against a local Ollama model: `npm run ai:local` (see [scripts/localAnalyzer.ts](scripts/localAnalyzer.ts)), which listens on `http://localhost:8787/analyze` - the default the frontend already expects in development. This local analyser supports text assignment-brief analysis only; it rejects image input, so timetable/assignment **screenshots** still need the hosted Worker even in local development.
 
 `FEATHERLESS_API_KEY` is a Cloudflare Worker secret only. The frontend never reads it and it must never be prefixed with `NEXT_PUBLIC_`.
 
