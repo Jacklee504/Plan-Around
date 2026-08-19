@@ -44,6 +44,8 @@ const statusCopy: Record<PlanStatus, { label: string; detail: string; className:
   },
 };
 
+const MAX_TIMER_DELAY_MS = 24 * 60 * 60 * 1000;
+
 function formatHours(hours: number) {
   return `${Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1)}h`;
 }
@@ -127,7 +129,13 @@ export function PlanWorkspace() {
       return earliest === null ? startMs : Math.min(earliest, startMs);
     }, null);
     if (nextBoundary === null) return;
-    const timer = window.setTimeout(() => setNow(new Date()), nextBoundary - now.getTime() + 1000);
+    // Browser timers pass their delay through a Web IDL `long` (signed 32-bit):
+    // a delay beyond ~24.86 days overflows and gets treated as 0, which would
+    // otherwise let a far-future block schedule an immediate, self-repeating
+    // timeout. Capping the delay just re-checks at most once a day until the
+    // boundary is close enough to target exactly.
+    const delay = Math.min(nextBoundary - now.getTime() + 1000, MAX_TIMER_DELAY_MS);
+    const timer = window.setTimeout(() => setNow(new Date()), delay);
     return () => window.clearTimeout(timer);
   }, [studyBlocks, now]);
 
