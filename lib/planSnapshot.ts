@@ -132,16 +132,21 @@ export type PlanChangeReason =
   | "dated-commitments"
   | "planning-preferences";
 
+// The minimum fields a fingerprint needs before per-category comparison is
+// meaningful. planningPreferences is deliberately excluded - it's omitted
+// for default preferences by design, not a sign of a malformed/legacy shape.
+const REQUIRED_SNAPSHOT_FIELDS = ["assignment", "module", "timetableEntries", "commitments", "datedCommitments"] as const;
+
 function parseStoredSnapshot(storedFingerprint: string): ReturnType<typeof createPlanInputSnapshot> | null {
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(storedFingerprint);
-    if (parsed && typeof parsed === "object" && "assignment" in parsed) {
-      return parsed as ReturnType<typeof createPlanInputSnapshot>;
-    }
+    parsed = JSON.parse(storedFingerprint);
   } catch {
-    // Malformed JSON - handled the same as an unrecognised shape below.
+    return null;
   }
-  return null;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  if (!REQUIRED_SNAPSHOT_FIELDS.every((field) => field in parsed)) return null;
+  return parsed as ReturnType<typeof createPlanInputSnapshot>;
 }
 
 /**

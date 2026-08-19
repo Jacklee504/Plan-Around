@@ -1055,6 +1055,13 @@ describe("plan change reasons", () => {
     expect(getPlanChangeReasons(JSON.stringify({ unexpected: "shape" }), baseInputs)).toEqual(["assignment"]);
   });
 
+  it("falls back to a conservative reason instead of producing noisy per-field results for a partial/legacy shape", () => {
+    const partialSnapshot = JSON.parse(createPlanFingerprint(baseInputs)) as Record<string, unknown>;
+    delete partialSnapshot.datedCommitments;
+
+    expect(getPlanChangeReasons(JSON.stringify(partialSnapshot), baseInputs)).toEqual(["assignment"]);
+  });
+
   it("returns no reasons when there is no stored fingerprint yet", () => {
     expect(getPlanChangeReasons(undefined, baseInputs)).toEqual([]);
   });

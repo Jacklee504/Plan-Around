@@ -6,7 +6,7 @@ import { createPlanFingerprint, getPlanChangeReasons, getReservableStudyBlocks, 
 import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
-import { calculateRemainingWorkload, completedMinutes, replaceIncompleteBlocksForAssignment, studyBlockMinutes } from "@/lib/studyProgress";
+import { calculateRemainingWorkload, canCompleteStudyBlock, completedMinutes, replaceIncompleteBlocksForAssignment, studyBlockMinutes } from "@/lib/studyProgress";
 import { summarizeReplan, type ReplanSummary } from "@/lib/replanSummary";
 import { DEFAULT_PLANNING_PREFERENCES, normalizePlanningPreferences } from "@/lib/planningPreferences";
 import { OnboardingRequired } from "@/components/OnboardingRequired";
@@ -244,11 +244,13 @@ export function PlanWorkspace() {
 
   function toggleStudyBlockCompletion(blockId: string) {
     setStudyBlocks((current) =>
-      current.map((block) =>
-        block.id === blockId
-          ? { ...block, completedAt: block.completedAt ? undefined : new Date().toISOString() }
-          : block,
-      ),
+      current.map((block) => {
+        if (block.id !== blockId) return block;
+        if (block.completedAt) return { ...block, completedAt: undefined };
+        // A future session cannot be newly marked complete - see canCompleteStudyBlock.
+        if (!canCompleteStudyBlock(block)) return block;
+        return { ...block, completedAt: new Date().toISOString() };
+      }),
     );
   }
 
@@ -325,7 +327,7 @@ export function PlanWorkspace() {
 
           {isStoredPlanStale ? (
             <section className="border-y border-amber-200 bg-amber-50 px-5 py-4 text-amber-950" role="status">
-              <p className="font-semibold">Your availability changed.</p>
+              <p className="font-semibold">Your plan needs updating.</p>
               <p className="mt-1 text-sm leading-6">Replan the remaining work to keep this schedule realistic. Completed study time will be preserved.</p>
               {staleReasons.length ? <p className="mt-1 text-sm leading-6">Reason: {staleReasons.map((reason) => planChangeReasonCopy[reason]).join(", ")}</p> : null}
             </section>
@@ -386,7 +388,7 @@ export function PlanWorkspace() {
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Generated sessions</p>
                   <h2 id="study-blocks-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Your study blocks</h2>
                 </div>
-                <p className="text-sm text-[var(--muted-ink)]">Up to 3 hours a day where possible</p>
+                <p className="text-sm text-[var(--muted-ink)]">Aims for {formatHours(planningPreferences.dailyStudyTargetMinutes / 60)} a day where possible</p>
               </div>
               {Object.keys(groupedBlocks).length ? (
                 <div className="mt-5 space-y-6">
@@ -399,13 +401,22 @@ export function PlanWorkspace() {
                             <p className="font-semibold tabular-nums">{block.start}–{block.end}</p>
                             <p className="text-sm text-[var(--muted-ink)]">{block.taskName}</p>
                             <p className="text-sm font-semibold tabular-nums sm:text-right">{blockDuration(block)}</p>
-                            <button
-                              type="button"
-                              onClick={() => toggleStudyBlockCompletion(block.id)}
-                              className={`min-h-9 rounded-lg px-3 text-xs font-semibold sm:justify-self-end ${block.completedAt ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-[var(--accent)]"}`}
-                            >
-                              {block.completedAt ? "Completed" : "Mark complete"}
-                            </button>
+                            {block.completedAt || canCompleteStudyBlock(block) ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleStudyBlockCompletion(block.id)}
+                                className={`min-h-9 rounded-lg px-3 text-xs font-semibold sm:justify-self-end ${block.completedAt ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-[var(--accent)]"}`}
+                              >
+                                {block.completedAt ? "Completed" : "Mark complete"}
+                              </button>
+                            ) : (
+                              <span
+                                className="min-h-9 content-center px-3 text-xs font-semibold text-[var(--muted-ink)] sm:justify-self-end sm:text-right"
+                                title="You can mark this complete once the session starts."
+                              >
+                                Scheduled
+                              </span>
+                            )}
                           </li>
                         ))}
                       </ul>

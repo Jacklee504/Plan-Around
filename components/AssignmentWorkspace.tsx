@@ -6,7 +6,8 @@ import { analyzeAssignmentBrief, imageAnalysisIsAvailable } from "@/lib/assignme
 import { prepareAnalysisImage, type PreparedAnalysisImage } from "@/lib/analysisImage";
 import { assignmentAnalysisInputKey, type AssignmentAnalysisInput, type AssignmentAnalysisResponse, type GroundedField } from "@/lib/assignmentAnalysis";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
-import type { Assignment, AssignmentTask, Module } from "@/types";
+import { removeAssignmentPlanningState, restoreAssignmentPlanningState } from "@/lib/studyProgress";
+import type { Assignment, AssignmentTask, Module, StudyBlock } from "@/types";
 import { WorkloadBreakdown } from "@/components/WorkloadBreakdown";
 import { OnboardingRequired } from "@/components/OnboardingRequired";
 import { useOnboardingState } from "@/lib/onboarding";
@@ -24,6 +25,12 @@ type TaskDraft = {
   marks: string;
   complexity: "1" | "2" | "3";
   notes: string;
+};
+
+type DeletedAssignmentUndo = {
+  assignment: Assignment;
+  studyBlocks: StudyBlock[];
+  planSnapshot: string | undefined;
 };
 
 const emptyAssignmentDraft: AssignmentDraft = {
@@ -93,7 +100,7 @@ export function AssignmentWorkspace() {
   const [needsReplacementConfirmation, setNeedsReplacementConfirmation] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
-  const [deletedAssignment, setDeletedAssignment] = useState<Assignment | null>(null);
+  const [deletedAssignment, setDeletedAssignment] = useState<DeletedAssignmentUndo | null>(null);
   const [selectedWorkloadAssignmentId, setSelectedWorkloadAssignmentId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -315,16 +322,43 @@ export function AssignmentWorkspace() {
   }
 
   function deleteAssignment(assignment: Assignment) {
+    // Deletion removes the assignment's planning state (StudyBlocks, plan
+    // snapshot) as one coherent operation, not just the Assignment record -
+    // otherwise orphaned StudyBlocks keep appearing in Calendar and can keep
+    // reserving time for a deleted assignment. Undo restores all three together.
+    const { remainingStudyBlocks, remainingPlanSnapshots, removedStudyBlocks, removedPlanSnapshot } = removeAssignmentPlanningState(
+      readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []),
+      readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {}),
+      assignment.id,
+    );
+
     setAssignments((current) => current.filter((item) => item.id !== assignment.id));
     if (selectedWorkloadAssignmentId === assignment.id) setSelectedWorkloadAssignmentId(null);
-    setDeletedAssignment(assignment);
+
+    if (removedStudyBlocks.length) writeStoredValue(storageKeys.studyBlocks, remainingStudyBlocks);
+    if (removedPlanSnapshot !== undefined) writeStoredValue(storageKeys.planSnapshots, remainingPlanSnapshots);
+
+    setDeletedAssignment({ assignment, studyBlocks: removedStudyBlocks, planSnapshot: removedPlanSnapshot });
     setStatus("");
   }
 
   function restoreDeletedAssignment() {
     if (!deletedAssignment) return;
-    setAssignments((current) => [...current, deletedAssignment]);
-    setSelectedWorkloadAssignmentId(deletedAssignment.id);
+    const { assignment, studyBlocks, planSnapshot } = deletedAssignment;
+
+    setAssignments((current) => [...current, assignment]);
+    setSelectedWorkloadAssignmentId(assignment.id);
+
+    const { restoredStudyBlocks, restoredPlanSnapshots } = restoreAssignmentPlanningState(
+      readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []),
+      readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {}),
+      assignment.id,
+      studyBlocks,
+      planSnapshot,
+    );
+    if (studyBlocks.length) writeStoredValue(storageKeys.studyBlocks, restoredStudyBlocks);
+    if (planSnapshot !== undefined) writeStoredValue(storageKeys.planSnapshots, restoredPlanSnapshots);
+
     setDeletedAssignment(null);
     setStatus("Assignment restored.");
   }
@@ -485,14 +519,6 @@ export function AssignmentWorkspace() {
           </div>
 
           <aside className="h-fit border-t border-[var(--line)] pt-5 lg:sticky lg:top-6">
-            {error ? <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{error}</p> : null}
-            {status && !status.startsWith("Suggestions applied.") ? <p className="mb-4 rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-sm leading-6 text-[var(--accent-strong)]" role="status">{status}</p> : null}
-
-            <button type="submit" disabled={!modules.length || hasUnconfirmedSelection} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">Save assignment</button>
-            <button type="button" onClick={resetForm} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">Clear form</button>
-          </aside>
-
-          <aside className="h-fit border-t border-[var(--line)] pt-5 lg:sticky lg:top-6">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Ready when you are</p>
             <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Save the assignment.</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">The next step will use these details to explain the workload before it schedules anything.</p>
@@ -513,7 +539,7 @@ export function AssignmentWorkspace() {
           <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--muted-ink)]">{assignments.length} saved</span>
         </div>
 
-        {deletedAssignment ? <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm"><span><span className="font-semibold">{deletedAssignment.title}</span> was deleted.</span><button type="button" onClick={restoreDeletedAssignment} className="min-h-10 rounded-lg px-3 font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]">Undo</button></div> : null}
+        {deletedAssignment ? <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm"><span><span className="font-semibold">{deletedAssignment.assignment.title}</span> was deleted.</span><button type="button" onClick={restoreDeletedAssignment} className="min-h-10 rounded-lg px-3 font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]">Undo</button></div> : null}
 
         {assignments.length ? (
           <ul className="mt-4 divide-y divide-[var(--line)] border-y border-[var(--line)]">

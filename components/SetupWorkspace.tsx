@@ -810,6 +810,7 @@ async function importTimetable(file: File | undefined) {
     setCommitments([]);
     setDatedCommitments([]);
     setTimetableEntries([]);
+    setStudyBlocks([]);
     setSelectedEntryId(null);
     setEventDraft(null);
     setImportState("idle");

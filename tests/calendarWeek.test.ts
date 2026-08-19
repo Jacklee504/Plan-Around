@@ -58,4 +58,26 @@ describe("calendarWeek", () => {
     expect(getMondayWeekKeyForDate(new Date(2025, 11, 29))).toBe("2025-12-29");
     expect(getMondayWeekKeyForDateKey("2026-01-04")).toBe("2025-12-29");
   });
+
+  it("moves by exactly seven calendar days across the late-March DST boundary", () => {
+    // Ireland's clocks spring forward on 2026-03-29 (a Sunday).
+    expect(addCalendarWeeks("2026-03-22", 1)).toBe("2026-03-29");
+    expect(calendarDateForDay("2026-03-29", 1)).toBe("2026-03-30");
+  });
+
+  it("moves by exactly seven calendar days across the late-October DST boundary", () => {
+    // Ireland's clocks fall back on 2026-10-25 (a Sunday).
+    expect(addCalendarWeeks("2026-10-18", 1)).toBe("2026-10-25");
+    expect(calendarDateForDay("2026-10-25", 1)).toBe("2026-10-26");
+  });
+
+  it("maps the calendar week start correctly on and around a DST changeover date", () => {
+    expect(getCalendarWeekStart(new Date(2026, 2, 30))).toBe("2026-03-29");
+    expect(getCalendarWeekStart(new Date(2026, 9, 26))).toBe("2026-10-25");
+  });
+
+  it("keeps Monday-based week keys correct immediately after a DST changeover", () => {
+    expect(getMondayWeekKeyForDate(new Date(2026, 2, 30))).toBe("2026-03-30");
+    expect(getMondayWeekKeyForDate(new Date(2026, 9, 26))).toBe("2026-10-26");
+  });
 });
