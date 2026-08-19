@@ -194,7 +194,7 @@ Outside the current scope:
 
 - calendar-provider integrations;
 - accounts and cloud persistence;
-- generic PDF OCR;
+- OCR for arbitrary documents beyond assignment briefs and timetables;
 - automatic replanning;
 - native mobile applications;
 - general-purpose task management.

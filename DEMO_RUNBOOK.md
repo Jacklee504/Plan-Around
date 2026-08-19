@@ -20,7 +20,7 @@ marked **(run manually before recording)**.
 - [ ] **(run manually)** Featherless balance/provider preflight is healthy: `FEATHERLESS_API_KEY="..." npm run preflight:provider`.
 - [ ] **(run manually, costs one real request)** One production text-analysis smoke has completed: `SMOKE_RUN_AI=1 npm run smoke:production`.
 - [ ] Clean browser/localStorage reset (open the production URL in a private/incognito window, or clear `plan-around.*` keys).
-- [ ] Sample files ready: [`demo/sample-assignment.txt`](demo/sample-assignment.txt) and [`public/semester-1-timetable.pdf`](public/semester-1-timetable.pdf).
+- [ ] Sample files ready: [`demo/sample-assignment.txt`](demo/sample-assignment.txt) and [`public/semester-1-timetable.pdf`](public/semester-1-timetable.pdf). To show PDF upload specifically (text-extraction and vision-fallback paths for both assignments and timetables), the `demo/` folder also has [`demo/software_engineering_project.pdf`](demo/software_engineering_project.pdf) (text-layer assignment PDF), [`demo/02_cloud_distributed_systems_full.png`](demo/02_cloud_distributed_systems_full.png) (scanned/image-only assignment input), and [`demo/demo_timetable_visual_grid.pdf`](demo/demo_timetable_visual_grid.pdf) (visual timetable PDF that falls back to vision).
 
 ## Demo sequence (~3 minutes)
 

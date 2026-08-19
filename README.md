@@ -12,9 +12,9 @@ Students usually know when an assignment is due, but not how much time it deserv
 
 ## What PlanAround does
 
-- Import a timetable screenshot and review the detected classes.
+- Import a timetable screenshot or PDF and review the detected classes. A PDF is parsed deterministically first; if it has no readable text layer (e.g. a scanned/visual timetable), it's rendered client-side and read visually instead.
 - Add recurring and one-off commitments.
-- Analyse or manually enter an assignment.
+- Analyse an assignment brief pasted as text, uploaded as a screenshot, or uploaded as a PDF (text extracted locally first, image analysis only if needed), or enter it manually.
 - Estimate workload from ECTS, assignment weighting and rubric structure.
 - Schedule study sessions around the student's actual availability.
 - Adjust scheduling preferences (study window, session length, daily target, time of day, study days) in Settings.
