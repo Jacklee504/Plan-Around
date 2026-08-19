@@ -25,6 +25,7 @@ import {
   type PreparedAnalysisImage,
 } from "@/lib/analysisImage";
 import { analyzeTimetableScreenshot } from "@/lib/timetableAnalyzer";
+import { imageAnalysisIsAvailable } from "@/lib/analyzerEndpoint";
 import type { TimetableAnalysisEntry } from "@/lib/timetableAnalysis";
 import { TimetableReview } from "@/components/TimetableReview";
 import type {
@@ -633,6 +634,14 @@ async function importTimetable(file: File | undefined) {
   // scanned/image-only page, or a different layout). Render the PDF locally
   // and prepare it exactly like an uploaded screenshot, reusing the existing
   // "ready to analyse" review step instead of failing outright.
+  if (!imageAnalysisIsAvailable()) {
+    setImportState("error");
+    setImportMessage(
+      "This PDF's timetable text could not be read directly, and reading it visually needs the hosted analyser. Use the deployed app or configure NEXT_PUBLIC_ANALYZER_URL locally.",
+    );
+    return;
+  }
+
   const version = timetableImageVersion.current + 1;
   timetableImageVersion.current = version;
   setIsPreparingTimetableImage(true);

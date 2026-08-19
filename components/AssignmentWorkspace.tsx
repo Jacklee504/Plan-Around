@@ -5,7 +5,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { analyzeAssignmentBrief, imageAnalysisIsAvailable } from "@/lib/assignmentAnalyzer";
 import { prepareAnalysisImage, type PreparedAnalysisImage } from "@/lib/analysisImage";
 import { extractPdfEmbeddedText, hasUsefulEmbeddedText, isPdfFile, renderPdfToImageFile } from "@/lib/pdfDocument";
-import { assignmentAnalysisInputKey, type AssignmentAnalysisInput, type AssignmentAnalysisResponse, type GroundedField } from "@/lib/assignmentAnalysis";
+import { assignmentAnalysisInputKey, MAX_BRIEF_CHARACTERS, type AssignmentAnalysisInput, type AssignmentAnalysisResponse, type GroundedField } from "@/lib/assignmentAnalysis";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { removeAssignmentPlanningState, restoreAssignmentPlanningState } from "@/lib/studyProgress";
 import type { Assignment, AssignmentTask, Module, StudyBlock } from "@/types";
@@ -185,10 +185,16 @@ export function AssignmentWorkspace() {
         const extractedText = await extractPdfEmbeddedText(file);
         if (imagePreparationVersion.current !== version) return;
         if (hasUsefulEmbeddedText(extractedText)) {
+          if (extractedText.length > MAX_BRIEF_CHARACTERS) {
+            throw new Error("This PDF contains more text than PlanAround can analyse at once. Upload the assignment brief rather than the full module handbook, or use a shorter PDF.");
+          }
           currentAnalysisInputKey.current = assignmentAnalysisInputKey({ kind: "text", text: extractedText });
           setBriefText(extractedText);
           setAnalysisImage(null);
           return;
+        }
+        if (!canAnalyseScreenshot) {
+          throw new Error("This PDF looks scanned or image-only, which needs the hosted analyser to read. Use the deployed app or configure NEXT_PUBLIC_ANALYZER_URL locally.");
         }
         const renderedImage = await renderPdfToImageFile(file);
         if (imagePreparationVersion.current !== version) return;
@@ -200,6 +206,9 @@ export function AssignmentWorkspace() {
         return;
       }
 
+      if (!canAnalyseScreenshot) {
+        throw new Error("Screenshot analysis uses the hosted analyser. Use the deployed app or configure NEXT_PUBLIC_ANALYZER_URL locally.");
+      }
       const image = await prepareAnalysisImage(file);
       if (imagePreparationVersion.current !== version) return;
       currentAnalysisInputKey.current = assignmentAnalysisInputKey(image);
@@ -461,14 +470,14 @@ export function AssignmentWorkspace() {
               </label>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-ink)]">or</span>
-                <label className={`inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] ${!canAnalyseScreenshot || isPreparingImage ? "cursor-not-allowed opacity-60" : ""}`}>
-                  <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" onChange={(event) => void selectAnalysisFile(event.target.files?.[0])} disabled={!canAnalyseScreenshot || isPreparingImage} className="sr-only" />
+                <label className={`inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] ${isPreparingImage ? "cursor-not-allowed opacity-60" : ""}`}>
+                  <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" onChange={(event) => void selectAnalysisFile(event.target.files?.[0])} disabled={isPreparingImage} className="sr-only" />
                   {isPreparingImage ? "Preparing file…" : "Upload screenshot or PDF"}
                 </label>
                 <p className="text-sm text-[var(--muted-ink)]">PNG, JPEG, WebP or PDF, up to 8 MB (15 MB for PDF). A PDF&apos;s text is read locally first; a scanned PDF is prepared as an image instead. Sent to the hosted analyser only when you click Analyse.</p>
               </div>
               {analysisImage ? <div className="mt-3 flex flex-wrap items-center gap-3 border-y border-[var(--line)] py-3 text-sm"><p className="font-semibold text-[var(--ink)]">Screenshot ready: {analysisImage.filename}</p><p className="text-[var(--muted-ink)]">Prepared for analysis, not saved.</p><button type="button" onClick={clearAnalysisImage} className="min-h-10 font-semibold text-[var(--accent-strong)] underline underline-offset-2">Remove screenshot</button></div> : null}
-              {!canAnalyseScreenshot ? <p className="mt-3 text-sm leading-6 text-[var(--muted-ink)]">Screenshot analysis uses the hosted analyser. Use the deployed app or configure <code>NEXT_PUBLIC_ANALYZER_URL</code> locally.</p> : null}
+              {!canAnalyseScreenshot ? <p className="mt-3 text-sm leading-6 text-[var(--muted-ink)]">Screenshots and scanned PDFs use the hosted analyser. A PDF with a text layer still works locally. Use the deployed app or configure <code>NEXT_PUBLIC_ANALYZER_URL</code> to enable the rest.</p> : null}
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={analyseBrief} disabled={(!briefText.trim() && !analysisImage) || isAnalysing || isPreparingImage} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">
                   {isAnalysing ? "Analysing source…" : analysisImage ? "Analyse screenshot with AI" : "Analyse brief with AI"}
