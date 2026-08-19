@@ -1,0 +1,31 @@
+Database Systems - Coursework 2: Relational Database Design Report
+
+Deadline: 14 November 2026
+Weighting: 40% of the module grade
+
+This coursework asks you to design and document a relational database for a small library
+lending system. Submit a single PDF report.
+
+Marking breakdown (100 marks total):
+
+1. Requirements analysis and ER diagram (20 marks)
+   - Identify at least six entities with realistic attributes.
+   - Show all relationships with correct cardinality.
+
+2. Normalised relational schema (30 marks)
+   - Provide table definitions in 3NF with primary and foreign keys.
+   - Justify each normalisation step in one short paragraph.
+
+3. SQL implementation (25 marks)
+   - Provide CREATE TABLE statements matching your schema.
+   - Provide five SELECT queries demonstrating joins, aggregation, and a subquery.
+
+4. Critical evaluation (15 marks)
+   - Discuss one design trade-off you made and why.
+   - Discuss how the schema would need to change to support fines and reservations.
+
+5. Report presentation (10 marks)
+   - Clear structure, labelled diagrams, and a table of contents.
+
+Late submissions follow the standard department policy. Use the module's referencing style
+for any external sources.

@@ -12,7 +12,10 @@
     "typecheck": "tsc --noEmit",
     "worker:types": "wrangler types worker/worker-configuration.d.ts --config worker/wrangler.jsonc",
     "worker:types:check": "wrangler types worker/worker-configuration.d.ts --config worker/wrangler.jsonc --check",
-    "worker:typecheck": "tsc --project worker/tsconfig.json --noEmit"
+    "worker:typecheck": "tsc --project worker/tsconfig.json --noEmit",
+    "verify:release": "npm test && npm run lint && npm run typecheck && npm run build && npm run worker:types:check && npm run worker:typecheck",
+    "smoke:production": "tsx scripts/productionSmoke.ts",
+    "preflight:provider": "tsx scripts/providerPreflight.ts"
   },
   "keywords": [],
   "author": "",

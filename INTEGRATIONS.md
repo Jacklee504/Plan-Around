@@ -27,6 +27,12 @@ Evaluated and deliberately left out of the running product, because none of them
 - **YouCam** — image enhancement/generation APIs. PlanAround already has an image-preparation path and the production vision model already accepts screenshots directly; an extra remote image processor would only add latency, privacy surface and failure modes without solving a real problem.
 - **Hawkeye** — a developer search/navigation tool whose current release supports Windows only; the development machine is macOS, so there is no integration path.
 
+## Operational notes
+
+- **Worker rate limits**: `worker/wrangler.jsonc` currently sets 3 requests/minute per client and 12 requests/minute globally on the analysis routes. Raising the global limit for concurrent judge traffic is a deliberate decision that depends on the live Featherless plan's concurrency and remaining credits, so it is left for whoever has that account access rather than changed speculatively here.
+- **Health check**: the Worker exposes `GET /health` (no provider call, no secrets) for cheap uptime checks; see [`scripts/productionSmoke.ts`](scripts/productionSmoke.ts).
+- **Provider preflight**: [`scripts/providerPreflight.ts`](scripts/providerPreflight.ts) reports Featherless plan/model status from `FEATHERLESS_API_KEY` without printing the key. Run it before a demo to confirm credits/model availability.
+
 ## Domain
 
 Canonical URL: `https://planaround.vercel.app/`

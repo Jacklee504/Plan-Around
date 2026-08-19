@@ -231,7 +231,7 @@ async function requestProviderOnce(
       headers: {
         Authorization: `Bearer ${env.FEATHERLESS_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://plan-around.vercel.app/",
+        "HTTP-Referer": "https://planaround.vercel.app/",
         "X-Title": "PlanAround",
       },
       body: JSON.stringify({
@@ -406,6 +406,14 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
     async fetch(request: Request, env: Env): Promise<Response> {
       const url = new URL(request.url);
       const origin = request.headers.get("Origin");
+
+      if (url.pathname === "/health") {
+        if (origin && !isAllowedOrigin(origin, env)) return jsonResponse({ error: "Origin is not allowed." }, 403, null, env);
+        if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin, env) });
+        if (request.method !== "GET") return jsonResponse({ error: "Not found." }, 404, origin, env);
+        return jsonResponse({ ok: true, service: "planaround-ai" }, 200, origin, env);
+      }
+
       const route = url.pathname === assignmentRoute.pathname
         ? assignmentRoute
         : url.pathname === timetableRoute.pathname
