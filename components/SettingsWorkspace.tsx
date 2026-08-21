@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { CALENDAR_DAYS } from "@/lib/calendarLayout";
+import { applyPlanAroundImport, buildPlanAroundExport, parsePlanAroundExport, serializePlanAroundExport } from "@/lib/dataPortability";
+import { buildStudyCalendarIcs } from "@/lib/icsExport";
 import { DEFAULT_PLANNING_PREFERENCES, normalizePlanningPreferences } from "@/lib/planningPreferences";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
-import type { PlanningPreferences, PreferredStudyTime } from "@/types";
+import {
+  getNotificationPermission,
+  isNotificationSupported,
+  readNotificationsEnabled,
+  requestNotificationPermission,
+  writeNotificationsEnabled,
+} from "@/lib/studyNotifications";
+import type { Commitment, DatedCommitment, PlanningPreferences, PreferredStudyTime, StudyBlock, TimetableEntry } from "@/types";
 
 const dayLabels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -45,10 +54,18 @@ const selectClassName =
 export function SettingsWorkspace() {
   const [preferences, setPreferences] = useState<PlanningPreferences>(DEFAULT_PLANNING_PREFERENCES);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [notificationSupported, setNotificationSupported] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [dataMessage, setDataMessage] = useState<string | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
       setPreferences(normalizePlanningPreferences(readStoredValue<unknown>(storageKeys.planningPreferences, DEFAULT_PLANNING_PREFERENCES)));
+      setNotificationSupported(isNotificationSupported());
+      setNotificationPermission(getNotificationPermission());
+      setNotificationsEnabled(readNotificationsEnabled());
       setIsLoaded(true);
     }, 0);
 
@@ -58,6 +75,64 @@ export function SettingsWorkspace() {
   useEffect(() => {
     if (isLoaded) writeStoredValue(storageKeys.planningPreferences, preferences);
   }, [isLoaded, preferences]);
+
+  function downloadTextFile(filename: string, content: string, mimeType: string) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportData() {
+    const today = new Date().toISOString().slice(0, 10);
+    downloadTextFile(`planaround-backup-${today}.json`, serializePlanAroundExport(buildPlanAroundExport()), "application/json");
+    setDataMessage("Backup downloaded.");
+  }
+
+  function downloadIcs() {
+    const ics = buildStudyCalendarIcs({
+      studyBlocks: readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []),
+      timetableEntries: readStoredValue<TimetableEntry[]>(storageKeys.timetableEntries, []),
+      commitments: readStoredValue<Commitment[]>(storageKeys.commitments, []),
+      datedCommitments: readStoredValue<DatedCommitment[]>(storageKeys.datedCommitments, []),
+    });
+    downloadTextFile("planaround-calendar.ics", ics, "text/calendar");
+  }
+
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const parsed = parsePlanAroundExport(await file.text());
+    if (!parsed) {
+      setDataMessage("That file doesn't look like a PlanAround backup.");
+      return;
+    }
+
+    if (!window.confirm("Importing will overwrite all current PlanAround data on this device. Continue?")) return;
+
+    applyPlanAroundImport(parsed);
+    window.location.reload();
+  }
+
+  async function enableNotifications() {
+    const permission = await requestNotificationPermission();
+    setNotificationPermission(permission);
+    if (permission === "granted") {
+      writeNotificationsEnabled(true);
+      setNotificationsEnabled(true);
+    }
+  }
+
+  function toggleNotifications() {
+    const next = !notificationsEnabled;
+    writeNotificationsEnabled(next);
+    setNotificationsEnabled(next);
+  }
 
   function updateStudyStart(nextStart: string) {
     const nextEnd = minutesFromTime(preferences.studyEnd) - minutesFromTime(nextStart) < 60
@@ -170,6 +245,31 @@ export function SettingsWorkspace() {
         </div>
       </section>
 
+      <section className="border-b border-[var(--line)] pb-6" aria-labelledby="notifications-heading">
+        <h2 id="notifications-heading" className="text-sm font-semibold">Notifications</h2>
+        {!notificationSupported ? (
+          <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">This browser doesn&apos;t support notifications.</p>
+        ) : notificationPermission === "denied" ? (
+          <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">Notifications are blocked for this site in your browser settings.</p>
+        ) : notificationPermission !== "granted" ? (
+          <>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Get a browser notification 15 minutes before a scheduled study session starts, while a PlanAround tab is open.</p>
+            <button type="button" onClick={enableNotifications} className="mt-3 min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
+              Enable session reminders
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button type="button" onClick={toggleNotifications} aria-pressed={notificationsEnabled} className={toggleButtonClassName(notificationsEnabled)}>
+                {notificationsEnabled ? "Reminders on" : "Reminders off"}
+              </button>
+            </div>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">A notification appears about 15 minutes before a scheduled study session starts. This only fires while a PlanAround tab is open in this browser.</p>
+          </>
+        )}
+      </section>
+
       <section aria-labelledby="defaults-heading">
         <h2 id="defaults-heading" className="text-sm font-semibold">Defaults &amp; data</h2>
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -179,6 +279,21 @@ export function SettingsWorkspace() {
           <p className="text-sm text-[var(--muted-ink)]">Saved on this device</p>
         </div>
         <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Planning preferences are stored in this browser with the rest of your PlanAround data. This only resets scheduling preferences - your Calendar, assignments and study progress are untouched.</p>
+
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={exportData} className="min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
+            Export backup (.json)
+          </button>
+          <button type="button" onClick={() => importFileInputRef.current?.click()} className="min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
+            Import backup
+          </button>
+          <button type="button" onClick={downloadIcs} className="min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
+            Download calendar (.ics)
+          </button>
+          <input ref={importFileInputRef} type="file" accept="application/json" onChange={handleImportFile} className="hidden" aria-hidden="true" tabIndex={-1} />
+        </div>
+        {dataMessage ? <p className="mt-3 text-sm text-[var(--muted-ink)]" role="status">{dataMessage}</p> : null}
+        <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround has no account or cloud sync - all data lives only in this browser. Export a backup to move it to another device or protect against clearing your browser data. Importing a backup overwrites everything currently stored here. The calendar download covers study sessions, classes and commitments as a read-only .ics file for Google/Outlook/Apple Calendar.</p>
       </section>
     </div>
   );

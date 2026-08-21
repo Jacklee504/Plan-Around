@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { calculateOverallInsights } from "@/lib/insights";
 import { createPlanFingerprint, getPlanChangeReasons, getReservableStudyBlocks, type PlanChangeReason } from "@/lib/planSnapshot";
 import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
@@ -142,6 +143,10 @@ export function PlanWorkspace() {
   const schedulableAssignments = useMemo(
     () => assignments.filter((assignment) => modules.some((module) => module.id === assignment.moduleId)),
     [assignments, modules],
+  );
+  const overallInsights = useMemo(
+    () => calculateOverallInsights(assignments, modules, studyBlocks, now),
+    [assignments, modules, studyBlocks, now],
   );
   const selectedAssignment = schedulableAssignments.find((assignment) => assignment.id === selectedAssignmentId) ?? null;
   const selectedModule = selectedAssignment ? modules.find((module) => module.id === selectedAssignment.moduleId) ?? null : null;
@@ -299,6 +304,26 @@ export function PlanWorkspace() {
 
   return (
     <div className="space-y-9">
+      <section className="border-b border-[var(--line)] pb-6" aria-labelledby="overview-heading">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Overview</p>
+        <h2 id="overview-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Progress across everything</h2>
+        <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+          <div><dt className="text-sm text-[var(--muted-ink)]">Completed overall</dt><dd className="mt-1 text-xl font-semibold tracking-[-0.03em]">{formatHours(overallInsights.totalCompletedMinutes / 60)}</dd></div>
+          <div><dt className="text-sm text-[var(--muted-ink)]">Completed this week</dt><dd className="mt-1 text-xl font-semibold tracking-[-0.03em]">{formatHours(overallInsights.thisWeekCompletedMinutes / 60)}</dd></div>
+          <div><dt className="text-sm text-[var(--muted-ink)]">Sessions completed</dt><dd className="mt-1 text-xl font-semibold tracking-[-0.03em]">{overallInsights.completedSessionCount}</dd></div>
+        </dl>
+        {overallInsights.perAssignment.length ? (
+          <ul className="mt-4 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+            {overallInsights.perAssignment.map((insight) => (
+              <li key={insight.assignmentId} className="flex items-center justify-between gap-4 py-2.5 text-sm">
+                <span>{insight.title}</span>
+                <span className="font-semibold tabular-nums">{Math.round(insight.completionRate * 100)}% · {formatHours(insight.completedMinutes / 60)} of {formatHours(insight.recommendedMinutes / 60)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
       <section className="grid gap-5 border-y border-[var(--line)] py-6 lg:grid-cols-[minmax(0,1fr)_14rem] lg:items-end" aria-labelledby="plan-controls-heading">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Assignment plan</p>

@@ -8,6 +8,7 @@ export const storageKeys = {
   studyBlocks: "plan-around.study-blocks",
   planSnapshots: "plan-around.plan-snapshots",
   planningPreferences: "plan-around.planning-preferences",
+  notificationsEnabled: "plan-around.notifications-enabled",
 } as const;
 
 export function readStoredValue<T>(key: string, fallback: T): T {
