@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="PlanAround">
+  <rect width="512" height="512" fill="#1a6f44"/>
+  <path fill="#fcfaf3" d="M136 151c0-22.1 17.9-40 40-40h160c22.1 0 40 17.9 40 40v33H136v-33Z"/>
+  <path fill="#fcfaf3" d="M136 201h240v171c0 22.1-17.9 40-40 40H176c-22.1 0-40-17.9-40-40V201Z"/>
+  <rect x="177" y="83" width="34" height="88" rx="17" fill="#fcfaf3"/>
+  <rect x="301" y="83" width="34" height="88" rx="17" fill="#fcfaf3"/>
+  <rect x="170" y="239" width="85" height="39" rx="13" fill="#1a6f44"/>
+  <rect x="271" y="320" width="72" height="39" rx="13" fill="#1a6f44"/>
+  <rect x="278" y="239" width="65" height="39" rx="13" fill="#e5b75b"/>
+  <path d="M190 307h64c21 0 38 17 38 38v6c0 21 17 38 38 38h9" fill="none" stroke="#e5b75b" stroke-linecap="round" stroke-width="18"/>
+  <circle cx="347" cy="389" r="36" fill="#e5b75b"/>
+  <path d="m329 389 12 12 24-25" fill="none" stroke="#fcfaf3" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+</svg>

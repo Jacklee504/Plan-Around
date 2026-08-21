@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useOnboardingState } from "@/lib/onboarding";
@@ -29,9 +30,13 @@ export function AppShell({ children, eyebrow, title, description }: AppShellProp
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-5 pb-10 pt-5 sm:px-8 sm:pt-8">
       <header className="flex items-center justify-between gap-4 border-b border-[var(--line)] pb-5">
         <Link href="/setup" className="group inline-flex items-center gap-3 rounded-md">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--accent)] text-sm font-bold text-white shadow-sm transition-transform duration-200 group-hover:-rotate-3">
-            PA
-          </span>
+          <Image
+            src="/icons/icon-192.png"
+            alt=""
+            width={36}
+            height={36}
+            className="h-9 w-9 transition-transform duration-200 group-hover:-rotate-3"
+          />
           <span>
             <span className="block text-sm font-semibold tracking-[-0.02em]">PlanAround</span>
             <span className="block text-xs text-[var(--muted-ink)]">Fit assignments around your actual week.</span>
