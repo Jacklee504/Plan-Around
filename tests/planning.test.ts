@@ -12,7 +12,7 @@ import {
   validateAssignmentAnalysisInput,
 } from "../lib/assignmentAnalysis";
 import { generateStudySchedule } from "../lib/scheduler";
-import { calendarBlockDensity } from "../lib/calendarLayout";
+import { blockPosition, calendarBlockDensity, calendarVisibleRange } from "../lib/calendarLayout";
 import { MAX_TIMETABLE_COMPLETION_TOKENS, validateTimetableAnalysis } from "../lib/timetableAnalysis";
 import { calculateWorkloadBreakdown } from "../lib/workload";
 import { DEFAULT_PLANNING_PREFERENCES } from "../lib/planningPreferences";
@@ -84,6 +84,44 @@ describe("calendar block density", () => {
     expect(calendarBlockDensity("09:00", "09:59")).toBe("compact");
     expect(calendarBlockDensity("09:00", "10:00")).toBe("tight");
     expect(calendarBlockDensity("09:00", "10:01")).toBe("normal");
+  });
+});
+
+describe("calendar visible range", () => {
+  it("trims a normal class day to a padded, eight-hour timetable", () => {
+    expect(
+      calendarVisibleRange({
+        timetableEntries: [
+          timetableEntry({ start: "09:00", end: "10:00" }),
+          timetableEntry({ id: "class-2", start: "13:00", end: "15:00" }),
+        ],
+      }),
+    ).toEqual({ startHour: 8, endHour: 16 });
+  });
+
+  it("keeps late study time visible and can include a future preference window", () => {
+    expect(
+      calendarVisibleRange({
+        timetableEntries: [timetableEntry({ start: "09:00", end: "10:00" })],
+        studyBlocks: [{
+          id: "block-1",
+          assignmentId: "assignment-1",
+          date: "2026-08-20",
+          start: "18:00",
+          end: "20:00",
+          taskId: "implementation",
+          taskName: "Implementation",
+        }],
+        preferredHours: { start: "17:00", end: "21:00" },
+      }),
+    ).toEqual({ startHour: 8, endHour: 22 });
+  });
+
+  it("repositions blocks from the compact window rather than the fixed day start", () => {
+    expect(blockPosition("10:00", "11:30", 9)).toEqual({
+      top: "64px",
+      height: "96px",
+    });
   });
 });
 

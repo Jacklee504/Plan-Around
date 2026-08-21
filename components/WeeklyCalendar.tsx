@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   blockPosition,
   CALENDAR_DAYS,
   CALENDAR_END_HOUR,
   CALENDAR_START_HOUR,
   calendarBlockDensity,
+  calendarHeight,
+  calendarVisibleRange,
   HOUR_HEIGHT,
+  type CalendarTimeRange,
 } from "@/lib/calendarLayout";
 import { calendarDateForDay, localDateKey } from "@/lib/calendarWeek";
 import type {
@@ -49,17 +52,20 @@ type WeeklyCalendarProps = {
   onSelectEmptySlot?: (slot: CalendarSlot) => void;
 };
 
-const calendarHeight = (CALENDAR_END_HOUR - CALENDAR_START_HOUR) * HOUR_HEIGHT;
+const FULL_DAY_RANGE: CalendarTimeRange = {
+  startHour: CALENDAR_START_HOUR,
+  endHour: CALENDAR_END_HOUR,
+};
 
 function dateForDay(visibleWeekStart: string | undefined, dayOfWeek: number) {
   return visibleWeekStart ? calendarDateForDay(visibleWeekStart, dayOfWeek) : undefined;
 }
 
-function snappedTime(offsetY: number) {
-  const rawMinutes = CALENDAR_START_HOUR * 60 + (offsetY / HOUR_HEIGHT) * 60;
+function snappedTime(offsetY: number, startHour: number, endHour: number) {
+  const rawMinutes = startHour * 60 + (offsetY / HOUR_HEIGHT) * 60;
   const snappedMinutes = Math.max(
-    CALENDAR_START_HOUR * 60,
-    Math.min(CALENDAR_END_HOUR * 60 - 30, Math.round(rawMinutes / 30) * 30),
+    startHour * 60,
+    Math.min(endHour * 60 - 30, Math.round(rawMinutes / 30) * 30),
   );
   return `${String(Math.floor(snappedMinutes / 60)).padStart(2, "0")}:${String(snappedMinutes % 60).padStart(2, "0")}`;
 }
@@ -84,31 +90,31 @@ function cardPadding(density: ReturnType<typeof calendarBlockDensity>) {
     : "px-2 py-1 text-[14px] leading-[18px]";
 }
 
-function HourAxis() {
+function HourAxis({ range }: { range: CalendarTimeRange }) {
   return (
     <div
       className="relative border-r border-[var(--line)] text-xs text-[var(--muted-ink)]"
-      style={{ height: calendarHeight }}
+      style={{ height: calendarHeight(range) }}
     >
       {Array.from(
-        { length: CALENDAR_END_HOUR - CALENDAR_START_HOUR + 1 },
+        { length: range.endHour - range.startHour + 1 },
         (_, index) => (
           <span
             key={index}
             className="absolute right-1.5 tabular-nums sm:right-2"
             style={{ top: index * HOUR_HEIGHT }}
-          >{`${CALENDAR_START_HOUR + index}:00`}</span>
+          >{`${range.startHour + index}:00`}</span>
         ),
       )}
     </div>
   );
 }
 
-function HourGridLines() {
+function HourGridLines({ range }: { range: CalendarTimeRange }) {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
       {Array.from(
-        { length: CALENDAR_END_HOUR - CALENDAR_START_HOUR + 1 },
+        { length: range.endHour - range.startHour + 1 },
         (_, index) => (
           <div
             key={index}
@@ -124,6 +130,7 @@ function HourGridLines() {
 type DayColumnProps = {
   dayOfWeek: number;
   currentDate: string | undefined;
+  range: CalendarTimeRange;
   timetableEntries: TimetableEntry[];
   commitments: Commitment[];
   datedCommitments: DatedCommitment[];
@@ -139,6 +146,7 @@ type DayColumnProps = {
 function DayColumn({
   dayOfWeek,
   currentDate,
+  range,
   timetableEntries,
   commitments,
   datedCommitments,
@@ -164,7 +172,7 @@ function DayColumn({
         onSelectEmptySlot({
           dayOfWeek,
           date: currentDate,
-          start: snappedTime(event.clientY - bounds.top),
+          start: snappedTime(event.clientY - bounds.top, range.startHour, range.endHour),
         });
       }}
     >
@@ -193,7 +201,7 @@ function DayColumn({
                 onSelectEntry(entry);
               }}
               className={className}
-              style={blockPosition(entry.start, entry.end)}
+              style={blockPosition(entry.start, entry.end, range.startHour)}
             >
               {content}
             </button>
@@ -201,7 +209,7 @@ function DayColumn({
             <div
               key={entry.id}
               className={className}
-              style={blockPosition(entry.start, entry.end)}
+              style={blockPosition(entry.start, entry.end, range.startHour)}
             >
               {content}
             </div>
@@ -232,6 +240,7 @@ function DayColumn({
               style={blockPosition(
                 commitment.start,
                 commitment.end,
+                range.startHour,
               )}
             >
               {content}
@@ -243,6 +252,7 @@ function DayColumn({
               style={blockPosition(
                 commitment.start,
                 commitment.end,
+                range.startHour,
               )}
             >
               {content}
@@ -275,6 +285,7 @@ function DayColumn({
               style={blockPosition(
                 commitment.start,
                 commitment.end,
+                range.startHour,
               )}
             >
               {content}
@@ -286,6 +297,7 @@ function DayColumn({
               style={blockPosition(
                 commitment.start,
                 commitment.end,
+                range.startHour,
               )}
             >
               {content}
@@ -305,7 +317,7 @@ function DayColumn({
             <div
               key={block.id}
               className={`absolute left-1 right-1 z-20 overflow-hidden rounded-lg border text-left ${cardPadding(density)} ${completed ? "border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)]" : "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"}`}
-              style={blockPosition(block.start, block.end)}
+              style={blockPosition(block.start, block.end, range.startHour)}
             >
               <CalendarCard
                 label={block.taskName}
@@ -336,8 +348,28 @@ export function WeeklyCalendar({
     (dayOfWeek) => dateForDay(visibleWeekStart, dayOfWeek) === todayDateKey,
   );
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(todayDayOfWeek ?? 1);
+  const [showFullDay, setShowFullDay] = useState(false);
+
+  // Trims the grid to the hours actually in use (padded, minimum 8h) so a
+  // week of 9-5 classes doesn't render the full 08:00-22:00 range - never
+  // hides anything, just the empty hours around it. "Show full day" opts
+  // back into the fixed range.
+  const compactRange = useMemo(
+    () =>
+      calendarVisibleRange({
+        timetableEntries,
+        commitments,
+        datedCommitments,
+        studyBlocks,
+      }),
+    [commitments, datedCommitments, studyBlocks, timetableEntries],
+  );
+  const isAlreadyFullDay =
+    compactRange.startHour === CALENDAR_START_HOUR && compactRange.endHour === CALENDAR_END_HOUR;
+  const visibleRange = showFullDay ? FULL_DAY_RANGE : compactRange;
 
   const dayColumnProps = {
+    range: visibleRange,
     timetableEntries,
     commitments,
     datedCommitments,
@@ -352,6 +384,22 @@ export function WeeklyCalendar({
 
   return (
     <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
+      {!isAlreadyFullDay ? (
+        <div className="flex items-center justify-end gap-3 border-b border-[var(--line)] bg-[var(--surface-soft)] px-3 py-2 sm:px-4">
+          <span className="text-xs tabular-nums text-[var(--muted-ink)]" aria-live="polite">
+            {`${String(visibleRange.startHour).padStart(2, "0")}:00–${String(visibleRange.endHour).padStart(2, "0")}:00`}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowFullDay((current) => !current)}
+            className="min-h-9 rounded-lg px-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            aria-pressed={showFullDay}
+          >
+            {showFullDay ? "Use compact hours" : "Show full day"}
+          </button>
+        </div>
+      ) : null}
+
       {/* Seven columns don't fit a phone screen readably, so below md this
           swaps for a single-day agenda with a day switcher instead of
           shrinking or horizontally scrolling a dense grid. */}
@@ -380,9 +428,9 @@ export function WeeklyCalendar({
             })}
           </div>
           <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] py-4">
-            <HourAxis />
-            <div className="relative" style={{ height: calendarHeight }}>
-              <HourGridLines />
+            <HourAxis range={visibleRange} />
+            <div className="relative" style={{ height: calendarHeight(visibleRange) }}>
+              <HourGridLines range={visibleRange} />
               <div className="relative grid h-full grid-cols-7">
                 {CALENDAR_DAYS.map((dayOfWeek) => (
                   <DayColumn
@@ -429,9 +477,9 @@ export function WeeklyCalendar({
           })}
         </div>
         <div className="grid grid-cols-[3rem_minmax(0,1fr)] py-4">
-          <HourAxis />
-          <div className="relative" style={{ height: calendarHeight }}>
-            <HourGridLines />
+          <HourAxis range={visibleRange} />
+          <div className="relative" style={{ height: calendarHeight(visibleRange) }}>
+            <HourGridLines range={visibleRange} />
             <DayColumn
               dayOfWeek={selectedDayOfWeek}
               currentDate={dateForDay(visibleWeekStart, selectedDayOfWeek)}
