@@ -5,6 +5,7 @@ import { CALENDAR_DAYS } from "@/lib/calendarLayout";
 import { applyPlanAroundImport, buildPlanAroundExport, parsePlanAroundExport, serializePlanAroundExport } from "@/lib/dataPortability";
 import { buildStudyCalendarIcs } from "@/lib/icsExport";
 import { DEFAULT_PLANNING_PREFERENCES, normalizePlanningPreferences } from "@/lib/planningPreferences";
+import { resetForNewSemester } from "@/lib/semesterReset";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import {
   getNotificationPermission,
@@ -100,6 +101,20 @@ export function SettingsWorkspace() {
       datedCommitments: readStoredValue<DatedCommitment[]>(storageKeys.datedCommitments, []),
     });
     downloadTextFile("planaround-calendar.ics", ics, "text/calendar");
+  }
+
+  function startNewSemester() {
+    if (
+      !window.confirm(
+        "This downloads a backup of your current timetable, modules, commitments and assignments, then clears them so you can set up a new term. Your scheduling preferences are kept. Continue?",
+      )
+    )
+      return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    downloadTextFile(`planaround-semester-backup-${today}.json`, serializePlanAroundExport(buildPlanAroundExport()), "application/json");
+    resetForNewSemester();
+    window.location.reload();
   }
 
   async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
@@ -294,6 +309,14 @@ export function SettingsWorkspace() {
         </div>
         {dataMessage ? <p className="mt-3 text-sm text-[var(--muted-ink)]" role="status">{dataMessage}</p> : null}
         <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround has no account or cloud sync - all data lives only in this browser. Export a backup to move it to another device or protect against clearing your browser data. Importing a backup overwrites everything currently stored here. The calendar download covers study sessions, classes and commitments as a read-only .ics file for Google/Outlook/Apple Calendar.</p>
+
+        <div className="mt-6 border-t border-[var(--line)] pt-5">
+          <p className="text-sm font-medium">New semester</p>
+          <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Downloads a backup, then clears your timetable, modules, commitments and assignments so you can set up a new term from scratch. Scheduling preferences are kept.</p>
+          <button type="button" onClick={startNewSemester} className="mt-3 min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:text-red-700">
+            Start new semester
+          </button>
+        </div>
       </section>
     </div>
   );
