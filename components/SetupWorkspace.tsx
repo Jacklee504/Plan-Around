@@ -99,7 +99,7 @@ const weekRangeMonthYearFormatter = new Intl.DateTimeFormat("en-IE", {
 });
 function formatVisibleWeekRange(weekStart: string) {
   const start = dateFromDateKey(weekStart);
-  const end = dateFromDateKey(calendarDateForDay(weekStart, 6));
+  const end = dateFromDateKey(calendarDateForDay(weekStart, 0));
   const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
   const startLabel = sameMonth ? weekRangeDayFormatter.format(start) : weekRangeMonthFormatter.format(start);
   return `${startLabel}–${weekRangeMonthYearFormatter.format(end)}`;

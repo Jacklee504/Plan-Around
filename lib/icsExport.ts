@@ -1,4 +1,4 @@
-import { addCalendarWeeks, dateFromDateKey, getCalendarWeekStart, getMondayWeekKeyForDate } from "./calendarWeek";
+import { addCalendarWeeks, calendarDateForDay, dateFromDateKey, getCalendarWeekStart, getMondayWeekKeyForDate } from "./calendarWeek";
 import type { Commitment, DatedCommitment, StudyBlock, TimetableEntry } from "@/types";
 
 const DEFAULT_WEEKS_AHEAD = 8;
@@ -81,18 +81,16 @@ export function buildStudyCalendarIcs(input: IcsExportInput, options: IcsExportO
 
   const firstWeekStart = getCalendarWeekStart(now);
   for (let week = 0; week < weeksAhead; week += 1) {
-    const weekStartDate = dateFromDateKey(addCalendarWeeks(firstWeekStart, week));
+    const weekStartKey = addCalendarWeeks(firstWeekStart, week);
 
     input.timetableEntries.forEach((entry) => {
-      const date = new Date(weekStartDate);
-      date.setDate(date.getDate() + entry.dayOfWeek);
+      const date = dateFromDateKey(calendarDateForDay(weekStartKey, entry.dayOfWeek));
       if (!isTimetableEntryActiveOnDate(entry, date)) return;
       lines.push(...buildEvent(`timetable-${entry.id}-${week}`, `${entry.moduleCode || entry.moduleName} (${entry.sessionType})`, date, entry.start, entry.end, dtstamp));
     });
 
     input.commitments.forEach((commitment) => {
-      const date = new Date(weekStartDate);
-      date.setDate(date.getDate() + commitment.dayOfWeek);
+      const date = dateFromDateKey(calendarDateForDay(weekStartKey, commitment.dayOfWeek));
       lines.push(...buildEvent(`commitment-${commitment.id}-${week}`, commitment.label, date, commitment.start, commitment.end, dtstamp));
     });
   }

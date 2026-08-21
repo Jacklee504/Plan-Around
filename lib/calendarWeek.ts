@@ -8,9 +8,9 @@ export function dateFromDateKey(dateKey: string) {
 }
 
 export function getCalendarWeekStart(date: Date = new Date()) {
-  const sunday = dateFromDateKey(localDateKey(date));
-  sunday.setDate(sunday.getDate() - sunday.getDay());
-  return localDateKey(sunday);
+  const monday = dateFromDateKey(localDateKey(date));
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  return localDateKey(monday);
 }
 
 export function addCalendarWeeks(weekStart: string, weeks: number) {
@@ -19,9 +19,12 @@ export function addCalendarWeeks(weekStart: string, weeks: number) {
   return localDateKey(next);
 }
 
+// weekStart is Monday-anchored (see getCalendarWeekStart), so dayOfWeek's
+// native 0=Sunday...6=Saturday numbering needs shifting to a Monday-relative
+// offset rather than being added directly.
 export function calendarDateForDay(weekStart: string, dayOfWeek: number) {
   const date = dateFromDateKey(weekStart);
-  date.setDate(date.getDate() + dayOfWeek);
+  date.setDate(date.getDate() + ((dayOfWeek + 6) % 7));
   return localDateKey(date);
 }
 
