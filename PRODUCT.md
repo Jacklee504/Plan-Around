@@ -26,7 +26,7 @@ Avoid generic to-do-list styling, visually dense calendar grids, and AI-tutor or
 2. Explain recommendations rather than presenting them as opaque automation.
 3. Treat a student's real commitments as first-class constraints.
 4. Prioritise a reliable end-to-end demo over feature breadth.
-5. Prioritise a polished desktop planning experience for the prototype.
+5. Prioritise a polished desktop planning experience for the prototype, with a responsive mobile layout so the core flow still works on a phone.
 
 ## Accessibility & Inclusion
 

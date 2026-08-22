@@ -24,7 +24,7 @@ marked **(run manually before recording)**.
 
 ## Demo sequence (~3 minutes)
 
-A StudyBlock cannot be marked complete before its scheduled local start time — this is an intentional
+A StudyBlock cannot be marked complete before its scheduled local start time – this is an intentional
 product rule (`lib/studyProgress.ts#canCompleteStudyBlock`), not a bug. A plan generated moments before
 recording will normally have no session eligible to complete yet, so the progress/replan segment (steps
 7, 10, 11) needs a plan that was generated earlier, not one generated live in the same take. Prefer, in
@@ -45,14 +45,14 @@ Do not edit localStorage, change the system clock, or add a demo-only bypass to 
 4. Review the extracted structure (title, deadline, weighting, tasks, marks).
 5. Save it and generate the deterministic plan.
 6. Navigate to a future week in Calendar.
-7. Mark a session complete once it is actually eligible (its scheduled start has passed — see the note above).
+7. Mark a session complete once it is actually eligible (its scheduled start has passed – see the note above).
 8. Add a commitment that conflicts with an incomplete study block.
 9. Return to Plan and show the stale-plan reason.
 10. Replan remaining work.
 11. Show the completed session preserved and the remaining sessions moved.
 12. Briefly show Settings/preferences affecting where new sessions land.
 
-Do not try to show every control — this sequence is the differentiator path (AI extraction, deterministic
+Do not try to show every control – this sequence is the differentiator path (AI extraction, deterministic
 scheduling, adaptive replanning, planning preferences), not a full feature tour.
 
 ## Known expected state
@@ -66,7 +66,7 @@ Using `demo/sample-assignment.txt` (Database Systems Coursework 2), extraction s
 
 The exact wording of task names/rationales is AI-generated and can vary between runs. Treat this as
 correct as long as the structured fields (deadline, weight, marks, task count) are reviewable and roughly
-match the brief — do not expect verbatim repeatability.
+match the brief – do not expect verbatim repeatability.
 
 ## Fallback path
 
@@ -75,5 +75,5 @@ If live AI is temporarily unavailable while recording:
 1. Confirm Worker/provider state first (`npm run smoke:production`, then `preflight:provider` if that fails).
 2. Retry once.
 3. If the Vercel frontend itself is the problem, switch to the GitHub Pages mirror.
-4. Do not fake an AI result in the recorded/submitted build — if it cannot be shown live, say so rather than
+4. Do not fake an AI result in the recorded/submitted build – if it cannot be shown live, say so rather than
    scripting a fabricated response.

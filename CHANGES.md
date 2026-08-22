@@ -92,3 +92,71 @@ No application behaviour changed in this phase. Why it matters: this project bui
 - Deployment: the frontend is a Next.js app deployed on Vercel from this repository; the AI backend is a shared Cloudflare Worker (Featherless-backed) that now also allow-lists this deployment's origin alongside the original project's origin, so both can call the same Worker without either origin being removed. Only Worker config/code changes require redeploying the Worker; ordinary frontend changes only need a Vercel deploy.
 - Files: `README.md`, `PROJECT_BRIEF.md`, `BASELINE.md`, `CHANGES.md`, `worker/src/index.ts` (origin allow-list, done earlier), `next.config.ts` (GitHub Pages basePath, done earlier).
 - Deterministic; no AI involvement (documentation and configuration only).
+
+## PDF upload for assignments and timetables
+
+**Status:** Implemented.
+
+- Added `lib/pdfDocument.ts`: client-side PDF handling (`pdfjs-dist`, lazy-loaded so it never enters the initial bundle or breaks static prerendering) covering embedded-text extraction and, when needed, local page rendering to an image.
+- Assignment briefs: a PDF's embedded text is extracted locally and routed through the existing text-analysis path when there's enough of it; a scanned/image-only PDF (no usable text layer) is rendered locally and routed through the existing image-analysis path via the unchanged `prepareAnalysisImage()` pipeline. Raw PDF bytes are never sent to Featherless - only extracted text or a locally-rendered image.
+- Timetables: the deterministic parser is still tried first; only when it finds no valid rows is the PDF rendered locally and passed through the existing `/analyze-timetable` vision route, reusing the same review step already used for screenshot import.
+- Fixed a regression surfaced during testing: a stale PDF-fallback message could leak into a subsequent plain image upload; timetable image selection now resets that state explicitly. Also fixed: the brief-length check now runs at upload time instead of failing later with a generic error, and only image-dependent paths (plain images, scanned PDFs, timetable vision fallback) are disabled in local-Ollama dev mode - a text-layer PDF only needs local extraction plus text analysis, so it keeps working without the hosted analyser.
+- Files: `lib/pdfDocument.ts`, `components/AssignmentWorkspace.tsx`, `components/SetupWorkspace.tsx`, plus demo PDF/image fixtures under `demo/`.
+- Why it matters: assignment briefs and timetables are very often shared as PDFs, not screenshots or pasted text; without this, a student would have to manually convert a PDF before PlanAround could read it.
+- Mixed: local PDF text extraction and rendering are deterministic; when a PDF has no usable text layer, the rendered page still goes through the same AI image-analysis path used for screenshots (interpretation only, nothing auto-accepted).
+
+## Quick wins: data portability, calendar export, session reminders, progress insights
+
+**Status:** Implemented.
+
+- Added `lib/dataPortability.ts`: `buildPlanAroundExport`/`serializePlanAroundExport` produce a versioned JSON snapshot of every stored key; `parsePlanAroundExport`/`applyPlanAroundImport` validate and restore one, overwriting current storage. Exposed in Settings as "Export backup (.json)" / "Import backup".
+- Added `lib/icsExport.ts`: `buildStudyCalendarIcs` builds a standard `.ics` file covering study sessions, classes and commitments, exposed in Settings as "Download calendar (.ics)" for Google/Outlook/Apple Calendar.
+- Added `lib/studyNotifications.ts`: an opt-in browser Notification permission flow plus a `useStudySessionNotifications()` hook that fires a notification 15 minutes before a scheduled study session starts while a PlanAround tab is open. Enabled/disabled from Settings; state persists under `plan-around.notifications-enabled`.
+- Added `lib/insights.ts`: `calculateOverallInsights` computes total and this-week completed minutes, completed session count, and a per-assignment completion rate from existing study blocks - no new stored data, purely derived. Shown as an "Overview" section at the top of Plan.
+- Files: `lib/dataPortability.ts`, `lib/icsExport.ts`, `lib/studyNotifications.ts`, `lib/insights.ts`, `lib/storage.ts`, `components/SettingsWorkspace.tsx`, `components/AppShell.tsx`, `components/PlanWorkspace.tsx`.
+- Why it matters: PlanAround has no account or cloud sync by design, so a local-only backup/restore path is the only way to move data between devices or survive a cleared browser; the calendar export, reminders and progress overview all surface information the app already computes but previously had no way to show outside the Plan page for one assignment at a time.
+- Deterministic; no AI involvement.
+
+## Monday-first Calendar week
+
+**Status:** Implemented.
+
+- Re-anchored `lib/calendarWeek.ts`'s `getCalendarWeekStart`/`calendarDateForDay` from Sunday-first to Monday-first, matching the day ordering already used in `lib/calendarLayout.ts`'s `CALENDAR_DAYS`. The Sunday-first display was a side effect of adding single-week study-plan display, not a deliberate choice, and was worth correcting once noticed.
+- The Monday-based attendance-week key (`getMondayWeekKeyForDate`/`getMondayWeekKeyForDateKey`, used for "not attending this week") is unchanged and was already Monday-anchored; it remains a deliberately separate concept from the navigation week, not merged with it.
+- The scheduler's day numbering is untouched: `Commitment`/`TimetableEntry.dayOfWeek` still uses native JS `Date.getDay()` convention (0=Sunday...6=Saturday) since it's compared directly against real dates - only Calendar's display/navigation order changed, not the stored data model.
+- Fixed a latent bug this exposed in `lib/icsExport.ts`: date-from-week-offset math had assumed a fixed weekday-to-offset mapping that broke once the week anchor moved; it now routes through the shared `calendarDateForDay` helper instead of ad hoc date arithmetic.
+- Files: `lib/calendarWeek.ts`, `lib/icsExport.ts`, `tests/calendarWeek.test.ts`.
+- Why it matters: matches the conventional week layout most students expect and removes an inconsistency between the week people actually use and what Calendar displayed.
+- Deterministic; no AI involvement.
+
+## PWA install and offline support
+
+**Status:** Implemented.
+
+- Added `public/manifest.json` and app icons (`public/icons/`), linked from `app/layout.tsx` (`manifest`, `icons`, `viewport` theme colour), so PlanAround can be installed as an app on desktop and mobile.
+- Added `public/sw.js`: a service worker with network-first navigation (falls back to cache when offline) and cache-first static-asset caching.
+- Added `components/ServiceWorkerRegistration.tsx`, registered from `AppShell`, gated to `process.env.NODE_ENV === "production"` only - Turbopack's dev-mode chunks aren't content-hashed/immutable like production chunks, so registering the service worker in development risks serving a stale cached bundle after a code change.
+- Files: `public/manifest.json`, `public/sw.js`, `public/icons/*`, `app/layout.tsx`, `components/ServiceWorkerRegistration.tsx`, `components/AppShell.tsx`.
+- Why it matters: PlanAround is already a client-heavy, localStorage-only app with no server-side dependency for its core flow, so installable/offline support is a natural, low-cost extension rather than a new architectural direction.
+- Deterministic; no AI involvement.
+
+## Multi-semester reset
+
+**Status:** Implemented.
+
+- Added `lib/semesterReset.ts`: `resetForNewSemester()` clears term-scoped storage (timetable, modules, commitments, dated commitments, assignments, study blocks, plan snapshots) while explicitly keeping scheduling preferences and the notification-enabled setting, since those are personal defaults rather than a specific term's data.
+- Exposed in Settings as "Start new semester", which downloads a backup (reusing the existing data-export path) before clearing, so the previous term isn't lost even without a manual export first.
+- Files: `lib/semesterReset.ts`, `components/SettingsWorkspace.tsx`.
+- Why it matters: PlanAround originally modelled one continuous week with no way to start over for a new term short of manually clearing browser storage; this reuses the same export machinery already built for backups rather than inventing a second data-clearing path.
+- Deterministic; no AI involvement.
+
+## Mobile-responsive Calendar
+
+**Status:** Implemented.
+
+- `components/WeeklyCalendar.tsx` was restructured into `HourAxis`/`HourGridLines`/`DayColumn` pieces shared by both a `hidden md:block` seven-column desktop grid (unchanged layout/behaviour) and a `md:hidden` single-day mobile view with a day switcher (`selectedDayOfWeek` state), so the scheduling/rendering logic isn't duplicated between the two.
+- Added an auto-fit compact hour range: `lib/calendarLayout.ts#calendarVisibleRange` finds the smallest useful time window that still shows every scheduled item (plus the user's preferred study hours, if set) for the visible day(s), instead of always rendering the full 8am-10pm grid; a toggle switches back to the full day. `blockPosition`/`minuteToPixel` now take an optional `startHour` so both the compact and full-day ranges position blocks correctly.
+- Lighter responsive touch-ups (spacing, wrapping, touch-target sizing) applied across `AppShell.tsx`, `SetupWorkspace.tsx`, `AssignmentWorkspace.tsx`, `PlanWorkspace.tsx` and `SettingsWorkspace.tsx`.
+- Files: `components/WeeklyCalendar.tsx`, `lib/calendarLayout.ts`, `components/AppShell.tsx`, `components/SetupWorkspace.tsx`, `components/AssignmentWorkspace.tsx`, `components/PlanWorkspace.tsx`, `components/SettingsWorkspace.tsx`.
+- Why it matters: PlanAround was desktop-only by design; a seven-day-wide absolutely-positioned hour grid is unusable at phone width, so Calendar specifically needed a real design decision (single-day view, not just shrinking the grid) rather than a generic responsive pass.
+- Deterministic; no AI involvement.

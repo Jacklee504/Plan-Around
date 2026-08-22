@@ -18,6 +18,11 @@ Students usually know when an assignment is due, but not how much time it deserv
 - Estimate workload from ECTS, assignment weighting and rubric structure.
 - Schedule study sessions around the student's actual availability.
 - Adjust scheduling preferences (study window, session length, daily target, time of day, study days) in Settings.
+- See overall progress and workload insights across every assignment in Plan.
+- Export a full data backup (`.json`) and re-import it, or download study sessions, classes and commitments as a read-only `.ics` calendar file, from Settings.
+- Opt in to a browser notification 15 minutes before a scheduled study session starts, while a PlanAround tab is open.
+- Start a new semester from Settings: downloads a backup, then clears the timetable, modules, commitments and assignments while keeping scheduling preferences.
+- Install PlanAround as an offline-capable app (PWA) on desktop or mobile; Calendar has a responsive single-day mobile view alongside the full desktop week grid.
 
 ## Adaptive planning flow
 

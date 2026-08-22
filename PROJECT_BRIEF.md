@@ -77,6 +77,8 @@ The generated plan includes:
 - scheduled study blocks;
 - schedule status.
 
+Plan also shows an overview of progress across every assignment: total and this-week completed time, sessions completed, and a per-assignment completion rate.
+
 ### Settings
 
 The student can adjust how the scheduler places sessions without changing what work is required:
@@ -88,6 +90,15 @@ The student can adjust how the scheduler places sessions without changing what w
 - which days study sessions can be placed on.
 
 Defaults reproduce the pre-Settings scheduler behaviour exactly. Preferences change where the scheduler places sessions - they never change the underlying ECTS-based workload, assignment weighting, buffer, task-mark weighting or complexity adjustment, and they never alter completed work.
+
+Settings also covers data and lifecycle, independent of scheduling preferences:
+
+- opt in to a browser notification 15 minutes before a scheduled study session starts, while a PlanAround tab is open;
+- export a full data backup (`.json`) and re-import it on the same or another device;
+- download study sessions, classes and commitments as a read-only `.ics` file for Google/Outlook/Apple Calendar;
+- start a new semester: downloads a backup, then clears the timetable, modules, commitments and assignments, keeping only scheduling preferences.
+
+PlanAround can also be installed as an offline-capable app (a service worker caches the app shell and static assets; navigation still prefers the network when available).
 
 ## AI Boundary
 
@@ -164,7 +175,7 @@ Completed minutes are tracked per task, and progress is shown against the assign
 
 ## Multi-week Calendar
 
-Calendar displays a Sunday-first week and can navigate to any week, not only the current one.
+Calendar displays a Monday-first week and can navigate to any week, not only the current one. On narrow screens it switches to a single-day view with a day switcher instead of the full seven-column grid; the visible hour range also auto-fits to the day's earliest and latest scheduled items (with a toggle back to the full day), so a light day doesn't render a mostly-empty 8am-10pm grid.
 
 Attendance state ("not going this week") uses a separate Monday-based week key, independent of which week is currently being viewed, so marking a class skipped while browsing a future week does not affect the real current week.
 
@@ -188,7 +199,7 @@ Workload calculation and scheduling are implemented as deterministic TypeScript 
 
 The hackathon prototype focuses on the complete flow from timetable and assignment input to a realistic study plan.
 
-It is designed primarily for desktop use.
+It is designed primarily for desktop use, with a responsive layout (including a single-day mobile Calendar view) so the core flow also works on a phone.
 
 Outside the current scope:
 
