@@ -35,6 +35,11 @@ describe("findBlocksDueForNotification", () => {
     expect(findBlocksDueForNotification([completed], NOW, new Set())).toEqual([]);
   });
 
+  it("excludes a block marked missed even if within the window", () => {
+    const missed = block({ start: minutesAfterNow(5), missedAt: "2026-08-19T08:00:00.000Z" });
+    expect(findBlocksDueForNotification([missed], NOW, new Set())).toEqual([]);
+  });
+
   it("excludes a block already recorded as notified", () => {
     const due = block({ id: "b2", start: minutesAfterNow(5) });
     expect(findBlocksDueForNotification([due], NOW, new Set(["b2"]))).toEqual([]);

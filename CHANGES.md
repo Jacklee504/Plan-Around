@@ -160,3 +160,36 @@ No application behaviour changed in this phase. Why it matters: this project bui
 - Files: `components/WeeklyCalendar.tsx`, `lib/calendarLayout.ts`, `components/AppShell.tsx`, `components/SetupWorkspace.tsx`, `components/AssignmentWorkspace.tsx`, `components/PlanWorkspace.tsx`, `components/SettingsWorkspace.tsx`.
 - Why it matters: PlanAround was desktop-only by design; a seven-day-wide absolutely-positioned hour grid is unusable at phone width, so Calendar specifically needed a real design decision (single-day view, not just shrinking the grid) rather than a generic responsive pass.
 - Deterministic; no AI involvement.
+
+## Manual missed-session marking and Calendar week scrolling
+
+**Status:** Implemented.
+
+- Plan can now mark a scheduled study session "Missed", mutually exclusive with "Completed" and not time-gated (unlike completion, which requires the session's scheduled start to have passed) so it's demo-able immediately. Calendar renders a missed study block in its own distinct style, separate from both a normal and a completed block.
+- A scroll/wheel gesture over the Calendar week-navigation controls steps through weeks, instead of only one click at a time via the previous/next buttons.
+- Fixed a real crash found via live testing: `next.config.ts`'s static export (`output: "export"`) requires `images.unoptimized: true`, which the branding-icon change had not set - every page load of the exported build crashed the app shell until this was added.
+- Files: `components/PlanWorkspace.tsx`, `components/WeeklyCalendar.tsx`, `components/SetupWorkspace.tsx`, `next.config.ts`.
+- Why it matters: without a way to record a session that didn't happen, an unattended study block just sat there indefinitely looking unresolved instead of reflecting what actually happened.
+- Deterministic; no AI involvement.
+- **Known gap, not yet closed:** `missedAt` was excluded from the notification filter when this shipped, so a session already marked missed could still trigger its 15-minutes-before reminder; fixed below. It also isn't part of the plan fingerprint, so marking a future session missed doesn't itself stale the plan the way changed availability does - the remaining time is only recovered via a manual regenerate/replan, not the existing stale-plan prompt.
+
+## UX critique fixes: replan preview, progressive disclosure, pluralization
+
+**Status:** Implemented.
+
+- Fixed "1 tasks" pluralization in the saved-assignments list.
+- Plan now shows a replan preview (sessions kept vs. replaced) before the user commits to replanning a stale plan, instead of only surfacing that comparison after the fact via the existing "Plan updated" summary.
+- Added progressive disclosure to the assignment brief AI-analysis section, removed duplicated heading text across pages, and constrained a few unbounded Settings paragraphs to a readable line length.
+- Files: `components/AssignmentWorkspace.tsx`, `components/OnboardingRequired.tsx`, `components/PlanWorkspace.tsx`, `components/SettingsWorkspace.tsx`, `components/SetupWorkspace.tsx`.
+- Why it matters: a stale-plan replan is a one-way, hard-to-undo action; showing what it will do before it happens is more trustworthy than only explaining it afterward.
+- Deterministic; no AI involvement.
+
+## Regression fixes: missed-session notifications, backup import validation
+
+**Status:** Implemented.
+
+- `lib/studyNotifications.ts#findBlocksDueForNotification` now also excludes a block with `missedAt` set, closing the gap noted above - a session the user already marked missed no longer triggers its 15-minutes-before reminder.
+- `lib/dataPortability.ts#parsePlanAroundExport` now checks every recognised key's stored value against its expected broad shape (array/object/boolean, `null` always accepted as "never set on the source device") and rejects the whole import if any recognised key fails - previously only the outer `{ data: {...} }` envelope was validated, so an edited/corrupt backup with e.g. `"plan-around.assignments": {}` passed structural validation and then broke assignment hydration (`.at(-1)` on a non-array) on the next reload. `applyPlanAroundImport` also now skips writing a `null` value instead of writing the literal string `"null"`, which would otherwise have made `readStoredValue` return `null` instead of falling back to that key's default on every future read - the same class of poisoned-state bug from a different angle, reachable even from a completely genuine partial export.
+- Files: `lib/studyNotifications.ts`, `lib/dataPortability.ts`, `tests/studyNotifications.test.ts`, `tests/dataPortability.test.ts`.
+- Why it matters: both were real, reachable regressions from recently shipped features rather than hypothetical edge cases - one produces an incorrect notification a user can directly observe, the other can leave a workspace broken after a reload with no obvious cause.
+- Deterministic; no AI involvement.

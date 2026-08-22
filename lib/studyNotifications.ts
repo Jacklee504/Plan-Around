@@ -30,14 +30,15 @@ export function writeNotificationsEnabled(enabled: boolean) {
 
 /**
  * A session "comes due" once it is within the reminder window and hasn't
- * started yet - already-started/completed sessions are excluded so a missed
- * check (e.g. the tab was closed) never fires a stale reminder late.
+ * started yet - already-started/completed/missed sessions are excluded so a
+ * missed check (e.g. the tab was closed) never fires a stale reminder late,
+ * and a session the user already marked missed never reminds them of it.
  */
 export function findBlocksDueForNotification(blocks: StudyBlock[], now: Date, alreadyNotifiedIds: Set<string>): StudyBlock[] {
   const windowEnd = now.getTime() + NOTIFY_MINUTES_BEFORE * 60 * 1000;
 
   return blocks.filter((block) => {
-    if (block.completedAt || alreadyNotifiedIds.has(block.id)) return false;
+    if (block.completedAt || block.missedAt || alreadyNotifiedIds.has(block.id)) return false;
     const startMs = studyBlockScheduledStart(block).getTime();
     return startMs >= now.getTime() && startMs <= windowEnd;
   });

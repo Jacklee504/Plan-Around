@@ -55,6 +55,23 @@ describe("dataPortability", () => {
     expect(parsePlanAroundExport(JSON.stringify({ data: null }))).toBeNull();
   });
 
+  it("rejects a recognised key whose value has the wrong broad shape", () => {
+    expect(parsePlanAroundExport(JSON.stringify({ version: 1, exportedAt: "now", data: { [storageKeys.assignments]: {} } }))).toBeNull();
+    expect(parsePlanAroundExport(JSON.stringify({ version: 1, exportedAt: "now", data: { [storageKeys.onboarding]: [] } }))).toBeNull();
+    expect(parsePlanAroundExport(JSON.stringify({ version: 1, exportedAt: "now", data: { [storageKeys.notificationsEnabled]: "true" } }))).toBeNull();
+  });
+
+  it("skips writing a key the source device never set, instead of poisoning it with literal null", () => {
+    writeStoredValue(storageKeys.assignments, [{ id: "a1" }]);
+
+    const parsed = parsePlanAroundExport(JSON.stringify({ version: 1, exportedAt: "now", data: { [storageKeys.assignments]: null } }));
+    expect(parsed).not.toBeNull();
+
+    applyPlanAroundImport(parsed!);
+
+    expect(readStoredValue(storageKeys.assignments, [])).toEqual([{ id: "a1" }]);
+  });
+
   it("only writes back recognised storage keys, ignoring unrelated ones", () => {
     const parsed = parsePlanAroundExport(JSON.stringify({ version: 1, exportedAt: "now", data: { "some.unknown.key": "x", [storageKeys.commitments]: [{ id: "c1" }] } }));
     expect(parsed).not.toBeNull();
