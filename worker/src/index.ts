@@ -530,6 +530,11 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
         };
         return jsonResponse(response, 200, origin, env);
       } catch (error) {
+        console.error(JSON.stringify({
+          event: "analysis_request_failed",
+          route: route.pathname,
+          error: error instanceof Error ? error.message : "Unknown analysis error.",
+        }));
         if (error instanceof ClientInputError) return jsonResponse({ error: error.message }, 400, origin, env);
         return jsonResponse({ error: route.errorMessage }, 502, origin, env);
       }
