@@ -1,4 +1,3 @@
-import { MAX_ANALYSIS_IMAGE_BASE64_CHARACTERS } from "./assignmentAnalysis";
 import {
   MAX_IMAGE_UPLOAD_BYTES,
   prepareAnalysisImage,
@@ -53,6 +52,13 @@ export function timetableGridVerticalLines(
     : [];
 }
 
+export function timetableDayPanelBounds(verticalLines: number[]) {
+  return verticalLines.slice(1, -1).map((dayLeft, index) => ({
+    dayLeft,
+    dayRight: verticalLines[index + 2],
+  }));
+}
+
 function loadImage(file: File) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -79,9 +85,10 @@ function canvasBlob(canvas: HTMLCanvasElement) {
 }
 
 /**
- * Splits a recognisable table grid into day panels. Every panel repeats the
- * time column beside exactly one day, making grid geometry far easier for the
- * vision model to read. Unknown layouts safely fall back to the original.
+ * Rebuilds a recognisable table grid as one contact sheet of day panels. Every
+ * panel repeats the time column beside exactly one day, making grid geometry
+ * easier for the vision model to read without relying on it to retain all of
+ * several separate image inputs. Unknown layouts safely use the original.
  */
 export async function prepareTimetableAnalysisImages(file: File): Promise<PreparedAnalysisImage[]> {
   if (!file.type.match(/^image\/(?:jpeg|png|webp)$/)) {
@@ -106,30 +113,30 @@ export async function prepareTimetableAnalysisImages(file: File): Promise<Prepar
 
   const [tableLeft, timeColumnRight] = verticalLines;
   const timeColumnWidth = timeColumnRight - tableLeft;
-  const panels = await Promise.all(
-    verticalLines.slice(1, -1).map(async (dayLeft, index) => {
-      const dayRight = verticalLines[index + 2];
-      const panel = document.createElement("canvas");
-      panel.width = timeColumnWidth + PANEL_GAP + (dayRight - dayLeft);
-      panel.height = source.height;
-      const context = panel.getContext("2d");
-      if (!context) throw new Error("This browser could not prepare the timetable screenshot.");
-      context.fillStyle = "#ffffff";
-      context.fillRect(0, 0, panel.width, panel.height);
-      context.drawImage(source, tableLeft, 0, timeColumnWidth, source.height, 0, 0, timeColumnWidth, panel.height);
-      context.drawImage(source, dayLeft, 0, dayRight - dayLeft, source.height, timeColumnWidth + PANEL_GAP, 0, dayRight - dayLeft, panel.height);
-
-      const croppedFile = new File(
-        [await canvasBlob(panel)],
-        `${file.name.replace(/\.[^.]+$/, "")}-day-${index + 1}.jpg`,
-        { type: "image/jpeg" },
-      );
-      return prepareAnalysisImage(croppedFile);
-    }),
+  const dayPanels = timetableDayPanelBounds(verticalLines);
+  const contactSheet = document.createElement("canvas");
+  contactSheet.width = dayPanels.reduce(
+    (width, panel) => width + timeColumnWidth + PANEL_GAP + panel.dayRight - panel.dayLeft,
+    0,
   );
+  contactSheet.height = source.height;
+  const context = contactSheet.getContext("2d");
+  if (!context) throw new Error("This browser could not prepare the timetable screenshot.");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, contactSheet.width, contactSheet.height);
 
-  const batchSize = panels.reduce((total, panel) => total + panel.base64.length, 0);
-  return batchSize <= MAX_ANALYSIS_IMAGE_BASE64_CHARACTERS
-    ? panels
-    : [await prepareAnalysisImage(file)];
+  let panelOffset = 0;
+  for (const panel of dayPanels) {
+    const dayWidth = panel.dayRight - panel.dayLeft;
+    context.drawImage(source, tableLeft, 0, timeColumnWidth, source.height, panelOffset, 0, timeColumnWidth, contactSheet.height);
+    context.drawImage(source, panel.dayLeft, 0, dayWidth, source.height, panelOffset + timeColumnWidth + PANEL_GAP, 0, dayWidth, contactSheet.height);
+    panelOffset += timeColumnWidth + PANEL_GAP + dayWidth;
+  }
+
+  const contactSheetFile = new File(
+    [await canvasBlob(contactSheet)],
+    `${file.name.replace(/\.[^.]+$/, "")}-weekday-panels.jpg`,
+    { type: "image/jpeg" },
+  );
+  return [await prepareAnalysisImage(contactSheetFile)];
 }
