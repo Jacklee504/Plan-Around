@@ -13,7 +13,6 @@ import {
 } from "../../lib/assignmentAnalysis";
 import {
   createTimetableImageAnalysisPrompt,
-  createTimetableVerificationPrompt,
   MAX_TIMETABLE_COMPLETION_TOKENS,
   timetableAnalysisSystemPrompt,
   type TimetableAnalysis,
@@ -26,7 +25,6 @@ const MAX_TEXT_REQUEST_BYTES = 25_000;
 const MAX_IMAGE_REQUEST_BYTES = 2_100_000;
 const MAX_UPSTREAM_RESPONSE_BYTES = 100_000;
 const ANALYSIS_TIMEOUT_MS = 60_000;
-const TIMETABLE_ANALYSIS_TIMEOUT_MS = 110_000;
 const PROVIDER_TIMEOUT_MS = 50_000;
 const PROVIDER_RETRY_DELAY_MS = 500;
 const MIN_PROVIDER_WINDOW_MS = 1_000;
@@ -56,14 +54,9 @@ function wait(milliseconds: number) {
 
 class AnalysisBudget {
   readonly controller = new AbortController();
-  readonly deadline: number;
+  readonly deadline = Date.now() + ANALYSIS_TIMEOUT_MS;
   providerCalls = 0;
-  private readonly timeout: ReturnType<typeof setTimeout>;
-
-  constructor(timeoutMilliseconds = ANALYSIS_TIMEOUT_MS) {
-    this.deadline = Date.now() + timeoutMilliseconds;
-    this.timeout = setTimeout(() => this.controller.abort(), timeoutMilliseconds);
-  }
+  private readonly timeout = setTimeout(() => this.controller.abort(), ANALYSIS_TIMEOUT_MS);
 
   remainingMilliseconds() {
     return Math.max(0, this.deadline - Date.now());
@@ -474,82 +467,6 @@ async function analyseSource<T>(source: AnalysisSource, route: AnalysisRoute<T>,
   }
 }
 
-type VerifiedTimetableAnalysis = {
-  analysis: TimetableAnalysis;
-  verifier: TimetableAnalysisResponse["verifier"];
-};
-
-async function analyseTimetableSource(
-  source: TimetableAnalysisSource,
-  env: Env,
-  upstreamFetch: typeof fetch,
-  pause: Wait,
-): Promise<VerifiedTimetableAnalysis> {
-  const budget = new AnalysisBudget(TIMETABLE_ANALYSIS_TIMEOUT_MS);
-  const messages = createMessages(source, timetableRoute);
-  const model = timetableRoute.model(env);
-
-  try {
-    const firstContent = await requestProvider(
-      messages,
-      env,
-      model,
-      upstreamFetch,
-      pause,
-      budget,
-      timetableRoute.completionTokens,
-    );
-
-    let candidate: TimetableAnalysis;
-    try {
-      candidate = timetableRoute.parse(firstContent);
-    } catch (firstError) {
-      const validationError = firstError instanceof Error ? firstError.message : String(firstError);
-      const repairedMessages: ChatMessage[] = [
-        ...messages,
-        { role: "user", content: timetableRoute.repairPrompt(validationError) },
-      ];
-      return {
-        analysis: timetableRoute.parse(
-          await requestProvider(
-            repairedMessages,
-            env,
-            model,
-            upstreamFetch,
-            pause,
-            budget,
-            timetableRoute.completionTokens,
-          ),
-        ),
-        verifier: { used: false, model: null, reasons: [] },
-      };
-    }
-
-    const verificationMessages: ChatMessage[] = [
-      ...messages,
-      { role: "assistant", content: JSON.stringify(candidate) },
-      { role: "user", content: createTimetableVerificationPrompt() },
-    ];
-    const verified = timetableRoute.parse(
-      await requestProvider(
-        verificationMessages,
-        env,
-        model,
-        upstreamFetch,
-        pause,
-        budget,
-        timetableRoute.completionTokens,
-      ),
-    );
-    return {
-      analysis: verified,
-      verifier: { used: true, model, reasons: ["Visual timetable panel recheck completed."] },
-    };
-  } finally {
-    budget.dispose();
-  }
-}
-
 export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = wait) {
   return {
     async fetch(request: Request, env: Env): Promise<Response> {
@@ -604,12 +521,12 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
         }
 
         const source = parseTimetableAnalysisRequest(requestBody);
-        const result = await analyseTimetableSource(source, env, upstreamFetch, pause);
+        const analysis = await analyseSource(source, timetableRoute, env, upstreamFetch, pause);
         const response: TimetableAnalysisResponse = {
-          analysis: result.analysis,
+          analysis,
           provider: "featherless",
           model: timetableRoute.model(env),
-          verifier: result.verifier,
+          verifier: { used: false, model: null, reasons: [] },
         };
         return jsonResponse(response, 200, origin, env);
       } catch (error) {

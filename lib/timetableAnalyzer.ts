@@ -1,7 +1,7 @@
 import { getAnalyzerEndpoint, imageAnalysisIsAvailable } from "@/lib/analyzerEndpoint";
 import { type TimetableAnalysisInput, type TimetableAnalysisResponse, validateTimetableAnalysisResponse } from "@/lib/timetableAnalysis";
 
-const ANALYZER_TIMEOUT_MS = 125_000;
+const ANALYZER_TIMEOUT_MS = 70_000;
 
 export async function analyzeTimetableScreenshot(input: TimetableAnalysisInput | TimetableAnalysisInput[]): Promise<TimetableAnalysisResponse> {
   if (!imageAnalysisIsAvailable()) throw new Error("Timetable screenshot analysis uses the hosted analyser. Use the deployed app or configure NEXT_PUBLIC_ANALYZER_URL locally.");
