@@ -94,7 +94,7 @@ npm run build
 
 ## Baseline disclosure
 
-This repository is a continuation of a project originally built for a separate hackathon, entirely within that hackathon's timeline. See [BASELINE.md](BASELINE.md) for exactly what was inherited, and [CHANGES.md](CHANGES.md) for every change made since.
+This repository is a continuation of a project originally built for a separate hackathon, entirely within that hackathon's timeline. See [BASELINE.md](BASELINE.md) for exactly what was inherited and a summary of what's new since.
 
 Full product detail (workload model, scheduling rules, architecture, prototype scope) is in [PROJECT_BRIEF.md](PROJECT_BRIEF.md).
 
