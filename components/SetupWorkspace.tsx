@@ -20,10 +20,8 @@ import {
 } from "@/lib/calendarWeek";
 import { WeeklyCalendar, type CalendarSlot } from "@/components/WeeklyCalendar";
 import { initialOnboardingState, useOnboardingState } from "@/lib/onboarding";
-import {
-  prepareAnalysisImage,
-  type PreparedAnalysisImage,
-} from "@/lib/analysisImage";
+import { type PreparedAnalysisImage } from "@/lib/analysisImage";
+import { prepareTimetableAnalysisImages } from "@/lib/timetableImage";
 import { analyzeTimetableScreenshot } from "@/lib/timetableAnalyzer";
 import { imageAnalysisIsAvailable } from "@/lib/analyzerEndpoint";
 import type { TimetableAnalysisEntry } from "@/lib/timetableAnalysis";
@@ -356,7 +354,7 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [preparedTimetableImage, setPreparedTimetableImage] =
-    useState<PreparedAnalysisImage | null>(null);
+    useState<PreparedAnalysisImage[] | null>(null);
   const [isPreparingTimetableImage, setIsPreparingTimetableImage] =
     useState(false);
   const [isAnalysingTimetable, setIsAnalysingTimetable] = useState(false);
@@ -676,7 +674,7 @@ async function importTimetable(file: File | undefined) {
   setIsPreparingTimetableImage(true);
   try {
     const renderedImage = await renderPdfToImageFile(file);
-    const prepared = await prepareAnalysisImage(renderedImage);
+    const prepared = await prepareTimetableAnalysisImages(renderedImage);
     if (timetableImageVersion.current !== version) return;
     setPreparedTimetableImage(prepared);
     setImportState("complete");
@@ -711,7 +709,7 @@ async function importTimetable(file: File | undefined) {
     setImportState("idle");
     setImportMessage("");
     try {
-      const prepared = await prepareAnalysisImage(file);
+      const prepared = await prepareTimetableAnalysisImages(file);
       if (timetableImageVersion.current === version)
         setPreparedTimetableImage(prepared);
     } catch (error) {
@@ -990,11 +988,14 @@ async function importTimetable(file: File | undefined) {
         >
           <div>
             <p className="text-sm font-semibold">
-              {preparedTimetableImage.filename} is ready to analyse.
+              {preparedTimetableImage.length === 1
+                ? `${preparedTimetableImage[0].filename} is ready to analyse.`
+                : `${uploadedFileName} was prepared as ${preparedTimetableImage.length} weekday panels.`}
             </p>
             <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">
               The screenshot is prepared locally and sent only when you choose
-              Analyse.
+              Analyse. Grid timetables are split into weekday panels so their
+              times and multi-hour blocks can be read more reliably.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">

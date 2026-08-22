@@ -13,10 +13,12 @@ import {
 } from "../../lib/assignmentAnalysis";
 import {
   createTimetableImageAnalysisPrompt,
+  createTimetableVerificationPrompt,
   MAX_TIMETABLE_COMPLETION_TOKENS,
   timetableAnalysisSystemPrompt,
   type TimetableAnalysis,
   type TimetableAnalysisResponse,
+  type TimetableAnalysisInput,
   validateTimetableAnalysis,
 } from "../../lib/timetableAnalysis";
 
@@ -24,6 +26,7 @@ const MAX_TEXT_REQUEST_BYTES = 25_000;
 const MAX_IMAGE_REQUEST_BYTES = 2_100_000;
 const MAX_UPSTREAM_RESPONSE_BYTES = 100_000;
 const ANALYSIS_TIMEOUT_MS = 60_000;
+const TIMETABLE_ANALYSIS_TIMEOUT_MS = 110_000;
 const PROVIDER_TIMEOUT_MS = 50_000;
 const PROVIDER_RETRY_DELAY_MS = 500;
 const MIN_PROVIDER_WINDOW_MS = 1_000;
@@ -34,6 +37,11 @@ type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
 };
+
+type TimetableAnalysisSource =
+  | TimetableAnalysisInput
+  | { kind: "image-batch"; images: TimetableAnalysisInput[] };
+type AnalysisSource = AssignmentAnalysisInput | TimetableAnalysisSource;
 
 class ClientInputError extends Error {}
 class ProviderResponseError extends Error {}
@@ -48,9 +56,14 @@ function wait(milliseconds: number) {
 
 class AnalysisBudget {
   readonly controller = new AbortController();
-  readonly deadline = Date.now() + ANALYSIS_TIMEOUT_MS;
+  readonly deadline: number;
   providerCalls = 0;
-  private readonly timeout = setTimeout(() => this.controller.abort(), ANALYSIS_TIMEOUT_MS);
+  private readonly timeout: ReturnType<typeof setTimeout>;
+
+  constructor(timeoutMilliseconds = ANALYSIS_TIMEOUT_MS) {
+    this.deadline = Date.now() + timeoutMilliseconds;
+    this.timeout = setTimeout(() => this.controller.abort(), timeoutMilliseconds);
+  }
 
   remainingMilliseconds() {
     return Math.max(0, this.deadline - Date.now());
@@ -162,7 +175,7 @@ async function readBoundedText(
   return new TextDecoder().decode(body);
 }
 
-function parseAnalysisRequest(body: string) {
+function parseRequestPayload(body: string) {
   let payload: unknown;
   try {
     payload = JSON.parse(body);
@@ -173,10 +186,15 @@ function parseAnalysisRequest(body: string) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new ClientInputError("Request body was invalid.");
   }
+  return payload as { source?: unknown; sources?: unknown };
+}
+
+function parseAnalysisRequest(body: string) {
+  const payload = parseRequestPayload(body);
 
   let source: AssignmentAnalysisInput;
   try {
-    source = validateAssignmentAnalysisInput((payload as { source?: unknown }).source);
+    source = validateAssignmentAnalysisInput(payload.source);
   } catch (error) {
     throw new ClientInputError(error instanceof Error ? error.message : "Analysis input was invalid.");
   }
@@ -188,6 +206,37 @@ function parseAnalysisRequest(body: string) {
   if (source.kind === "image" && bodyBytes > MAX_IMAGE_REQUEST_BYTES) {
     throw new ClientInputError("Screenshot analysis request is too large.");
   }
+  return source;
+}
+
+function parseTimetableAnalysisRequest(body: string): TimetableAnalysisSource {
+  const payload = parseRequestPayload(body);
+  if (Array.isArray(payload.sources)) {
+    if (payload.sources.length < 2 || payload.sources.length > 7) {
+      throw new ClientInputError("A timetable grid must contain between 2 and 7 weekday panels.");
+    }
+    const images = payload.sources.map((source, index) => {
+      let image: AssignmentAnalysisInput;
+      try {
+        image = validateAssignmentAnalysisInput(source);
+      } catch (error) {
+        throw new ClientInputError(
+          error instanceof Error ? `Timetable panel ${index + 1}: ${error.message}` : "Timetable panel was invalid.",
+        );
+      }
+      if (image.kind !== "image") throw new ClientInputError("A timetable panel must be a screenshot.");
+      return image;
+    });
+    return { kind: "image-batch", images };
+  }
+
+  let source: AssignmentAnalysisInput;
+  try {
+    source = validateAssignmentAnalysisInput(payload.source);
+  } catch (error) {
+    throw new ClientInputError(error instanceof Error ? error.message : "Analysis input was invalid.");
+  }
+  if (source.kind !== "image") throw new ClientInputError("A timetable screenshot is required.");
   return source;
 }
 
@@ -215,6 +264,7 @@ function parseAssignmentAnalysis(content: string): AssignmentAnalysis {
 async function requestProviderOnce(
   messages: ChatMessage[],
   env: Env,
+  model: string,
   upstreamFetch: typeof fetch,
   budget: AnalysisBudget,
   completionTokens: number,
@@ -235,7 +285,7 @@ async function requestProviderOnce(
         "X-Title": "PlanAround",
       },
       body: JSON.stringify({
-        model: env.AI_PRIMARY_MODEL,
+        model,
         temperature: 0.1,
         max_tokens: completionTokens,
         response_format: { type: "json_object" },
@@ -259,7 +309,9 @@ async function requestProviderOnce(
     );
 
     try {
-      return contentFromProviderPayload(JSON.parse(providerBody));
+      const content = contentFromProviderPayload(JSON.parse(providerBody));
+      console.log("Featherless timetable output:", content);
+      return content;
     } catch {
       throw new ProviderResponseError("AI provider response was invalid.");
     }
@@ -277,17 +329,18 @@ async function requestProviderOnce(
 async function requestProvider(
   messages: ChatMessage[],
   env: Env,
+  model: string,
   upstreamFetch: typeof fetch,
   pause: Wait,
   budget: AnalysisBudget,
   completionTokens: number,
 ) {
   try {
-    return await requestProviderOnce(messages, env, upstreamFetch, budget, completionTokens);
+    return await requestProviderOnce(messages, env, model, upstreamFetch, budget, completionTokens);
   } catch (error) {
     if (!(error instanceof TransientProviderError)) throw error;
     await budget.pauseBeforeRetry(pause);
-    return requestProviderOnce(messages, env, upstreamFetch, budget, completionTokens);
+    return requestProviderOnce(messages, env, model, upstreamFetch, budget, completionTokens);
   }
 }
 
@@ -297,6 +350,8 @@ type AnalysisRoute<T> = {
   completionTokens: number;
   imagePrompt: () => string;
   parse: (content: string) => T;
+  model: (env: Env) => string;
+  repairPrompt: (validationError: string) => string;
   errorMessage: string;
   allowsText: boolean;
 };
@@ -307,6 +362,14 @@ const assignmentRoute: AnalysisRoute<AssignmentAnalysis> = {
   completionTokens: MAX_ANALYSIS_COMPLETION_TOKENS,
   imagePrompt: createImageAnalysisPrompt,
   parse: parseAssignmentAnalysis,
+  model: (env) => env.AI_PRIMARY_MODEL,
+  repairPrompt: (validationError) =>
+    `The previous response failed validation: ${validationError}\n\n` +
+    "Start again. Return only compact valid JSON matching the schema. " +
+    "Complexity must be exactly 1, 2 or 3. " +
+    "Requirements must always be a JSON array of strings, or an empty array. " +
+    "Keep rationales under 25 words, use at most 4 short requirements per task, " +
+    "use YYYY-MM-DD for the deadline, and do not add commentary.",
   errorMessage: "The analyser could not read this brief.",
   allowsText: true,
 };
@@ -317,31 +380,45 @@ const timetableRoute: AnalysisRoute<TimetableAnalysis> = {
   completionTokens: MAX_TIMETABLE_COMPLETION_TOKENS,
   imagePrompt: createTimetableImageAnalysisPrompt,
   parse: (content) => validateTimetableAnalysis(JSON.parse(stripJsonCodeFence(content))),
+  model: (env) => env.AI_TIMETABLE_MODEL,
+  repairPrompt: (validationError) =>
+    `The previous timetable response failed validation: ${validationError}\n\n` +
+    "Start again from the supplied timetable panel(s). Return only compact valid JSON with entries and warnings arrays. " +
+    "Each entry needs a full weekday name, HH:MM start and end, and an end after its start. " +
+    "Use each panel's header and horizontal grid lines; preserve multi-hour blocks and do not invent sessions.",
   errorMessage: "The analyser could not read this timetable.",
   allowsText: false,
 };
 
-function createMessages(source: AssignmentAnalysisInput, route: AnalysisRoute<unknown>): ChatMessage[] {
+function createMessages(source: AnalysisSource, route: AnalysisRoute<unknown>): ChatMessage[] {
   const userContent = source.kind === "text"
     ? createAnalysisPrompt(source.text)
-    : [
-      { type: "text" as const, text: route.imagePrompt() },
-      { type: "image_url" as const, image_url: { url: `data:${source.mimeType};base64,${source.base64}` } },
-    ];
+    : (() => {
+      const images = source.kind === "image-batch" ? source.images : [source];
+      return [
+        { type: "text" as const, text: route.imagePrompt() },
+        ...images.flatMap((image, index) => [
+          ...(images.length > 1 ? [{ type: "text" as const, text: `Weekday panel ${index + 1}:` }] : []),
+          { type: "image_url" as const, image_url: { url: `data:${image.mimeType};base64,${image.base64}` } },
+        ]),
+      ];
+    })();
   return [
     { role: "system", content: route.systemPrompt },
     { role: "user", content: userContent },
   ];
 }
 
-async function analyseSource<T>(source: AssignmentAnalysisInput, route: AnalysisRoute<T>, env: Env, upstreamFetch: typeof fetch, pause: Wait) {
+async function analyseSource<T>(source: AnalysisSource, route: AnalysisRoute<T>, env: Env, upstreamFetch: typeof fetch, pause: Wait) {
   const budget = new AnalysisBudget();
   const messages = createMessages(source, route);
+  const model = route.model(env);
 
   try {
     const firstContent = await requestProvider(
       messages,
       env,
+      model,
       upstreamFetch,
       pause,
       budget,
@@ -365,13 +442,7 @@ async function analyseSource<T>(source: AssignmentAnalysisInput, route: Analysis
         ...messages,
         {
           role: "user",
-          content:
-            `The previous response failed validation: ${validationError}\n\n` +
-            "Start again. Return only compact valid JSON matching the schema. " +
-            "Complexity must be exactly 1, 2 or 3. " +
-            "Requirements must always be a JSON array of strings, or an empty array. " +
-            "Keep rationales under 25 words, use at most 4 short requirements per task, " +
-            "use YYYY-MM-DD for the deadline, and do not add commentary.",
+          content: route.repairPrompt(validationError),
         },
       ];
 
@@ -380,6 +451,7 @@ async function analyseSource<T>(source: AssignmentAnalysisInput, route: Analysis
           await requestProvider(
             repairedMessages,
             env,
+            model,
             upstreamFetch,
             pause,
             budget,
@@ -401,6 +473,83 @@ async function analyseSource<T>(source: AssignmentAnalysisInput, route: Analysis
     budget.dispose();
   }
 }
+
+type VerifiedTimetableAnalysis = {
+  analysis: TimetableAnalysis;
+  verifier: TimetableAnalysisResponse["verifier"];
+};
+
+async function analyseTimetableSource(
+  source: TimetableAnalysisSource,
+  env: Env,
+  upstreamFetch: typeof fetch,
+  pause: Wait,
+): Promise<VerifiedTimetableAnalysis> {
+  const budget = new AnalysisBudget(TIMETABLE_ANALYSIS_TIMEOUT_MS);
+  const messages = createMessages(source, timetableRoute);
+  const model = timetableRoute.model(env);
+
+  try {
+    const firstContent = await requestProvider(
+      messages,
+      env,
+      model,
+      upstreamFetch,
+      pause,
+      budget,
+      timetableRoute.completionTokens,
+    );
+
+    let candidate: TimetableAnalysis;
+    try {
+      candidate = timetableRoute.parse(firstContent);
+    } catch (firstError) {
+      const validationError = firstError instanceof Error ? firstError.message : String(firstError);
+      const repairedMessages: ChatMessage[] = [
+        ...messages,
+        { role: "user", content: timetableRoute.repairPrompt(validationError) },
+      ];
+      return {
+        analysis: timetableRoute.parse(
+          await requestProvider(
+            repairedMessages,
+            env,
+            model,
+            upstreamFetch,
+            pause,
+            budget,
+            timetableRoute.completionTokens,
+          ),
+        ),
+        verifier: { used: false, model: null, reasons: [] },
+      };
+    }
+
+    const verificationMessages: ChatMessage[] = [
+      ...messages,
+      { role: "assistant", content: JSON.stringify(candidate) },
+      { role: "user", content: createTimetableVerificationPrompt() },
+    ];
+    const verified = timetableRoute.parse(
+      await requestProvider(
+        verificationMessages,
+        env,
+        model,
+        upstreamFetch,
+        pause,
+        budget,
+        timetableRoute.completionTokens,
+      ),
+    );
+    return {
+      analysis: verified,
+      verifier: { used: true, model, reasons: ["Visual timetable panel recheck completed."] },
+    };
+  } finally {
+    budget.dispose();
+  }
+}
+
 export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = wait) {
   return {
     async fetch(request: Request, env: Env): Promise<Response> {
@@ -439,11 +588,8 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
           MAX_IMAGE_REQUEST_BYTES,
           () => new ClientInputError("Request body is too large."),
         );
-        const source = parseAnalysisRequest(requestBody);
-        if (!route.allowsText && source.kind !== "image") {
-          throw new ClientInputError("A timetable screenshot is required.");
-        }
         if (route === assignmentRoute) {
+          const source = parseAnalysisRequest(requestBody);
           const analysis = await analyseSource(source, assignmentRoute, env, upstreamFetch, pause);
           const response: AssignmentAnalysisResponse = {
             analysis,
@@ -451,18 +597,19 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
               ? createTextAnalysisProvenance(source.text, analysis)
               : createImageAnalysisProvenance(analysis),
             provider: "featherless",
-            model: env.AI_PRIMARY_MODEL,
+            model: assignmentRoute.model(env),
             verifier: { used: false, model: null, reasons: [] },
           };
           return jsonResponse(response, 200, origin, env);
         }
 
-        const analysis = await analyseSource(source, timetableRoute, env, upstreamFetch, pause);
+        const source = parseTimetableAnalysisRequest(requestBody);
+        const result = await analyseTimetableSource(source, env, upstreamFetch, pause);
         const response: TimetableAnalysisResponse = {
-          analysis,
+          analysis: result.analysis,
           provider: "featherless",
-          model: env.AI_PRIMARY_MODEL,
-          verifier: { used: false, model: null, reasons: [] },
+          model: timetableRoute.model(env),
+          verifier: result.verifier,
         };
         return jsonResponse(response, 200, origin, env);
       } catch (error) {

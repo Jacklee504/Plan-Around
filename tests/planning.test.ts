@@ -152,6 +152,15 @@ describe("timetable analysis contract", () => {
     expect(() => validateTimetableAnalysis({ ...timetableAnalysis, entries: [{ ...timetableAnalysis.entries[0], end: "09:00" }] })).toThrow("end after");
     expect(validateTimetableAnalysis({ ...timetableAnalysis, entries: [timetableAnalysis.entries[0], timetableAnalysis.entries[0]] }).entries).toHaveLength(1);
   });
+
+  it("keeps an otherwise reviewable extraction when the model reports too many warnings", () => {
+    const result = validateTimetableAnalysis({
+      ...timetableAnalysis,
+      warnings: Array.from({ length: 18 }, (_, index) => `Unclear cell ${index + 1}.`),
+    });
+
+    expect(result.warnings).toHaveLength(12);
+  });
 });
 
 describe("assignment analysis contract", () => {
@@ -1110,6 +1119,7 @@ const allowsRateLimit = { limit: async () => ({ success: true }) } satisfies Rat
 const workerEnv: Env = {
   AI_BASE_URL: "https://api.featherless.ai/v1",
   AI_PRIMARY_MODEL: "Qwen/Qwen3-VL-30B-A3B-Instruct",
+  AI_TIMETABLE_MODEL: "Qwen/Qwen2.5-VL-72B-Instruct",
   AI_VERIFIER_MODEL: "moonshotai/Kimi-K3",
   ALLOWED_PRODUCTION_ORIGIN: "https://plan-around.vercel.app",
   FEATHERLESS_API_KEY: "test-key",
@@ -1441,11 +1451,19 @@ describe("hosted timetable analyser", () => {
     const screenshot = { source: { kind: "image", mimeType: "image/png", base64: "c2NyZWVuc2hvdA==" } };
 
     const response = await worker.fetch(workerRequest("/analyze-timetable", screenshot, "https://jacklee504.github.io"), workerEnv);
-    const payload = await response.json() as { analysis: typeof timetableAnalysis; provider: string };
-    const messages = JSON.parse(providerRequest).messages;
+    const payload = await response.json() as { analysis: typeof timetableAnalysis; provider: string; model: string; verifier: { used: boolean; model: string | null; reasons: string[] } };
+    const providerPayload = JSON.parse(providerRequest);
+    const messages = providerPayload.messages;
 
     expect(response.status).toBe(200);
     expect(payload.provider).toBe("featherless");
+    expect(payload.model).toBe("Qwen/Qwen2.5-VL-72B-Instruct");
+    expect(payload.verifier).toEqual({
+      used: true,
+      model: "Qwen/Qwen2.5-VL-72B-Instruct",
+      reasons: ["Visual timetable panel recheck completed."],
+    });
+    expect(providerPayload.model).toBe("Qwen/Qwen2.5-VL-72B-Instruct");
     expect(payload.analysis).toEqual(timetableAnalysis);
     expect(messages[0].content).toContain("recurring teaching sessions");
     expect(messages[1].content).toEqual([
@@ -1454,10 +1472,42 @@ describe("hosted timetable analyser", () => {
     ]);
   });
 
-  it("uses a timetable-sized token budget and keeps route protections", async () => {
-    let providerRequest = "";
+  it("uses the visual recheck as the final timetable when it finds a missed block", async () => {
+    const candidate = {
+      ...timetableAnalysis,
+      entries: [timetableAnalysis.entries[0]],
+    };
+    const verified = {
+      ...timetableAnalysis,
+      entries: [
+        timetableAnalysis.entries[0],
+        { ...timetableAnalysis.entries[0], moduleCode: "CS402", day: "Tuesday", start: "16:00", end: "17:00", sessionType: "tutorial" },
+      ],
+    };
+    const providerRequests: string[] = [];
+    let call = 0;
     const worker = createWorker(async (_input, init) => {
-      providerRequest = String(init?.body);
+      providerRequests.push(String(init?.body));
+      call += 1;
+      return providerResponse(call === 1 ? candidate : verified);
+    });
+    const screenshot = { source: { kind: "image", mimeType: "image/png", base64: "c2NyZWVuc2hvdA==" } };
+
+    const response = await worker.fetch(workerRequest("/analyze-timetable", screenshot), workerEnv);
+    const payload = await response.json() as { analysis: typeof verified; verifier: { used: boolean } };
+    const verificationMessages = JSON.parse(providerRequests[1]).messages;
+
+    expect(response.status).toBe(200);
+    expect(payload.analysis).toEqual(verified);
+    expect(payload.verifier.used).toBe(true);
+    expect(verificationMessages.at(-2)).toEqual({ role: "assistant", content: JSON.stringify(candidate) });
+    expect(verificationMessages.at(-1).content).toContain("Correct omitted blocks");
+  });
+
+  it("uses a timetable-sized token budget and keeps route protections", async () => {
+    const providerRequests: string[] = [];
+    const worker = createWorker(async (_input, init) => {
+      providerRequests.push(String(init?.body));
       return providerResponse(timetableAnalysis);
     });
     const text = await worker.fetch(workerRequest("/analyze-timetable"), workerEnv);
@@ -1467,6 +1517,42 @@ describe("hosted timetable analyser", () => {
     expect(text.status).toBe(400);
     expect(untrustedOrigin.status).toBe(403);
     expect(screenshot.status).toBe(200);
-    expect(JSON.parse(providerRequest).max_tokens).toBe(MAX_TIMETABLE_COMPLETION_TOKENS);
+    expect(providerRequests).toHaveLength(2);
+    expect(JSON.parse(providerRequests[0]).max_tokens).toBe(MAX_TIMETABLE_COMPLETION_TOKENS);
+    expect(JSON.parse(providerRequests[1]).max_tokens).toBe(MAX_TIMETABLE_COMPLETION_TOKENS);
+    expect(JSON.parse(providerRequests[1]).messages.at(-1).content).toContain("Independently verify");
+  });
+
+  it("sends local weekday panels together and keeps the repair instruction timetable-specific", async () => {
+    const providerRequests: string[] = [];
+    let call = 0;
+    const worker = createWorker(async (_input, init) => {
+      providerRequests.push(String(init?.body));
+      call += 1;
+      return providerResponse(call === 1
+        ? { ...timetableAnalysis, entries: [{ ...timetableAnalysis.entries[0], day: "Mon" }] }
+        : timetableAnalysis);
+    });
+    const panels = {
+      sources: [
+        { kind: "image", mimeType: "image/jpeg", base64: "cGFuZWwtb25l" },
+        { kind: "image", mimeType: "image/jpeg", base64: "cGFuZWwtdHdv" },
+      ],
+    };
+
+    const response = await worker.fetch(workerRequest("/analyze-timetable", panels), workerEnv);
+    const firstMessages = JSON.parse(providerRequests[0]).messages;
+    const repairMessages = JSON.parse(providerRequests[1]).messages;
+
+    expect(response.status).toBe(200);
+    expect(firstMessages[1].content).toEqual([
+      expect.objectContaining({ type: "text" }),
+      expect.objectContaining({ type: "text", text: "Weekday panel 1:" }),
+      { type: "image_url", image_url: { url: "data:image/jpeg;base64,cGFuZWwtb25l" } },
+      expect.objectContaining({ type: "text", text: "Weekday panel 2:" }),
+      { type: "image_url", image_url: { url: "data:image/jpeg;base64,cGFuZWwtdHdv" } },
+    ]);
+    expect(repairMessages.at(-1).content).toContain("horizontal grid lines");
+    expect(repairMessages.at(-1).content).not.toContain("Complexity");
   });
 });

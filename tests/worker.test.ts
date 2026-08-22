@@ -6,6 +6,7 @@ function createTestEnv(overrides: Partial<Env> = {}): Env {
   return {
     AI_BASE_URL: "https://api.featherless.ai/v1",
     AI_PRIMARY_MODEL: "Qwen/Qwen3-VL-30B-A3B-Instruct",
+    AI_TIMETABLE_MODEL: "Qwen/Qwen2.5-VL-72B-Instruct",
     AI_VERIFIER_MODEL: "moonshotai/Kimi-K3",
     ALLOWED_PRODUCTION_ORIGIN: "https://plan-around.vercel.app",
     FEATHERLESS_API_KEY: "test-key",

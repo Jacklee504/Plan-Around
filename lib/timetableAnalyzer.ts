@@ -1,9 +1,9 @@
 import { getAnalyzerEndpoint, imageAnalysisIsAvailable } from "@/lib/analyzerEndpoint";
 import { type TimetableAnalysisInput, type TimetableAnalysisResponse, validateTimetableAnalysisResponse } from "@/lib/timetableAnalysis";
 
-const ANALYZER_TIMEOUT_MS = 35_000;
+const ANALYZER_TIMEOUT_MS = 125_000;
 
-export async function analyzeTimetableScreenshot(input: TimetableAnalysisInput): Promise<TimetableAnalysisResponse> {
+export async function analyzeTimetableScreenshot(input: TimetableAnalysisInput | TimetableAnalysisInput[]): Promise<TimetableAnalysisResponse> {
   if (!imageAnalysisIsAvailable()) throw new Error("Timetable screenshot analysis uses the hosted analyser. Use the deployed app or configure NEXT_PUBLIC_ANALYZER_URL locally.");
 
   const controller = new AbortController();
@@ -12,7 +12,7 @@ export async function analyzeTimetableScreenshot(input: TimetableAnalysisInput):
     const response = await fetch(getAnalyzerEndpoint("/analyze-timetable"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: input }),
+      body: JSON.stringify(Array.isArray(input) ? { sources: input } : { source: input }),
       signal: controller.signal,
     });
     if (response.status === 429) throw new Error("Too many timetable analysis requests. Please wait a minute before trying again.");
