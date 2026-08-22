@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { timetableDayPanelBounds, timetableGridVerticalLines } from "../lib/timetableImage";
+import { timetableContactSheetLayout, timetableDayPanelBounds, timetableGridVerticalLines } from "../lib/timetableImage";
 
 function pixelsWithVerticalLines(width: number, height: number, lines: number[]) {
   const pixels = new Uint8ClampedArray(width * height * 4).fill(255);
@@ -29,5 +29,19 @@ describe("timetableGridVerticalLines", () => {
 
   it("falls back when the image does not look like a multi-day grid", () => {
     expect(timetableGridVerticalLines(pixelsWithVerticalLines(100, 100, [10, 40, 80]), 100, 100)).toEqual([]);
+  });
+
+  it("puts a five-day timetable into two compact rows so Friday is not at the image edge", () => {
+    expect(timetableContactSheetLayout([100, 100, 100, 100, 100], 400)).toEqual({
+      width: 324,
+      height: 812,
+      panels: [
+        { left: 0, top: 0 },
+        { left: 112, top: 0 },
+        { left: 224, top: 0 },
+        { left: 0, top: 412 },
+        { left: 112, top: 412 },
+      ],
+    });
   });
 });

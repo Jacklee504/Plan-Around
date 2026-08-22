@@ -9,6 +9,7 @@ const MIN_GRID_DAY_COLUMNS = 2;
 const MIN_VERTICAL_LINE_RATIO = 0.45;
 const DARK_PIXEL_SUM_THRESHOLD = 600;
 const PANEL_GAP = 12;
+const CONTACT_SHEET_COLUMNS = 3;
 
 /**
  * Finds the long vertical borders of a timetable grid. This stays deliberately
@@ -59,6 +60,39 @@ export function timetableDayPanelBounds(verticalLines: number[]) {
   }));
 }
 
+type ContactSheetPanel = {
+  left: number;
+  top: number;
+};
+
+/**
+ * Places weekday panels in a compact reading-order grid. A wide single row
+ * makes the last weekday susceptible to provider-side image downscaling or
+ * cropping; three columns keep every weekday in the useful central area.
+ */
+export function timetableContactSheetLayout(panelWidths: number[], panelHeight: number) {
+  const rows = Math.ceil(panelWidths.length / CONTACT_SHEET_COLUMNS);
+  const rowWidths = Array.from({ length: rows }, (_, row) => {
+    const first = row * CONTACT_SHEET_COLUMNS;
+    const count = Math.min(CONTACT_SHEET_COLUMNS, panelWidths.length - first);
+    return panelWidths.slice(first, first + count).reduce((total, width) => total + width, 0) + Math.max(0, count - 1) * PANEL_GAP;
+  });
+  const panels: ContactSheetPanel[] = [];
+
+  for (let index = 0; index < panelWidths.length; index += 1) {
+    const row = Math.floor(index / CONTACT_SHEET_COLUMNS);
+    const firstInRow = row * CONTACT_SHEET_COLUMNS;
+    const left = panelWidths.slice(firstInRow, index).reduce((total, width) => total + width, 0) + (index - firstInRow) * PANEL_GAP;
+    panels.push({ left, top: row * (panelHeight + PANEL_GAP) });
+  }
+
+  return {
+    width: Math.max(...rowWidths),
+    height: rows * panelHeight + Math.max(0, rows - 1) * PANEL_GAP,
+    panels,
+  };
+}
+
 function loadImage(file: File) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -85,10 +119,11 @@ function canvasBlob(canvas: HTMLCanvasElement) {
 }
 
 /**
- * Rebuilds a recognisable table grid as one contact sheet of day panels. Every
- * panel repeats the time column beside exactly one day, making grid geometry
- * easier for the vision model to read without relying on it to retain all of
- * several separate image inputs. Unknown layouts safely use the original.
+ * Rebuilds a recognisable table grid as one compact contact sheet of day
+ * panels. Every panel repeats the time column beside exactly one day, making
+ * grid geometry easier for the vision model to read without relying on it to
+ * retain all of several separate image inputs. Unknown layouts safely use the
+ * original.
  */
 export async function prepareTimetableAnalysisImages(file: File): Promise<PreparedAnalysisImage[]> {
   if (!file.type.match(/^image\/(?:jpeg|png|webp)$/)) {
@@ -114,23 +149,23 @@ export async function prepareTimetableAnalysisImages(file: File): Promise<Prepar
   const [tableLeft, timeColumnRight] = verticalLines;
   const timeColumnWidth = timeColumnRight - tableLeft;
   const dayPanels = timetableDayPanelBounds(verticalLines);
-  const contactSheet = document.createElement("canvas");
-  contactSheet.width = dayPanels.reduce(
-    (width, panel) => width + timeColumnWidth + PANEL_GAP + panel.dayRight - panel.dayLeft,
-    0,
+  const panelWidths = dayPanels.map(
+    (panel) => timeColumnWidth + PANEL_GAP + panel.dayRight - panel.dayLeft,
   );
-  contactSheet.height = source.height;
+  const layout = timetableContactSheetLayout(panelWidths, source.height);
+  const contactSheet = document.createElement("canvas");
+  contactSheet.width = layout.width;
+  contactSheet.height = layout.height;
   const context = contactSheet.getContext("2d");
   if (!context) throw new Error("This browser could not prepare the timetable screenshot.");
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, contactSheet.width, contactSheet.height);
 
-  let panelOffset = 0;
-  for (const panel of dayPanels) {
+  for (const [index, panel] of dayPanels.entries()) {
+    const destination = layout.panels[index];
     const dayWidth = panel.dayRight - panel.dayLeft;
-    context.drawImage(source, tableLeft, 0, timeColumnWidth, source.height, panelOffset, 0, timeColumnWidth, contactSheet.height);
-    context.drawImage(source, panel.dayLeft, 0, dayWidth, source.height, panelOffset + timeColumnWidth + PANEL_GAP, 0, dayWidth, contactSheet.height);
-    panelOffset += timeColumnWidth + PANEL_GAP + dayWidth;
+    context.drawImage(source, tableLeft, 0, timeColumnWidth, source.height, destination.left, destination.top, timeColumnWidth, source.height);
+    context.drawImage(source, panel.dayLeft, 0, dayWidth, source.height, destination.left + timeColumnWidth + PANEL_GAP, destination.top, dayWidth, source.height);
   }
 
   const contactSheetFile = new File(
