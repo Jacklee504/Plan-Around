@@ -60,6 +60,13 @@ export function timetableDayPanelBounds(verticalLines: number[]) {
   }));
 }
 
+export function timetableDayPanelGroups<T>(panels: T[]) {
+  return Array.from(
+    { length: Math.ceil(panels.length / CONTACT_SHEET_COLUMNS) },
+    (_, index) => panels.slice(index * CONTACT_SHEET_COLUMNS, (index + 1) * CONTACT_SHEET_COLUMNS),
+  );
+}
+
 type ContactSheetPanel = {
   left: number;
   top: number;
@@ -119,11 +126,10 @@ function canvasBlob(canvas: HTMLCanvasElement) {
 }
 
 /**
- * Rebuilds a recognisable table grid as one compact contact sheet of day
- * panels. Every panel repeats the time column beside exactly one day, making
- * grid geometry easier for the vision model to read without relying on it to
- * retain all of several separate image inputs. Unknown layouts safely use the
- * original.
+ * Rebuilds a recognisable table grid as small contact sheets of day panels.
+ * Every panel repeats the time column beside exactly one day. Keeping at most
+ * three weekday panels per provider image avoids vision-model tile limits that
+ * can silently omit later weekdays. Unknown layouts safely use the original.
  */
 export async function prepareTimetableAnalysisImages(file: File): Promise<PreparedAnalysisImage[]> {
   if (!file.type.match(/^image\/(?:jpeg|png|webp)$/)) {
@@ -149,29 +155,31 @@ export async function prepareTimetableAnalysisImages(file: File): Promise<Prepar
   const [tableLeft, timeColumnRight] = verticalLines;
   const timeColumnWidth = timeColumnRight - tableLeft;
   const dayPanels = timetableDayPanelBounds(verticalLines);
-  const panelWidths = dayPanels.map(
-    (panel) => timeColumnWidth + PANEL_GAP + panel.dayRight - panel.dayLeft,
-  );
-  const layout = timetableContactSheetLayout(panelWidths, source.height);
-  const contactSheet = document.createElement("canvas");
-  contactSheet.width = layout.width;
-  contactSheet.height = layout.height;
-  const context = contactSheet.getContext("2d");
-  if (!context) throw new Error("This browser could not prepare the timetable screenshot.");
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, contactSheet.width, contactSheet.height);
+  return Promise.all(timetableDayPanelGroups(dayPanels).map(async (panels, groupIndex) => {
+    const panelWidths = panels.map(
+      (panel) => timeColumnWidth + PANEL_GAP + panel.dayRight - panel.dayLeft,
+    );
+    const layout = timetableContactSheetLayout(panelWidths, source.height);
+    const contactSheet = document.createElement("canvas");
+    contactSheet.width = layout.width;
+    contactSheet.height = layout.height;
+    const context = contactSheet.getContext("2d");
+    if (!context) throw new Error("This browser could not prepare the timetable screenshot.");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, contactSheet.width, contactSheet.height);
 
-  for (const [index, panel] of dayPanels.entries()) {
-    const destination = layout.panels[index];
-    const dayWidth = panel.dayRight - panel.dayLeft;
-    context.drawImage(source, tableLeft, 0, timeColumnWidth, source.height, destination.left, destination.top, timeColumnWidth, source.height);
-    context.drawImage(source, panel.dayLeft, 0, dayWidth, source.height, destination.left + timeColumnWidth + PANEL_GAP, destination.top, dayWidth, source.height);
-  }
+    for (const [index, panel] of panels.entries()) {
+      const destination = layout.panels[index];
+      const dayWidth = panel.dayRight - panel.dayLeft;
+      context.drawImage(source, tableLeft, 0, timeColumnWidth, source.height, destination.left, destination.top, timeColumnWidth, source.height);
+      context.drawImage(source, panel.dayLeft, 0, dayWidth, source.height, destination.left + timeColumnWidth + PANEL_GAP, destination.top, dayWidth, source.height);
+    }
 
-  const contactSheetFile = new File(
-    [await canvasBlob(contactSheet)],
-    `${file.name.replace(/\.[^.]+$/, "")}-weekday-panels.jpg`,
-    { type: "image/jpeg" },
-  );
-  return [await prepareAnalysisImage(contactSheetFile)];
+    const contactSheetFile = new File(
+      [await canvasBlob(contactSheet)],
+      `${file.name.replace(/\.[^.]+$/, "")}-weekday-panels-${groupIndex + 1}.jpg`,
+      { type: "image/jpeg" },
+    );
+    return prepareAnalysisImage(contactSheetFile);
+  }));
 }

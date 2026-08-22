@@ -22,7 +22,8 @@ import {
 } from "../../lib/timetableAnalysis";
 
 const MAX_TEXT_REQUEST_BYTES = 25_000;
-const MAX_IMAGE_REQUEST_BYTES = 2_100_000;
+const MAX_IMAGE_REQUEST_BYTES = 4_200_000;
+const MAX_TIMETABLE_ANALYSIS_SOURCES = 2;
 const MAX_UPSTREAM_RESPONSE_BYTES = 100_000;
 const ANALYSIS_TIMEOUT_MS = 60_000;
 const PROVIDER_TIMEOUT_MS = 50_000;
@@ -205,8 +206,8 @@ function parseAnalysisRequest(body: string) {
 function parseTimetableAnalysisRequest(body: string): TimetableAnalysisSource {
   const payload = parseRequestPayload(body);
   if (Array.isArray(payload.sources)) {
-    if (payload.sources.length < 1 || payload.sources.length > 7) {
-      throw new ClientInputError("A timetable grid must contain between 1 and 7 weekday panels.");
+    if (payload.sources.length < 1 || payload.sources.length > MAX_TIMETABLE_ANALYSIS_SOURCES) {
+      throw new ClientInputError("A timetable grid must contain one or two prepared weekday groups.");
     }
     const images = payload.sources.map((source, index) => {
       let image: AssignmentAnalysisInput;
@@ -467,6 +468,31 @@ async function analyseSource<T>(source: AnalysisSource, route: AnalysisRoute<T>,
   }
 }
 
+async function analyseTimetableSource(
+  source: TimetableAnalysisSource,
+  env: Env,
+  upstreamFetch: typeof fetch,
+  pause: Wait,
+) {
+  const groups = source.kind === "image-batch" ? source.images : [source];
+  const analyses = await Promise.all(
+    groups.map(async (group, index) => {
+      const analysis = await analyseSource(group, timetableRoute, env, upstreamFetch, pause);
+      console.log(JSON.stringify({
+        event: "timetable_group_analysed",
+        group: index + 1,
+        entries: analysis.entries.length,
+      }));
+      return analysis;
+    }),
+  );
+
+  return validateTimetableAnalysis({
+    entries: analyses.flatMap((analysis) => analysis.entries),
+    warnings: [...new Set(analyses.flatMap((analysis) => analysis.warnings))],
+  });
+}
+
 export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = wait) {
   return {
     async fetch(request: Request, env: Env): Promise<Response> {
@@ -521,7 +547,7 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
         }
 
         const source = parseTimetableAnalysisRequest(requestBody);
-        const analysis = await analyseSource(source, timetableRoute, env, upstreamFetch, pause);
+        const analysis = await analyseTimetableSource(source, env, upstreamFetch, pause);
         const response: TimetableAnalysisResponse = {
           analysis,
           provider: "featherless",

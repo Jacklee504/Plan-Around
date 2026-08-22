@@ -1497,15 +1497,17 @@ describe("hosted timetable analyser", () => {
     expect(response.status).toBe(200);
   });
 
-  it("sends local weekday panels together and keeps the repair instruction timetable-specific", async () => {
+  it("analyses prepared weekday groups separately and merges their sessions", async () => {
     const providerRequests: string[] = [];
-    let call = 0;
     const worker = createWorker(async (_input, init) => {
-      providerRequests.push(String(init?.body));
-      call += 1;
-      return providerResponse(call === 1
-        ? { ...timetableAnalysis, entries: [{ ...timetableAnalysis.entries[0], day: "Mon" }] }
-        : timetableAnalysis);
+      const request = String(init?.body);
+      providerRequests.push(request);
+      return providerResponse(request.includes("cGFuZWwtb25l")
+        ? timetableAnalysis
+        : {
+          ...timetableAnalysis,
+          entries: [{ ...timetableAnalysis.entries[0], day: "Friday", start: "13:00", end: "15:00" }],
+        });
     });
     const panels = {
       sources: [
@@ -1515,18 +1517,18 @@ describe("hosted timetable analyser", () => {
     };
 
     const response = await worker.fetch(workerRequest("/analyze-timetable", panels), workerEnv);
-    const firstMessages = JSON.parse(providerRequests[0]).messages;
-    const repairMessages = JSON.parse(providerRequests[1]).messages;
+    const payload = await response.json() as { analysis: typeof timetableAnalysis };
+    const requestsByPanel = providerRequests.map((request) => JSON.parse(request).messages[1].content);
 
     expect(response.status).toBe(200);
-    expect(firstMessages[1].content).toEqual([
-      expect.objectContaining({ type: "text" }),
-      expect.objectContaining({ type: "text", text: "Weekday panel 1:" }),
-      { type: "image_url", image_url: { url: "data:image/jpeg;base64,cGFuZWwtb25l" } },
-      expect.objectContaining({ type: "text", text: "Weekday panel 2:" }),
-      { type: "image_url", image_url: { url: "data:image/jpeg;base64,cGFuZWwtdHdv" } },
-    ]);
-    expect(repairMessages.at(-1).content).toContain("horizontal grid lines");
-    expect(repairMessages.at(-1).content).not.toContain("Complexity");
+    expect(providerRequests).toHaveLength(2);
+    expect(requestsByPanel).toEqual(expect.arrayContaining([
+      [expect.objectContaining({ type: "text" }), { type: "image_url", image_url: { url: "data:image/jpeg;base64,cGFuZWwtb25l" } }],
+      [expect.objectContaining({ type: "text" }), { type: "image_url", image_url: { url: "data:image/jpeg;base64,cGFuZWwtdHdv" } }],
+    ]));
+    expect(payload.analysis.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ day: "Monday" }),
+      expect.objectContaining({ day: "Friday", start: "13:00", end: "15:00" }),
+    ]));
   });
 });
