@@ -1485,6 +1485,18 @@ describe("hosted timetable analyser", () => {
     expect(JSON.parse(providerRequests[0]).max_tokens).toBe(MAX_TIMETABLE_COMPLETION_TOKENS);
   });
 
+  it("accepts a single prepared timetable panel in a sources batch", async () => {
+    const worker = createWorker(async () => providerResponse(timetableAnalysis));
+    const response = await worker.fetch(
+      workerRequest("/analyze-timetable", {
+        sources: [{ kind: "image", mimeType: "image/jpeg", base64: "Y29udGFjdC1zaGVldA==" }],
+      }),
+      workerEnv,
+    );
+
+    expect(response.status).toBe(200);
+  });
+
   it("sends local weekday panels together and keeps the repair instruction timetable-specific", async () => {
     const providerRequests: string[] = [];
     let call = 0;

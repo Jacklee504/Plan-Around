@@ -205,8 +205,8 @@ function parseAnalysisRequest(body: string) {
 function parseTimetableAnalysisRequest(body: string): TimetableAnalysisSource {
   const payload = parseRequestPayload(body);
   if (Array.isArray(payload.sources)) {
-    if (payload.sources.length < 2 || payload.sources.length > 7) {
-      throw new ClientInputError("A timetable grid must contain between 2 and 7 weekday panels.");
+    if (payload.sources.length < 1 || payload.sources.length > 7) {
+      throw new ClientInputError("A timetable grid must contain between 1 and 7 weekday panels.");
     }
     const images = payload.sources.map((source, index) => {
       let image: AssignmentAnalysisInput;
