@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   basePath: isGitHubPagesBuild ? "/Plan-Around" : "",
   agentRules: false,
+  images: { unoptimized: true },
 };
 
 export default nextConfig;

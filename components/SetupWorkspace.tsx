@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { parseTimetablePdf } from "@/lib/timetableParser";
 import { renderPdfToImageFile } from "@/lib/pdfDocument";
 import {
@@ -419,6 +419,35 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
     if (isLoaded)
       writeStoredValue(storageKeys.timetableEntries, timetableEntries);
   }, [isLoaded, timetableEntries]);
+
+  // Lets a scroll gesture over the week-navigation controls step through weeks
+  // quickly (several weeks per real scroll) instead of only one click at a
+  // time. A callback ref (not useRef+useEffect) because this component itself
+  // gates its whole calendar section behind an `isLoaded` hydration flag, so
+  // the div this attaches to doesn't exist yet on the render(s) where an
+  // effect keyed on a prop like `onboardingCompleted` would fire - a callback
+  // ref runs exactly when the DOM node itself mounts, regardless of that.
+  // Native addEventListener (not React's onWheel) so preventDefault reliably
+  // stops the page itself from scrolling while over this control.
+  const weekNavCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+
+    const WHEEL_STEP_THROTTLE_MS = 120;
+    let lastStepAt = 0;
+
+    function handleWheel(event: WheelEvent) {
+      const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+      if (delta === 0) return;
+      event.preventDefault();
+      const now = Date.now();
+      if (now - lastStepAt < WHEEL_STEP_THROTTLE_MS) return;
+      lastStepAt = now;
+      setVisibleCalendarWeekStart((current) => addCalendarWeeks(current, delta > 0 ? 1 : -1));
+    }
+
+    node.addEventListener("wheel", handleWheel, { passive: false });
+    return () => node.removeEventListener("wheel", handleWheel);
+  }, []);
 
   const selectedEntry =
     timetableEntries.find((entry) => entry.id === selectedEntryId) ?? null;
@@ -1072,7 +1101,11 @@ async function importTimetable(file: File | undefined) {
               )}
             </div>
             {onboardingCompleted ? (
-              <div className="mt-3 flex flex-wrap items-center gap-3">
+              <div
+                ref={weekNavCallbackRef}
+                className="mt-3 flex flex-wrap items-center gap-3"
+                title="Scroll here to browse weeks quickly"
+              >
                 <div className="inline-flex items-center gap-1 rounded-xl border border-[var(--line)] p-1">
                   <button
                     type="button"

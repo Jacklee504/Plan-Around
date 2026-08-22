@@ -312,16 +312,17 @@ function DayColumn({
             block.end,
           );
           const completed = Boolean(block.completedAt);
+          const missed = Boolean(block.missedAt);
 
           return (
             <div
               key={block.id}
-              className={`absolute left-1 right-1 z-20 overflow-hidden rounded-lg border text-left ${cardPadding(density)} ${completed ? "border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)]" : "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"}`}
+              className={`absolute left-1 right-1 z-20 overflow-hidden rounded-lg border text-left ${cardPadding(density)} ${completed ? "border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)]" : missed ? "border-red-200 bg-red-50 text-red-700" : "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"}`}
               style={blockPosition(block.start, block.end, range.startHour)}
             >
               <CalendarCard
                 label={block.taskName}
-                detail={completed ? "Completed" : "Study plan"}
+                detail={completed ? "Completed" : missed ? "Missed" : "Study plan"}
               />
             </div>
           );

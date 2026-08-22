@@ -96,6 +96,7 @@ export type StudyBlock = {
   taskId: string;
   taskName: string;
   completedAt?: string;
+  missedAt?: string;
 };
 
 export type PreferredStudyTime = "none" | "morning" | "afternoon" | "evening";

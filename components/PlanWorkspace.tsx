@@ -278,7 +278,21 @@ export function PlanWorkspace() {
         if (block.completedAt) return { ...block, completedAt: undefined };
         // A future session cannot be newly marked complete - see canCompleteStudyBlock.
         if (!canCompleteStudyBlock(block)) return block;
-        return { ...block, completedAt: new Date().toISOString() };
+        // Completing a session supersedes an earlier missed mark.
+        return { ...block, completedAt: new Date().toISOString(), missedAt: undefined };
+      }),
+    );
+  }
+
+  // Unlike completion, missed isn't gated by scheduled time - deciding a session
+  // will be skipped doesn't require waiting for it to start, and a completed
+  // session can't also be missed, so the toggle is a no-op once completed.
+  function toggleStudyBlockMissed(blockId: string) {
+    setStudyBlocks((current) =>
+      current.map((block) => {
+        if (block.id !== blockId || block.completedAt) return block;
+        if (block.missedAt) return { ...block, missedAt: undefined };
+        return { ...block, missedAt: new Date().toISOString() };
       }),
     );
   }
@@ -446,26 +460,37 @@ export function PlanWorkspace() {
                       <h3 className="text-sm font-semibold">{formatDate(date)}</h3>
                       <ul className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
                         {blocks.map((block) => (
-                          <li key={block.id} className={`grid gap-1 py-3 sm:grid-cols-[8rem_minmax(0,1fr)_auto_auto] sm:items-center ${block.completedAt ? "text-[var(--muted-ink)]" : ""}`}>
+                          <li key={block.id} className={`grid gap-1 py-3 sm:grid-cols-[8rem_minmax(0,1fr)_auto_auto] sm:items-center ${block.completedAt ? "text-[var(--muted-ink)]" : block.missedAt ? "text-red-700" : ""}`}>
                             <p className="font-semibold tabular-nums">{block.start}–{block.end}</p>
                             <p className="text-sm text-[var(--muted-ink)]">{block.taskName}</p>
                             <p className="text-sm font-semibold tabular-nums sm:text-right">{blockDuration(block)}</p>
-                            {block.completedAt || canCompleteStudyBlock(block) ? (
-                              <button
-                                type="button"
-                                onClick={() => toggleStudyBlockCompletion(block.id)}
-                                className={`min-h-9 rounded-lg px-3 text-xs font-semibold sm:justify-self-end ${block.completedAt ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-[var(--accent)]"}`}
-                              >
-                                {block.completedAt ? "Completed" : "Mark complete"}
-                              </button>
-                            ) : (
-                              <span
-                                className="min-h-9 content-center px-3 text-xs font-semibold text-[var(--muted-ink)] sm:justify-self-end sm:text-right"
-                                title="You can mark this complete once the session starts."
-                              >
-                                Scheduled
-                              </span>
-                            )}
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              {block.completedAt || canCompleteStudyBlock(block) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleStudyBlockCompletion(block.id)}
+                                  className={`min-h-9 rounded-lg px-3 text-xs font-semibold ${block.completedAt ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-[var(--accent)]"}`}
+                                >
+                                  {block.completedAt ? "Completed" : "Mark complete"}
+                                </button>
+                              ) : (
+                                <span
+                                  className="min-h-9 content-center px-3 text-xs font-semibold text-[var(--muted-ink)] text-right"
+                                  title="You can mark this complete once the session starts."
+                                >
+                                  Scheduled
+                                </span>
+                              )}
+                              {!block.completedAt ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleStudyBlockMissed(block.id)}
+                                  className={`min-h-9 rounded-lg px-3 text-xs font-semibold ${block.missedAt ? "bg-red-50 text-red-700" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-red-300 hover:text-red-700"}`}
+                                >
+                                  {block.missedAt ? "Missed" : "Mark missed"}
+                                </button>
+                              ) : null}
+                            </div>
                           </li>
                         ))}
                       </ul>
