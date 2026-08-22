@@ -88,6 +88,7 @@ export function AssignmentWorkspace() {
   const [draft, setDraft] = useState<AssignmentDraft>(emptyAssignmentDraft);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
   const [showTasks, setShowTasks] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
   const [briefText, setBriefText] = useState("");
   const [analysisImage, setAnalysisImage] = useState<PreparedAnalysisImage | null>(null);
   const currentAnalysisInputKey = useRef("");
@@ -462,29 +463,37 @@ export function AssignmentWorkspace() {
                   <h3 id="analysis-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Analyse an assignment brief.</h3>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Paste the assessment text to extract a draft rubric. You review it before anything is added.</p>
                 </div>
-                <button type="button" onClick={() => updateBriefText("CS301 Coursework Project\n\nThis coursework contributes 40% of the module grade.\nSubmission deadline: 28 August 2026.\n\nAssessment:\nDesign and implementation, 45 marks\nDevelop a working application implementing the required core functionality.\n\nTesting and evaluation, 25 marks\nProvide appropriate test cases and critically evaluate the finished solution.\n\nTechnical report, 20 marks\nSubmit a report of approximately 2,500 words documenting architecture, implementation decisions and evaluation.\n\nPresentation, 10 marks\nDeliver a five-minute presentation demonstrating the completed system.")} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Load sample brief</button>
+                {showAnalysis ? (
+                  <button type="button" onClick={() => updateBriefText("CS301 Coursework Project\n\nThis coursework contributes 40% of the module grade.\nSubmission deadline: 28 August 2026.\n\nAssessment:\nDesign and implementation, 45 marks\nDevelop a working application implementing the required core functionality.\n\nTesting and evaluation, 25 marks\nProvide appropriate test cases and critically evaluate the finished solution.\n\nTechnical report, 20 marks\nSubmit a report of approximately 2,500 words documenting architecture, implementation decisions and evaluation.\n\nPresentation, 10 marks\nDeliver a five-minute presentation demonstrating the completed system.")} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Load sample brief</button>
+                ) : (
+                  <button type="button" onClick={() => setShowAnalysis(true)} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Add a brief to analyse</button>
+                )}
               </div>
-              <label className="mt-4 block text-sm font-medium">
-                Assignment brief
-                <textarea value={briefText} onChange={(event) => updateBriefText(event.target.value)} disabled={Boolean(analysisImage)} className={`${inputClassName} min-h-36 py-3 disabled:cursor-not-allowed disabled:bg-[var(--surface-soft)]`} placeholder="Paste the assessment brief or rubric here" />
-              </label>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-ink)]">or</span>
-                <label className={`inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] ${isPreparingImage ? "cursor-not-allowed opacity-60" : ""}`}>
-                  <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" onChange={(event) => void selectAnalysisFile(event.target.files?.[0])} disabled={isPreparingImage} className="sr-only" />
-                  {isPreparingImage ? "Preparing file…" : "Upload screenshot or PDF"}
-                </label>
-                <p className="text-sm text-[var(--muted-ink)]">PNG, JPEG, WebP or PDF, up to 8 MB (15 MB for PDF). A PDF&apos;s text is read locally first; a scanned PDF is prepared as an image instead. Sent to the hosted analyser only when you click Analyse.</p>
-              </div>
-              {analysisImage ? <div className="mt-3 flex flex-wrap items-center gap-3 border-y border-[var(--line)] py-3 text-sm"><p className="font-semibold text-[var(--ink)]">Screenshot ready: {analysisImage.filename}</p><p className="text-[var(--muted-ink)]">Prepared for analysis, not saved.</p><button type="button" onClick={clearAnalysisImage} className="min-h-10 font-semibold text-[var(--accent-strong)] underline underline-offset-2">Remove screenshot</button></div> : null}
-              {!canAnalyseScreenshot ? <p className="mt-3 text-sm leading-6 text-[var(--muted-ink)]">Screenshots and scanned PDFs use the hosted analyser. A PDF with a text layer still works locally. Use the deployed app or configure <code>NEXT_PUBLIC_ANALYZER_URL</code> to enable the rest.</p> : null}
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <button type="button" onClick={analyseBrief} disabled={(!briefText.trim() && !analysisImage) || isAnalysing || isPreparingImage} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">
-                  {isAnalysing ? "Analysing source…" : analysisImage ? "Analyse screenshot with AI" : "Analyse brief with AI"}
-                </button>
-                <p className="text-sm text-[var(--muted-ink)]">It extracts details only. Workload and scheduling stay explainable.</p>
-              </div>
-              {analysisError ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{analysisError}</p> : null}
+              {showAnalysis ? (
+                <>
+                  <label className="mt-4 block text-sm font-medium">
+                    Assignment brief
+                    <textarea value={briefText} onChange={(event) => updateBriefText(event.target.value)} disabled={Boolean(analysisImage)} className={`${inputClassName} min-h-36 py-3 disabled:cursor-not-allowed disabled:bg-[var(--surface-soft)]`} placeholder="Paste the assessment brief or rubric here" />
+                  </label>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-ink)]">or</span>
+                    <label className={`inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] ${isPreparingImage ? "cursor-not-allowed opacity-60" : ""}`}>
+                      <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" onChange={(event) => void selectAnalysisFile(event.target.files?.[0])} disabled={isPreparingImage} className="sr-only" />
+                      {isPreparingImage ? "Preparing file…" : "Upload screenshot or PDF"}
+                    </label>
+                    <p className="text-sm text-[var(--muted-ink)]">PNG, JPEG, WebP or PDF, up to 8 MB (15 MB for PDF). A PDF&apos;s text is read locally first; a scanned PDF is prepared as an image instead. Sent to the hosted analyser only when you click Analyse.</p>
+                  </div>
+                  {analysisImage ? <div className="mt-3 flex flex-wrap items-center gap-3 border-y border-[var(--line)] py-3 text-sm"><p className="font-semibold text-[var(--ink)]">Screenshot ready: {analysisImage.filename}</p><p className="text-[var(--muted-ink)]">Prepared for analysis, not saved.</p><button type="button" onClick={clearAnalysisImage} className="min-h-10 font-semibold text-[var(--accent-strong)] underline underline-offset-2">Remove screenshot</button></div> : null}
+                  {!canAnalyseScreenshot ? <p className="mt-3 text-sm leading-6 text-[var(--muted-ink)]">Screenshots and scanned PDFs use the hosted analyser. A PDF with a text layer still works locally. Use the deployed app or configure <code>NEXT_PUBLIC_ANALYZER_URL</code> to enable the rest.</p> : null}
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button type="button" onClick={analyseBrief} disabled={(!briefText.trim() && !analysisImage) || isAnalysing || isPreparingImage} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">
+                      {isAnalysing ? "Analysing source…" : analysisImage ? "Analyse screenshot with AI" : "Analyse brief with AI"}
+                    </button>
+                    <p className="text-sm text-[var(--muted-ink)]">It extracts details only. Workload and scheduling stay explainable.</p>
+                  </div>
+                  {analysisError ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{analysisError}</p> : null}
+                </>
+              ) : null}
 
               {analysisResult ? (
                 <div className="mt-5 border-y border-[var(--line)] py-5" aria-live="polite">
@@ -582,7 +591,7 @@ export function AssignmentWorkspace() {
                 <li key={assignment.id} className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                   <div>
                     <p className="font-semibold">{assignment.title}</p>
-                    <p className="mt-1 text-sm text-[var(--muted-ink)]">{linkedModule?.code ?? linkedModule?.name ?? "Module removed"} · Due {formatDeadline(assignment.deadline)} · {assignment.moduleWeight}% · {assignment.tasks.length ? `${assignment.tasks.length} tasks` : "No task breakdown"}</p>
+                    <p className="mt-1 text-sm text-[var(--muted-ink)]">{linkedModule?.code ?? linkedModule?.name ?? "Module removed"} · Due {formatDeadline(assignment.deadline)} · {assignment.moduleWeight}% · {assignment.tasks.length ? `${assignment.tasks.length} task${assignment.tasks.length === 1 ? "" : "s"}` : "No task breakdown"}</p>
                     {assignment.analysisSource ? <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent-strong)]">AI-assisted rubric · {formatAnalysisProvider(assignment.analysisSource.provider)}</p> : null}
                   </div>
                   <div className="flex flex-wrap gap-1 sm:justify-self-end">

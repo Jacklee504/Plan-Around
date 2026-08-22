@@ -185,7 +185,7 @@ export function SettingsWorkspace() {
     <div className="space-y-9">
       <section className="border-y border-[var(--line)] pb-6" aria-labelledby="study-window-heading">
         <h2 id="study-window-heading" className="text-sm font-semibold">When to study</h2>
-        <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">These affect where future study sessions are placed. They never change how much work an assignment needs.</p>
+        <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Set the earliest start and latest finish for scheduled sessions.</p>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-medium">
@@ -225,7 +225,7 @@ export function SettingsWorkspace() {
 
         <div className="mt-4">
           <p className="text-sm font-medium">Preferred session length</p>
-          <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">A preference, not a guarantee. PlanAround may use a different valid length to avoid an unusable short remainder or to fit the available space.</p>
+          <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">A preference, not a guarantee. PlanAround may use a different valid length to avoid an unusable short remainder or to fit the available space.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {SESSION_LENGTH_OPTIONS.map((minutes) => (
               <button key={minutes} type="button" onClick={() => setPreferences({ ...preferences, preferredSessionMinutes: minutes })} aria-pressed={preferences.preferredSessionMinutes === minutes} className={toggleButtonClassName(preferences.preferredSessionMinutes === minutes)}>
@@ -237,7 +237,7 @@ export function SettingsWorkspace() {
 
         <div className="mt-5">
           <p className="text-sm font-medium">Daily study target</p>
-          <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">PlanAround aims to spread each assignment around this amount per day, but can use more available time when needed to meet the deadline.</p>
+          <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround aims to spread each assignment around this amount per day, but can use more available time when needed to meet the deadline.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {DAILY_TARGET_OPTIONS.map((minutes) => (
               <button key={minutes} type="button" onClick={() => setPreferences({ ...preferences, dailyStudyTargetMinutes: minutes })} aria-pressed={preferences.dailyStudyTargetMinutes === minutes} className={toggleButtonClassName(preferences.dailyStudyTargetMinutes === minutes)}>
@@ -250,7 +250,7 @@ export function SettingsWorkspace() {
 
       <section className="border-b border-[var(--line)] pb-6" aria-labelledby="time-of-day-heading">
         <h2 id="time-of-day-heading" className="text-sm font-semibold">When to prioritise</h2>
-        <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">PlanAround will try this part of each available day first, then fall back to other available times when needed. It does not remove availability outside this window.</p>
+        <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround will try this part of each available day first, then fall back to other available times when needed. It does not remove availability outside this window.</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {TIME_OF_DAY_OPTIONS.map((option) => (
             <button key={option.value} type="button" onClick={() => setPreferences({ ...preferences, preferredTimeOfDay: option.value })} aria-pressed={preferences.preferredTimeOfDay === option.value} className={toggleButtonClassName(preferences.preferredTimeOfDay === option.value)}>

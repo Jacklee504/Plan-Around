@@ -200,6 +200,26 @@ export function PlanWorkspace() {
   const recalculatedResult = selectedAssignment && workload
     ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks: assignmentReservedBlocks, preferences: planningPreferences })
     : null;
+  // Preview of what replanning would actually change, shown before the click
+  // instead of only after - built the same way generateOrReplan() itself
+  // schedules (against remainingWorkload, so completed work is excluded from
+  // what's being re-placed), not reused from recalculatedResult above, which
+  // is scheduled against the full workload for a different purpose (the
+  // always-visible schedule-status stats) and would overstate the change.
+  const replanPreview = isStoredPlanStale && selectedAssignment && remainingWorkload
+    ? summarizeReplan(
+      storedSelectedBlocks,
+      generateStudySchedule({
+        assignment: selectedAssignment,
+        workload: remainingWorkload,
+        timetableEntries,
+        commitments,
+        datedCommitments,
+        reservedBlocks: assignmentReservedBlocks,
+        preferences: planningPreferences,
+      }).studyBlocks,
+    )
+    : null;
   // While stale, only completed sessions remain valid history - obsolete
   // incomplete sessions are hidden until the user replans the remainder.
   const existingResult = recalculatedResult
@@ -393,6 +413,14 @@ export function PlanWorkspace() {
               <p className="font-semibold">Your plan needs updating.</p>
               <p className="mt-1 text-sm leading-6">Replan the remaining work to keep this schedule realistic. Completed study time will be preserved.</p>
               {staleReasons.length ? <p className="mt-1 text-sm leading-6">Reason: {staleReasons.map((reason) => planChangeReasonCopy[reason]).join(", ")}</p> : null}
+              {replanPreview ? (
+                <p className="mt-1 text-sm leading-6">
+                  {completedSelectedBlocks.length ? `Keeps your ${completedSelectedBlocks.length} completed session${completedSelectedBlocks.length === 1 ? "" : "s"}. ` : ""}
+                  {replanPreview.previousIncompleteBlocks || replanPreview.newIncompleteBlocks
+                    ? `Replaces ${replanPreview.previousIncompleteBlocks} upcoming session${replanPreview.previousIncompleteBlocks === 1 ? "" : "s"} with ${replanPreview.newIncompleteBlocks} new one${replanPreview.newIncompleteBlocks === 1 ? "" : "s"}.`
+                    : "No upcoming sessions to replace."}
+                </p>
+              ) : null}
             </section>
           ) : null}
 

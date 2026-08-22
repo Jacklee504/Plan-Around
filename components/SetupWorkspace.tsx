@@ -1062,14 +1062,11 @@ async function importTimetable(file: File | undefined) {
           <section aria-labelledby="calendar-heading">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">
-                  {onboardingCompleted ? "Calendar" : "Your recurring week"}
-                </p>
                 <h2
                   id="calendar-heading"
-                  className="mt-1 text-2xl font-semibold tracking-[-0.035em]"
+                  className="text-2xl font-semibold tracking-[-0.035em]"
                 >
-                  {onboardingCompleted ? "Calendar" : "Build your normal week."}
+                  {onboardingCompleted ? "This week" : "Build your normal week."}
                 </h2>
                 <p className="mt-1 text-sm text-[var(--muted-ink)]">
                   {onboardingCompleted
