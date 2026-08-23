@@ -660,15 +660,6 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
   }, [assignments, modules, assignmentSessions]);
   const shouldShowImporter =
     !reviewEntries && (showImporter || !timetableEntries.length);
-  const shouldShowPreUploadGuide =
-    !onboardingCompleted &&
-    shouldShowImporter &&
-    importState === "idle" &&
-    !preparedTimetableImage &&
-    !isPreparingTimetableImage &&
-    !isAnalysingTimetable &&
-    !timetableAnalysisError;
-
   function openSlot(slot: CalendarSlot) {
     setSelectedEntryId(null);
     setEventError("");
@@ -899,10 +890,8 @@ async function importTimetable(file: File | undefined) {
 
   if (!prepared || timetableImageVersion.current !== version) return;
   setPreparedTimetableImage(prepared);
-  setImportState("complete");
-  setImportMessage(
-    "We couldn't read the timetable text, so AI is reading the PDF as an image.",
-  );
+  setImportState("idle");
+  setImportMessage("");
   void analyseTimetableImage(prepared, version);
 }  async function selectTimetableImage(file: File | undefined) {
     if (!file) return;
@@ -1152,6 +1141,10 @@ async function importTimetable(file: File | undefined) {
             Download sample
           </a>
         </div>
+        <p className="text-sm leading-6 text-[var(--muted-ink)] lg:col-span-2">
+          <span className="font-semibold text-[var(--ink)]">For a cleaner import:</span>{" "}
+          use a timetable where the weekday labels, times and module names are all visible.
+        </p>
         {importState !== "idle" ? (
           <p
             className={`text-sm leading-6 lg:col-span-2 ${importState === "error" ? "text-red-700" : "text-[var(--muted-ink)]"}`}
@@ -1218,58 +1211,6 @@ async function importTimetable(file: File | undefined) {
   return (
     <div className="space-y-8">
       {shouldShowImporter ? importControls : null}
-      {shouldShowPreUploadGuide ? (
-        <section
-          aria-labelledby="setup-next-steps-heading"
-          className="border-t border-[var(--line)] pt-6"
-        >
-          <h2
-            id="setup-next-steps-heading"
-            className="text-xl font-semibold tracking-[-0.03em]"
-          >
-            What happens next
-          </h2>
-          <ol className="mt-4 grid gap-5 sm:grid-cols-3">
-            <li className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
-              <span className="grid size-9 place-items-center rounded-full bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-strong)]">
-                1
-              </span>
-              <div>
-                <h3 className="text-sm font-semibold">Check your classes</h3>
-                <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">
-                  Edit any day, time or module name before saving.
-                </p>
-              </div>
-            </li>
-            <li className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
-              <span className="grid size-9 place-items-center rounded-full bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-strong)]">
-                2
-              </span>
-              <div>
-                <h3 className="text-sm font-semibold">Add your routine</h3>
-                <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">
-                  Include work, exercise and other regular commitments.
-                </p>
-              </div>
-            </li>
-            <li className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
-              <span className="grid size-9 place-items-center rounded-full bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-strong)]">
-                3
-              </span>
-              <div>
-                <h3 className="text-sm font-semibold">Plan around your week</h3>
-                <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">
-                  Turn the finished calendar into a realistic assignment plan.
-                </p>
-              </div>
-            </li>
-          </ol>
-          <p className="mt-6 max-w-2xl text-sm leading-6 text-[var(--muted-ink)]">
-            <span className="font-semibold text-[var(--ink)]">For a cleaner import:</span>{" "}
-            use a timetable where the weekday labels, times and module names are all visible.
-          </p>
-        </section>
-      ) : null}
       {reviewEntries ? (
         <TimetableReview
           entries={reviewEntries}
@@ -1410,15 +1351,12 @@ async function importTimetable(file: File | undefined) {
           {!onboardingCompleted ? (
             <>
               <section className="border-t border-[var(--line)] pt-6">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">
-                  Step 2 · Add normal commitments
-                </p>
-                <h2 className="mt-1 text-xl font-semibold tracking-[-0.03em]">
-                  Keep your recurring life in view.
+                <h2 className="text-xl font-semibold tracking-[-0.03em]">
+                  Your teaching week is set.
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">
-                  Click an empty part of the calendar to add a recurring
-                  commitment.
+                  Add work, exercise and other regular commitments next. Then
+                  you&apos;ll be ready to add an assignment and create its plan.
                 </p>
                 <button
                   type="button"
