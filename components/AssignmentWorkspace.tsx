@@ -96,6 +96,14 @@ export function AssignmentWorkspace() {
 
   const selectedModule = modules.find((module) => module.id === draft.moduleId);
   const hasUnconfirmedSelection = selectedModule?.creditsConfirmed === false;
+  const hasCompleteAssignmentDetails = Boolean(
+    draft.moduleId &&
+      draft.title.trim() &&
+      draft.deadline &&
+      Number.isFinite(Number(draft.moduleWeight)) &&
+      Number(draft.moduleWeight) > 0 &&
+      Number(draft.moduleWeight) <= 100,
+  );
   const taskMarks = tasks.reduce((total, task) => total + (Number(task.marks) || 0), 0);
   const canAnalyseScreenshot = imageAnalysisIsAvailable();
   const hasDraftContent = Boolean(
@@ -468,7 +476,7 @@ export function AssignmentWorkspace() {
               ) : null}
             </section>
 
-            {!isReviewingTasks ? (
+            {!isReviewingTasks && hasCompleteAssignmentDetails ? (
               <section className="border-t border-[var(--line)] pt-6" aria-labelledby="review-next-heading">
                 <h2 id="review-next-heading" className="text-xl font-semibold tracking-[-0.03em]">Review assignment tasks</h2>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Add tasks manually, or review the ones from your brief before creating the assignment plan.</p>
