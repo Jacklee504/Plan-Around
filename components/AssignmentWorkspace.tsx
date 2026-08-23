@@ -121,7 +121,7 @@ export function AssignmentWorkspace() {
   function resetForm() {
     setDraft(emptyAssignmentDraft);
     setTasks([]);
-    setIsReviewingTasks(true);
+    setIsReviewingTasks(false);
     setShowAssignmentDetails(false);
     updateBriefText("");
     setHasAnalysedBrief(false);
@@ -342,7 +342,7 @@ export function AssignmentWorkspace() {
       complexity: String(task.complexity) as TaskDraft["complexity"],
       notes: task.requirements.join("\n"),
     })));
-    setIsReviewingTasks(false);
+    setIsReviewingTasks(true);
     setShowAssignmentDetails(true);
     setHasAnalysedBrief(true);
     setShowAnalysis(false);
