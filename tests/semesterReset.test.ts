@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetForNewSemester } from "../lib/semesterReset";
-import { readStoredValue, storageKeys, writeStoredValue } from "../lib/storage";
+import { clearPlanAroundStorage, readStoredValue, storageKeys, writeStoredValue } from "../lib/storage";
 
 // See tests/dataPortability.test.ts for why this shim exists - lib/storage.ts
 // no-ops without `window`/localStorage, which vitest's node environment lacks.
@@ -53,5 +53,11 @@ describe("resetForNewSemester", () => {
 
     expect(readStoredValue(storageKeys.planningPreferences, {})).toEqual({ studyStart: "09:00" });
     expect(readStoredValue(storageKeys.notificationsEnabled, false)).toBe(true);
+  });
+
+  it("clears every PlanAround key when all data is cleared", () => {
+    clearPlanAroundStorage();
+
+    expect(Object.values(storageKeys).every((key) => window.localStorage.getItem(key) === null)).toBe(true);
   });
 });

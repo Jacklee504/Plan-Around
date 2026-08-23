@@ -9,7 +9,7 @@ import { createPlanFingerprint, getReservableStudyBlocks } from "@/lib/planSnaps
 import { DEFAULT_PLANNING_PREFERENCES, normalizePlanningPreferences } from "@/lib/planningPreferences";
 import { resetForNewSemester } from "@/lib/semesterReset";
 import { generateStudySchedule } from "@/lib/scheduler";
-import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
+import { clearPlanAroundStorage, readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateRemainingWorkload, replaceIncompleteBlocksForAssignment } from "@/lib/studyProgress";
 import {
   getNotificationPermission,
@@ -130,6 +130,18 @@ export function SettingsWorkspace() {
     downloadTextFile(`planaround-semester-backup-${today}.json`, serializePlanAroundExport(buildPlanAroundExport()), "application/json");
     resetForNewSemester();
     window.location.reload();
+  }
+
+  function clearAllData() {
+    if (
+      !window.confirm(
+        "This permanently deletes all PlanAround data on this device, including your timetable, assignments, plans, preferences and reminders. It cannot be undone. Continue?",
+      )
+    )
+      return;
+
+    clearPlanAroundStorage();
+    router.replace("/setup");
   }
 
   async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
@@ -413,6 +425,14 @@ export function SettingsWorkspace() {
           <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Downloads a backup, then clears your timetable, modules, commitments and assignments so you can set up a new term from scratch. Scheduling preferences are kept.</p>
           <button type="button" onClick={startNewSemester} className="mt-3 min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:text-red-700">
             Start new semester
+          </button>
+        </div>
+
+        <div className="mt-6 border-t border-red-200 pt-5">
+          <p className="text-sm font-medium text-red-800">Clear all PlanAround data</p>
+          <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Permanently removes everything stored by PlanAround on this device, including scheduling preferences. This does not create a backup.</p>
+          <button type="button" onClick={clearAllData} className="mt-3 min-h-10 rounded-xl border border-red-200 px-4 text-sm font-semibold text-red-700 transition-colors hover:border-red-400 hover:bg-red-50">
+            Clear all data
           </button>
         </div>
       </section>
