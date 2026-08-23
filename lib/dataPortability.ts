@@ -8,7 +8,7 @@ export type PlanAroundExport = {
   data: Record<string, unknown>;
 };
 
-type StoredValueShape = "array" | "object" | "boolean";
+type StoredValueShape = "array" | "object" | "boolean" | "string";
 
 /**
  * The broad runtime shape each recognised key's stored value must have.
@@ -23,6 +23,7 @@ const storageKeyShapes: Record<string, StoredValueShape> = {
   [storageKeys.datedCommitments]: "array",
   [storageKeys.onboarding]: "object",
   [storageKeys.assignments]: "array",
+  [storageKeys.activeAssignmentId]: "string",
   [storageKeys.studyBlocks]: "array",
   [storageKeys.planSnapshots]: "object",
   [storageKeys.planningPreferences]: "object",
@@ -44,6 +45,8 @@ function matchesShape(value: unknown, shape: StoredValueShape): boolean {
       return typeof value === "object" && !Array.isArray(value);
     case "boolean":
       return typeof value === "boolean";
+    case "string":
+      return typeof value === "string";
   }
 }
 

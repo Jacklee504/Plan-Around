@@ -11,6 +11,7 @@ import type { OnboardingState } from "@/types";
 export function resetForNewSemester() {
   writeStoredValue(storageKeys.modules, []);
   writeStoredValue(storageKeys.assignments, []);
+  writeStoredValue(storageKeys.activeAssignmentId, "");
   writeStoredValue(storageKeys.commitments, []);
   writeStoredValue(storageKeys.datedCommitments, []);
   writeStoredValue(storageKeys.timetableEntries, []);

@@ -259,6 +259,7 @@ export function AssignmentWorkspace() {
     // Persist before navigating so Plan can load the newly saved assignment on
     // its first render rather than waiting for this component's effect.
     writeStoredValue(storageKeys.assignments, nextAssignments);
+    writeStoredValue(storageKeys.activeAssignmentId, assignment.id);
     setAssignments(nextAssignments);
     setDeletedAssignment(null);
     router.push(`/plan?assignment=${encodeURIComponent(assignment.id)}`);

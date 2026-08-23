@@ -108,7 +108,9 @@ export function PlanWorkspace() {
         ? storedAssignments.find((assignment) => assignment.id === requestedAssignmentId && storedModules.some((module) => module.id === assignment.moduleId))
         : null;
       const latestSchedulableAssignment = [...storedAssignments].reverse().find((assignment) => storedModules.some((module) => module.id === assignment.moduleId));
-      setSelectedAssignmentId(requestedAssignment?.id ?? latestSchedulableAssignment?.id ?? "");
+      const initialAssignmentId = requestedAssignment?.id ?? latestSchedulableAssignment?.id ?? "";
+      setSelectedAssignmentId(initialAssignmentId);
+      if (initialAssignmentId) writeStoredValue(storageKeys.activeAssignmentId, initialAssignmentId);
       setIsLoaded(true);
     }, 0);
 
@@ -291,6 +293,7 @@ export function PlanWorkspace() {
 
   function chooseAssignment(id: string) {
     setSelectedAssignmentId(id);
+    writeStoredValue(storageKeys.activeAssignmentId, id);
     setGeneratedResult(null);
     setLastReplanUpdate(null);
   }

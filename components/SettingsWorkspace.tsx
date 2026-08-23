@@ -1,12 +1,16 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { CALENDAR_DAYS } from "@/lib/calendarLayout";
 import { applyPlanAroundImport, buildPlanAroundExport, parsePlanAroundExport, serializePlanAroundExport } from "@/lib/dataPortability";
 import { buildStudyCalendarIcs } from "@/lib/icsExport";
+import { createPlanFingerprint, getReservableStudyBlocks } from "@/lib/planSnapshot";
 import { DEFAULT_PLANNING_PREFERENCES, normalizePlanningPreferences } from "@/lib/planningPreferences";
 import { resetForNewSemester } from "@/lib/semesterReset";
+import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
+import { calculateRemainingWorkload, replaceIncompleteBlocksForAssignment } from "@/lib/studyProgress";
 import {
   getNotificationPermission,
   isNotificationSupported,
@@ -14,7 +18,8 @@ import {
   requestNotificationPermission,
   writeNotificationsEnabled,
 } from "@/lib/studyNotifications";
-import type { Commitment, DatedCommitment, PlanningPreferences, PreferredStudyTime, StudyBlock, TimetableEntry } from "@/types";
+import { calculateWorkloadBreakdown } from "@/lib/workload";
+import type { Assignment, Commitment, DatedCommitment, Module, PlanningPreferences, PreferredStudyTime, StudyBlock, TimetableEntry } from "@/types";
 
 const dayLabels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -53,7 +58,9 @@ const selectClassName =
   "mt-1.5 min-h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)] outline-none transition-colors focus:border-[var(--accent)]";
 
 export function SettingsWorkspace() {
+  const router = useRouter();
   const [preferences, setPreferences] = useState<PlanningPreferences>(DEFAULT_PLANNING_PREFERENCES);
+  const [activeAssignment, setActiveAssignment] = useState<Assignment | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [notificationSupported, setNotificationSupported] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
@@ -64,6 +71,14 @@ export function SettingsWorkspace() {
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
       setPreferences(normalizePlanningPreferences(readStoredValue<unknown>(storageKeys.planningPreferences, DEFAULT_PLANNING_PREFERENCES)));
+      const storedModules = readStoredValue<Module[]>(storageKeys.modules, []);
+      const storedAssignments = readStoredValue<Assignment[]>(storageKeys.assignments, []);
+      const activeAssignmentId = readStoredValue<string>(storageKeys.activeAssignmentId, "");
+      const matchingAssignment = storedAssignments.find((assignment) =>
+        assignment.id === activeAssignmentId &&
+        storedModules.some((module) => module.id === assignment.moduleId),
+      );
+      setActiveAssignment(matchingAssignment ?? null);
       setNotificationSupported(isNotificationSupported());
       setNotificationPermission(getNotificationPermission());
       setNotificationsEnabled(readNotificationsEnabled());
@@ -174,6 +189,74 @@ export function SettingsWorkspace() {
     setPreferences({ ...preferences, enabledStudyDays });
   }
 
+  function updateActivePlan() {
+    const activeAssignmentId = readStoredValue<string>(storageKeys.activeAssignmentId, "");
+    const assignments = readStoredValue<Assignment[]>(storageKeys.assignments, []);
+    const modules = readStoredValue<Module[]>(storageKeys.modules, []);
+    const assignment = assignments.find((item) => item.id === activeAssignmentId);
+    const assignmentModule = assignment
+      ? modules.find((item) => item.id === assignment.moduleId)
+      : undefined;
+
+    if (!assignment || !assignmentModule) {
+      setActiveAssignment(null);
+      return;
+    }
+
+    // Write before navigating so Plan loads the exact preference set that
+    // shaped this updated schedule on its first render.
+    const nextPreferences = normalizePlanningPreferences(preferences);
+    writeStoredValue(storageKeys.planningPreferences, nextPreferences);
+
+    const timetableEntries = readStoredValue<TimetableEntry[]>(storageKeys.timetableEntries, []);
+    const commitments = readStoredValue<Commitment[]>(storageKeys.commitments, []);
+    const datedCommitments = readStoredValue<DatedCommitment[]>(storageKeys.datedCommitments, []);
+    const studyBlocks = readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []);
+    const planSnapshots = readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {});
+    const workload = calculateWorkloadBreakdown(assignmentModule.credits, assignment);
+    const completedBlocks = studyBlocks.filter(
+      (block) => block.assignmentId === assignment.id && block.completedAt,
+    );
+    const remainingWorkload = calculateRemainingWorkload(workload, completedBlocks);
+    const reservedBlocks = getReservableStudyBlocks({
+      currentAssignmentId: assignment.id,
+      assignments,
+      modules,
+      studyBlocks,
+      planSnapshots,
+      timetableEntries,
+      commitments,
+      datedCommitments,
+      planningPreferences: nextPreferences,
+    });
+    const scheduled = generateStudySchedule({
+      assignment,
+      workload: remainingWorkload,
+      timetableEntries,
+      commitments,
+      datedCommitments,
+      reservedBlocks: [...reservedBlocks, ...completedBlocks],
+      preferences: nextPreferences,
+    });
+
+    writeStoredValue(
+      storageKeys.studyBlocks,
+      replaceIncompleteBlocksForAssignment(studyBlocks, assignment.id, scheduled.studyBlocks),
+    );
+    writeStoredValue(storageKeys.planSnapshots, {
+      ...planSnapshots,
+      [assignment.id]: createPlanFingerprint({
+        assignment,
+        module: assignmentModule,
+        timetableEntries,
+        commitments,
+        datedCommitments,
+        planningPreferences: nextPreferences,
+      }),
+    });
+    router.push(`/plan?assignment=${encodeURIComponent(assignment.id)}`);
+  }
+
   const startOptions = STUDY_WINDOW_OPTIONS.filter((time) => minutesFromTime(preferences.studyEnd) - minutesFromTime(time) >= 60);
   const endOptions = STUDY_WINDOW_OPTIONS.filter((time) => minutesFromTime(time) - minutesFromTime(preferences.studyStart) >= 60);
 
@@ -258,6 +341,21 @@ export function SettingsWorkspace() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="border-b border-[var(--line)] pb-6" aria-labelledby="update-plan-heading">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Active assignment</p>
+        <h2 id="update-plan-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Update your plan.</h2>
+        {activeAssignment ? (
+          <>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Apply these study preferences to the remaining sessions for <span className="font-semibold text-[var(--ink)]">{activeAssignment.title}</span>. Completed sessions stay as they are.</p>
+            <button type="button" onClick={updateActivePlan} className="mt-4 min-h-11 rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">
+              Update plan
+            </button>
+          </>
+        ) : (
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Open an assignment plan first, then return here to update its remaining study sessions.</p>
+        )}
       </section>
 
       <section className="border-b border-[var(--line)] pb-6" aria-labelledby="notifications-heading">

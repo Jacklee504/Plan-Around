@@ -5,6 +5,7 @@ export const storageKeys = {
   datedCommitments: "plan-around.dated-commitments",
   onboarding: "plan-around.onboarding",
   assignments: "plan-around.assignments",
+  activeAssignmentId: "plan-around.active-assignment-id",
   studyBlocks: "plan-around.study-blocks",
   planSnapshots: "plan-around.plan-snapshots",
   planningPreferences: "plan-around.planning-preferences",
