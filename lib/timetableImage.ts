@@ -280,7 +280,10 @@ function canvasBlob(canvas: HTMLCanvasElement) {
  * to infer which day a block belongs to. Unknown layouts safely use the
  * original image.
  */
-export async function prepareTimetableAnalysisImages(file: File): Promise<PreparedTimetableImage[]> {
+export async function prepareTimetableAnalysisImages(
+  file: File,
+  { deriveSlots = true }: { deriveSlots?: boolean } = {},
+): Promise<PreparedTimetableImage[]> {
   if (!file.type.match(/^image\/(?:jpeg|png|webp)$/)) {
     throw new Error("Choose a PNG, JPEG or WebP screenshot.");
   }
@@ -308,7 +311,9 @@ export async function prepareTimetableAnalysisImages(file: File): Promise<Prepar
   const sourceTop = rowBounds?.top ?? 0;
   const sourceHeight = rowBounds ? rowBounds.bottom - rowBounds.top : source.height;
   const dayPanels = timetableDayPanelBounds(verticalLines);
-  const slotsByDay = timetableSlotsFromGrid(pixels, source.width, verticalLines);
+  const slotsByDay = deriveSlots
+    ? timetableSlotsFromGrid(pixels, source.width, verticalLines)
+    : null;
   return Promise.all(dayPanels.map(async (panel, panelIndex) => {
     const dayWidth = panel.dayRight - panel.dayLeft;
     const weekdayPanel = document.createElement("canvas");
