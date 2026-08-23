@@ -70,6 +70,7 @@ export function AssignmentWorkspace() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [draft, setDraft] = useState<AssignmentDraft>(emptyAssignmentDraft);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
+  const [isReviewingTasks, setIsReviewingTasks] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [briefText, setBriefText] = useState("");
   const [analysisImage, setAnalysisImage] = useState<PreparedAnalysisImage | null>(null);
@@ -118,6 +119,7 @@ export function AssignmentWorkspace() {
   function resetForm() {
     setDraft(emptyAssignmentDraft);
     setTasks([]);
+    setIsReviewingTasks(false);
     updateBriefText("");
     setHasAnalysedBrief(false);
     setAnalysisError("");
@@ -217,20 +219,34 @@ export function AssignmentWorkspace() {
     }
   }
 
-  function saveAssignment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function validateAssignmentDetails() {
     const title = draft.title.trim();
     const moduleWeight = Number(draft.moduleWeight);
 
     if (!draft.moduleId || !title || !draft.deadline || !Number.isFinite(moduleWeight) || moduleWeight <= 0 || moduleWeight > 100) {
       setError("Choose a module, then add a title, deadline and weighting between 1% and 100%.");
-      return;
+      return null;
     }
 
     if (hasUnconfirmedSelection) {
       setError("Confirm this module's credits in Calendar before saving an assignment for it.");
-      return;
+      return null;
     }
+
+    return { title, moduleWeight };
+  }
+
+  function continueToTaskReview() {
+    if (!validateAssignmentDetails()) return;
+    setError("");
+    setIsReviewingTasks(true);
+  }
+
+  function saveAssignment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const assignmentDetails = validateAssignmentDetails();
+    if (!assignmentDetails) return;
+    const { title, moduleWeight } = assignmentDetails;
 
     if (tasks.some((task) => !task.name.trim() || !Number.isFinite(Number(task.marks)) || Number(task.marks) <= 0)) {
       setError("Each added task needs a name and a positive mark value, or remove the unfinished task.");
@@ -263,6 +279,15 @@ export function AssignmentWorkspace() {
     router.push(`/plan?assignment=${encodeURIComponent(assignment.id)}`);
   }
 
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    if (isReviewingTasks) {
+      saveAssignment(event);
+      return;
+    }
+    event.preventDefault();
+    continueToTaskReview();
+  }
+
   function loadDemo() {
     const demoModule = modules.find((module) => module.code === "CS301") ?? modules[0];
     if (!demoModule) {
@@ -284,6 +309,7 @@ export function AssignmentWorkspace() {
       { id: createId(), name: "Technical report", marks: "20", complexity: "2", notes: "2,500-word report." },
       { id: createId(), name: "Presentation", marks: "10", complexity: "1", notes: "Five-minute presentation." },
     ]);
+    setIsReviewingTasks(true);
     setHasAnalysedBrief(false);
     setAnalysisError("");
     setStatus("Demo details loaded. Review them, then save when ready.");
@@ -335,6 +361,7 @@ export function AssignmentWorkspace() {
       complexity: String(task.complexity) as TaskDraft["complexity"],
       notes: task.requirements.join("\n"),
     })));
+    setIsReviewingTasks(true);
     setHasAnalysedBrief(true);
     setShowAnalysis(false);
     setStatus(analysis.tasks.length
@@ -398,8 +425,8 @@ export function AssignmentWorkspace() {
           <Link href="/setup" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Go to Calendar</Link>
         </section>
       ) : (
-        <form onSubmit={saveAssignment} className="max-w-3xl space-y-7">
-          <section className="border-y border-[var(--line)] py-6" aria-labelledby="assignment-form-heading">
+        <form onSubmit={handleFormSubmit} className="max-w-3xl space-y-7">
+          <section className={isReviewingTasks ? "hidden" : "border-y border-[var(--line)] py-6"} aria-labelledby="assignment-form-heading">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">1 · Assignment details</p>
@@ -433,7 +460,7 @@ export function AssignmentWorkspace() {
             {hasUnconfirmedSelection ? <p className="mt-4 rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">This module still needs its credits confirmed in <Link href="/setup" className="font-semibold text-[var(--accent-strong)] underline underline-offset-2">Calendar</Link>.</p> : null}
           </section>
 
-            <section className="border-t border-[var(--line)] pt-6" aria-labelledby="analysis-heading">
+            <section className={isReviewingTasks ? "hidden" : "border-t border-[var(--line)] pt-6"} aria-labelledby="analysis-heading">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Optional</p>
@@ -483,12 +510,44 @@ export function AssignmentWorkspace() {
               ) : null}
             </section>
 
-            <section className="border-t border-[var(--line)] pt-6" aria-labelledby="tasks-heading">
+            {!isReviewingTasks ? (
+              <section className="border-t border-[var(--line)] pt-6" aria-labelledby="review-next-heading">
+                <h2 id="review-next-heading" className="text-xl font-semibold tracking-[-0.03em]">Review assignment tasks</h2>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Add tasks manually, or review the ones from your brief before creating the assignment plan.</p>
+                {error ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{error}</p> : null}
+                {status ? <p className="mt-4 rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-sm leading-6 text-[var(--accent-strong)]" role="status">{status}</p> : null}
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <button type="button" onClick={continueToTaskReview} disabled={hasUnconfirmedSelection} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">Continue to task review</button>
+                  <button type="button" onClick={discardDraft} className="inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:text-red-700">Discard draft</button>
+                </div>
+              </section>
+            ) : null}
+
+            {isReviewingTasks ? (
+              <section className="border-y border-[var(--line)] py-6" aria-labelledby="review-heading">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">2 · Review</p>
+                    <h2 id="review-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Confirm the assignment tasks.</h2>
+                    <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">Check the task breakdown before creating the assignment plan.</p>
+                  </div>
+                  <button type="button" onClick={() => { setError(""); setIsReviewingTasks(false); }} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Edit details</button>
+                </div>
+                <dl className="mt-5 grid gap-3 rounded-xl bg-[var(--surface-soft)] p-4 text-sm sm:grid-cols-2">
+                  <div><dt className="text-[var(--muted-ink)]">Module</dt><dd className="mt-1 font-semibold">{selectedModule ? (selectedModule.code ? `${selectedModule.code} · ${selectedModule.name}` : selectedModule.name) : "No module selected"}</dd></div>
+                  <div><dt className="text-[var(--muted-ink)]">Deadline</dt><dd className="mt-1 font-semibold">{draft.deadline ? formatDeadline(draft.deadline) : "No deadline"}</dd></div>
+                  <div><dt className="text-[var(--muted-ink)]">Assignment</dt><dd className="mt-1 font-semibold">{draft.title || "Untitled assignment"}</dd></div>
+                  <div><dt className="text-[var(--muted-ink)]">Weighting</dt><dd className="mt-1 font-semibold">{draft.moduleWeight ? `${draft.moduleWeight}%` : "No weighting"}</dd></div>
+                </dl>
+              </section>
+            ) : null}
+
+            <section className={isReviewingTasks ? "border-t border-[var(--line)] pt-6" : "hidden"} aria-labelledby="tasks-heading">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">2 · Optional</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Task breakdown</p>
                   <h3 id="tasks-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Assignment tasks</h3>
-                  <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">Break the assignment into parts when it helps you plan the work.</p>
+                  <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">Add, edit or remove parts before continuing.</p>
                 </div>
 
                 {tasks.length ? (
@@ -527,7 +586,7 @@ export function AssignmentWorkspace() {
               ) : null}
             </section>
 
-          <section className="border-t border-[var(--line)] pt-6" aria-labelledby="save-assignment-heading">
+          <section className={isReviewingTasks ? "border-t border-[var(--line)] pt-6" : "hidden"} aria-labelledby="save-assignment-heading">
             <h2 id="save-assignment-heading" className="text-xl font-semibold tracking-[-0.03em]">Create assignment plan</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Your reviewed details will be used to create the workload and calendar plan.</p>
             {error ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{error}</p> : null}
