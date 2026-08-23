@@ -72,6 +72,7 @@ type StudyBlockEditDraft = {
   end: string;
   missed: boolean;
 };
+type TimetableAttendanceChoice = TimetableAttendance | "skip-this-week";
 type LegacyTimetableEntry = Omit<
   TimetableEntry,
   "attendance" | "skippedWeeks"
@@ -404,6 +405,118 @@ function StudyBlockDialog({
         <div className="mt-6 flex justify-end gap-3">
           <button type="button" onClick={onClose} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] hover:border-[var(--accent)]">Cancel</button>
           <button type="submit" className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">Save session</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function TimetableEntryDialog({
+  entry,
+  weekKey,
+  onSave,
+  onClose,
+}: {
+  entry: TimetableEntry;
+  weekKey: string;
+  onSave: (attendance: TimetableAttendanceChoice) => void;
+  onClose: () => void;
+}) {
+  const [attendance, setAttendance] = useState<TimetableAttendanceChoice>(
+    entry.attendance === "skip-every-week"
+      ? "skip-every-week"
+      : entry.skippedWeeks.includes(weekKey)
+        ? "skip-this-week"
+        : "attending",
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-[oklch(0.18_0.02_260_/_0.35)] p-4"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <form
+        className="w-full max-w-md rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave(attendance);
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
+        aria-labelledby="timetable-entry-heading"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">
+              Class attendance
+            </p>
+            <h2
+              id="timetable-entry-heading"
+              className="mt-1 text-xl font-semibold tracking-[-0.03em]"
+            >
+              Are you going to this class?
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-10 px-2 text-sm font-semibold text-[var(--muted-ink)] hover:text-[var(--ink)]"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mt-5 rounded-xl bg-[var(--surface-soft)] px-4 py-3">
+          <p className="text-sm font-semibold">
+            {entry.moduleCode} · {entry.moduleName}
+          </p>
+          <p className="mt-1 text-sm text-[var(--muted-ink)]">
+            {days[entry.dayOfWeek]}, {entry.start} to {entry.end} · {sessionLabels[entry.sessionType]}
+          </p>
+        </div>
+
+        <fieldset className="mt-5 grid gap-2">
+          <legend className="text-sm font-medium">Attendance</legend>
+          {[
+            ["attending", "Going", "Keep this class in your calendar."],
+            ["skip-this-week", "Not going this week", "Remove this occurrence only."],
+            ["skip-every-week", "Not going every week", "Remove this recurring class."],
+          ].map(([value, label, description]) => {
+            const selected = attendance === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setAttendance(value as TimetableAttendanceChoice)}
+                className={`min-h-11 rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
+                  selected
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                    : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--accent)]"
+                }`}
+              >
+                <span className="block font-semibold">{label}</span>
+                <span className="mt-0.5 block text-xs font-normal text-[var(--muted-ink)]">
+                  {description}
+                </span>
+              </button>
+            );
+          })}
+        </fieldset>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] hover:border-[var(--accent)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
+          >
+            Save attendance
+          </button>
         </div>
       </form>
     </div>
@@ -922,38 +1035,27 @@ async function importTimetable(file: File | undefined) {
     setShowImporter(false);
   }
 
-  function updateAttendance(attendance: TimetableAttendance) {
+  function saveSelectedEntryAttendance(attendance: TimetableAttendanceChoice) {
     if (!selectedEntry || !selectedEntryWeekKey) return;
     setTimetableEntries((current) =>
       current.map((entry) =>
         entry.id === selectedEntry.id
           ? {
               ...entry,
-              attendance,
-              skippedWeeks:
-                attendance === "attending"
+              attendance:
+                attendance === "skip-this-week" ? "attending" : attendance,
+              skippedWeeks: attendance === "skip-this-week"
+                ? entry.skippedWeeks.includes(selectedEntryWeekKey)
+                  ? entry.skippedWeeks
+                  : [...entry.skippedWeeks, selectedEntryWeekKey]
+                : attendance === "attending"
                   ? entry.skippedWeeks.filter((week) => week !== selectedEntryWeekKey)
                   : entry.skippedWeeks,
             }
           : entry,
       ),
     );
-  }
-  function skipSelectedEntryThisWeek() {
-    if (!selectedEntry || !selectedEntryWeekKey) return;
-    setTimetableEntries((current) =>
-      current.map((entry) =>
-        entry.id === selectedEntry.id
-          ? {
-              ...entry,
-              attendance: "attending",
-              skippedWeeks: entry.skippedWeeks.includes(selectedEntryWeekKey)
-                ? entry.skippedWeeks
-                : [...entry.skippedWeeks, selectedEntryWeekKey],
-            }
-          : entry,
-      ),
-    );
+    setSelectedEntryId(null);
   }
   const importControls = (
     <>
@@ -1278,43 +1380,6 @@ async function importTimetable(file: File | undefined) {
                 onSelectEmptySlot={openSlot}
               />
             </div>
-            {onboardingCompleted && selectedEntry ? (
-              <div className="mt-4 grid gap-4 border-y border-[var(--line)] py-4 sm:grid-cols-[1fr_auto] sm:items-center">
-                <div>
-                  <p className="text-sm font-semibold">
-                    {selectedEntry.moduleCode} · {selectedEntry.moduleName}
-                  </p>
-                  <p className="mt-1 text-sm text-[var(--muted-ink)]">
-                    {days[selectedEntry.dayOfWeek]}, {selectedEntry.start} to{" "}
-                    {selectedEntry.end} ·{" "}
-                    {sessionLabels[selectedEntry.sessionType]}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => updateAttendance("attending")}
-                    className={`min-h-10 rounded-lg px-3 text-sm font-semibold ${selectedEntry.attendance === "attending" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)]"}`}
-                  >
-                    Going
-                  </button>
-                  <button
-                    type="button"
-                    onClick={skipSelectedEntryThisWeek}
-                    className={`min-h-10 rounded-lg px-3 text-sm font-semibold ${selectedEntryWeekKey && selectedEntry.skippedWeeks.includes(selectedEntryWeekKey) ? "bg-[var(--ink)] text-white" : "border border-[var(--line)]"}`}
-                  >
-                    Not going this week
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateAttendance("skip-every-week")}
-                    className={`min-h-10 rounded-lg px-3 text-sm font-semibold ${selectedEntry.attendance === "skip-every-week" ? "bg-[var(--ink)] text-white" : "border border-[var(--line)]"}`}
-                  >
-                    Not going every week
-                  </button>
-                </div>
-              </div>
-            ) : null}
           </section>
           {!onboardingCompleted ? (
             <>
@@ -1391,6 +1456,15 @@ async function importTimetable(file: File | undefined) {
           block={studyBlockDraft}
           onSave={saveStudyBlock}
           onClose={() => setStudyBlockDraft(null)}
+        />
+      ) : null}
+      {onboardingCompleted && selectedEntry ? (
+        <TimetableEntryDialog
+          key={`${selectedEntry.id}-${selectedEntryWeekKey ?? ""}`}
+          entry={selectedEntry}
+          weekKey={selectedEntryWeekKey ?? currentWeekKey}
+          onSave={saveSelectedEntryAttendance}
+          onClose={() => setSelectedEntryId(null)}
         />
       ) : null}
     </div>

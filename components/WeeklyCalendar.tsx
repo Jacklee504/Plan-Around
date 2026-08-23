@@ -156,8 +156,8 @@ function CalendarCard({
   const isMicro = density === "micro";
   return (
     <span
-      className={`flex h-full min-w-0 flex-col overflow-hidden ${
-        !isMicro && detail ? "justify-center text-center" : ""
+      className={`flex h-full min-w-0 flex-col overflow-hidden text-center ${
+        isMicro ? "justify-end" : "justify-center"
       }`}
     >
       <FittedCalendarLabel
