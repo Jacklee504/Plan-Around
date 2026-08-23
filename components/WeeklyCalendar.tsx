@@ -133,7 +133,11 @@ function FittedCalendarLabel({
     >
       <span
         ref={labelRef}
-        className="block w-full whitespace-nowrap font-bold"
+        className={
+          isMicro
+            ? "block w-full whitespace-nowrap font-bold"
+            : "block w-full font-bold [overflow-wrap:normal] [word-break:normal]"
+        }
         style={{ fontSize: `${fontSize}px` }}
       >
         {label}
