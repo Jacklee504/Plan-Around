@@ -1150,13 +1150,6 @@ async function importTimetable(file: File | undefined) {
             />
           </label>
 
-          <a
-            href="/semester-1-timetable.pdf"
-            download
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
-          >
-            Download sample
-          </a>
         </div>
         <p className="text-sm leading-6 text-[var(--muted-ink)] lg:col-span-2">
           <span className="font-semibold text-[var(--ink)]">For a cleaner import:</span>{" "}

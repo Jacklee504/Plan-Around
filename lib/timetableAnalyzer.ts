@@ -33,7 +33,7 @@ export async function analyzeTimetableScreenshot(
     });
     if (response.status === 429) throw new Error("Too many timetable analysis requests. Please wait a minute before trying again.");
     if (response.status === 504) throw new Error("The timetable analyser took too long. Please try again.");
-    if (!response.ok) throw new Error("The analyser could not read this timetable. You can use the sample PDF instead.");
+    if (!response.ok) throw new Error("The analyser could not read this timetable. Try another readable file.");
     const parsed = validateTimetableAnalysisResponse(await response.json());
     const images = Array.isArray(input) ? input : [input];
     const slots = images.flatMap((image) => "slots" in image && image.slots ? image.slots : []);
@@ -49,7 +49,7 @@ export async function analyzeTimetableScreenshot(
     if (cancelledByCaller) throw new Error("Timetable analysis was cancelled.");
     if (controller.signal.aborted) throw new Error("The timetable analyser took too long. Please try again.");
     if (error instanceof Error && (error.message.startsWith("Too many timetable") || error.message.startsWith("The timetable analyser took too long") || error.message.startsWith("The analyser could not read"))) throw error;
-    throw new Error("The timetable analyser is not available. You can use the sample PDF instead.");
+    throw new Error("The timetable analyser is not available. Try again shortly.");
   } finally {
     clearTimeout(timeout);
     signal?.removeEventListener("abort", cancelFromCaller);

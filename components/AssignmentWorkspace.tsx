@@ -52,13 +52,6 @@ function createEmptyTask(): TaskDraft {
   return { id: createId(), name: "", marks: "", complexity: "2", notes: "" };
 }
 
-function getDemoDeadline() {
-  const deadline = new Date();
-  deadline.setDate(deadline.getDate() + 21);
-  const timezoneOffset = deadline.getTimezoneOffset() * 60_000;
-  return new Date(deadline.getTime() - timezoneOffset).toISOString().slice(0, 10);
-}
-
 function formatDeadline(date: string) {
   return new Intl.DateTimeFormat("en-IE", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${date}T12:00:00`));
 }
@@ -288,35 +281,6 @@ export function AssignmentWorkspace() {
     continueToTaskReview();
   }
 
-  function loadDemo() {
-    const demoModule = modules.find((module) => module.code === "CS301") ?? modules[0];
-    if (!demoModule) {
-      setError("Import your teaching week or add a module before loading the demo assignment.");
-      return;
-    }
-
-    updateBriefText("");
-    setShowAnalysis(false);
-    setDraft({
-      moduleId: demoModule.id,
-      title: "Coursework project",
-      deadline: getDemoDeadline(),
-      moduleWeight: "40",
-    });
-    setTasks([
-      { id: createId(), name: "Design and implementation", marks: "45", complexity: "3", notes: "Working prototype and core functionality." },
-      { id: createId(), name: "Testing and evaluation", marks: "25", complexity: "2", notes: "Test cases and a short evaluation." },
-      { id: createId(), name: "Technical report", marks: "20", complexity: "2", notes: "2,500-word report." },
-      { id: createId(), name: "Presentation", marks: "10", complexity: "1", notes: "Five-minute presentation." },
-    ]);
-    setIsReviewingTasks(true);
-    setHasAnalysedBrief(false);
-    setAnalysisError("");
-    setStatus("Demo details loaded. Review them, then save when ready.");
-    setError("");
-    setDeletedAssignment(null);
-  }
-
   async function analyseBrief() {
     const input: AssignmentAnalysisInput = analysisImage
       ? { kind: "image", mimeType: analysisImage.mimeType, base64: analysisImage.base64 }
@@ -427,13 +391,11 @@ export function AssignmentWorkspace() {
       ) : (
         <form onSubmit={handleFormSubmit} className="max-w-3xl space-y-7">
           <section className={isReviewingTasks ? "hidden" : "border-y border-[var(--line)] py-6"} aria-labelledby="assignment-form-heading">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">1 · Assignment details</p>
-                <h2 id="assignment-form-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">The essentials.</h2>
+                <h2 id="assignment-form-heading" className="text-xl font-semibold tracking-[-0.03em]">The essentials.</h2>
                 <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">Module, title, deadline and weighting are enough to begin.</p>
               </div>
-              <button type="button" onClick={loadDemo} className="min-h-11 rounded-xl border border-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]">Load demo</button>
             </div>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="text-sm font-medium sm:col-span-2">
@@ -463,17 +425,14 @@ export function AssignmentWorkspace() {
             <section className={isReviewingTasks ? "hidden" : "border-t border-[var(--line)] pt-6"} aria-labelledby="analysis-heading">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Optional</p>
-                  <h3 id="analysis-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Use a brief.</h3>
-                  <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Paste or upload it to fill the details and task list, then review everything yourself.</p>
+                  <h3 id="analysis-heading" className="text-lg font-semibold tracking-[-0.025em]">Have an assignment brief?</h3>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Upload or paste it to have AI fill in the assignment details, then review the result before continuing.</p>
                 </div>
                 {hasAnalysedBrief ? (
                   <button type="button" onClick={() => { updateBriefText(""); setShowAnalysis(true); }} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Replace brief</button>
-                ) : showAnalysis ? (
-                  <button type="button" onClick={() => updateBriefText("CS301 Coursework Project\n\nThis coursework contributes 40% of the module grade.\nSubmission deadline: 28 August 2026.\n\nAssessment:\nDesign and implementation, 45 marks\nDevelop a working application implementing the required core functionality.\n\nTesting and evaluation, 25 marks\nProvide appropriate test cases and critically evaluate the finished solution.\n\nTechnical report, 20 marks\nSubmit a report of approximately 2,500 words documenting architecture, implementation decisions and evaluation.\n\nPresentation, 10 marks\nDeliver a five-minute presentation demonstrating the completed system.")} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Load sample brief</button>
-                ) : (
-                  <button type="button" onClick={() => setShowAnalysis(true)} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Use a brief</button>
-                )}
+                ) : !showAnalysis ? (
+                  <button type="button" onClick={() => setShowAnalysis(true)} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Upload or paste a brief</button>
+                ) : null}
               </div>
               {showAnalysis ? (
                 <div className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--surface-soft)] p-4 sm:p-5">
@@ -495,7 +454,6 @@ export function AssignmentWorkspace() {
                     <button type="button" onClick={analyseBrief} disabled={(!briefText.trim() && !analysisImage) || isAnalysing || isPreparingImage} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">
                       {isAnalysing ? "Analysing brief…" : "Analyse brief"}
                     </button>
-                    <p className="text-sm text-[var(--muted-ink)]">It replaces the task list; you can edit it before continuing.</p>
                   </div>
                   {analysisError ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{analysisError}</p> : null}
                 </div>

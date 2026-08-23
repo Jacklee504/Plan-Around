@@ -6,6 +6,15 @@
 
 https://planaround.vercel.app/ (also mirrored at https://jacklee504.github.io/Plan-Around/)
 
+## Evaluation material
+
+Use these synthetic files through the normal import flows; no fields are prefilled in the app.
+
+- [Download timetable PDF](public/semester-1-timetable.pdf?raw=1) - import this first to set up the Calendar.
+- [Download assignment brief PDF](demo/software_engineering_project.pdf?raw=1) - upload this from Assignments to test text-based brief analysis.
+- [Download scanned assignment brief PDF](demo/cloud_distributed_systems_scanned.pdf?raw=1) - upload this to test image-based brief analysis.
+- [Download assignment brief text](demo/sample-assignment.txt?raw=1) - paste this into the brief field to test pasted-text analysis.
+
 ## Problem
 
 Students usually know when an assignment is due, but not how much time it deserves, which parts matter most, or where that work actually fits around lectures, work and other commitments. Calendars show availability; task lists show what needs doing. Neither answers both questions together.
