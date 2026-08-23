@@ -82,11 +82,9 @@ function titleMinimumFontSize(density: ReturnType<typeof calendarBlockDensity>) 
 function FittedCalendarLabel({
   label,
   density,
-  hasDetail,
 }: {
   label: string;
   density: ReturnType<typeof calendarBlockDensity>;
-  hasDetail: boolean;
 }) {
   const containerRef = useRef<HTMLSpanElement>(null);
   const labelRef = useRef<HTMLSpanElement>(null);
@@ -128,7 +126,7 @@ function FittedCalendarLabel({
       className={
         isMicro
           ? "flex h-full min-w-0 items-end overflow-hidden"
-          : `block min-h-0 overflow-hidden ${hasDetail ? "flex-1" : "h-full"}`
+          : "block min-w-0 shrink-0 overflow-hidden"
       }
     >
       <span
@@ -157,14 +155,17 @@ function CalendarCard({
 }) {
   const isMicro = density === "micro";
   return (
-    <span className="flex h-full min-w-0 flex-col overflow-hidden">
+    <span
+      className={`flex h-full min-w-0 flex-col overflow-hidden ${
+        !isMicro && detail ? "justify-center text-center" : ""
+      }`}
+    >
       <FittedCalendarLabel
         key={`${label}-${density}-${detail ?? ""}`}
         label={label}
         density={density}
-        hasDetail={!isMicro && Boolean(detail)}
       />
-      {!isMicro && detail ? <span className="block shrink-0 truncate">{detail}</span> : null}
+      {!isMicro && detail ? <span className="block shrink-0 truncate leading-3">{detail}</span> : null}
     </span>
   );
 }
