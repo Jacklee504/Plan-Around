@@ -432,24 +432,25 @@ export function TimetableReview({
         <h3 id="credit-review-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Confirm each module&apos;s credits.</h3>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-ink)]">Credits must be whole numbers. They help PlanAround estimate the workload for each assignment.</p>
         {reviewedModules.length ? (
-          <dl className="mt-4 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+          <dl className="mt-4 max-w-2xl divide-y divide-[var(--line)] border-y border-[var(--line)]">
             {reviewedModules.map((reviewedModule) => (
-              <div key={moduleKey(reviewedModule.code)} className="flex flex-wrap items-end justify-between gap-3 py-3">
-                <div>
-                  <dt className="text-sm font-semibold">{reviewedModule.name}</dt>
-                  <dd className="mt-1 text-xs text-[var(--muted-ink)]">{reviewedModule.code}</dd>
-                </div>
-                <label className="w-28 text-sm font-medium">
-                  Credits
-                  <input
-                    value={creditValue(reviewedModule.code)}
-                    onChange={(event) => updateCredits(reviewedModule.code, event.target.value)}
-                    className={inputClassName}
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    aria-describedby={creditError ? "credit-review-error" : undefined}
-                  />
-                </label>
+              <div key={moduleKey(reviewedModule.code)} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                <dt className="min-w-0 text-sm font-semibold">
+                  {reviewedModule.code} - {reviewedModule.name}
+                </dt>
+                <dd>
+                  <label className="block w-20">
+                    <span className="sr-only">Credits for {reviewedModule.code} - {reviewedModule.name}</span>
+                    <input
+                      value={creditValue(reviewedModule.code)}
+                      onChange={(event) => updateCredits(reviewedModule.code, event.target.value)}
+                      className={inputClassName}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      aria-describedby={creditError ? "credit-review-error" : undefined}
+                    />
+                  </label>
+                </dd>
               </div>
             ))}
           </dl>
