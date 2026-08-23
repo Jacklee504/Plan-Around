@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { timetableContactSheetLayout, timetableDayPanelBounds, timetableDayPanelGroups, timetableGridVerticalLines } from "../lib/timetableImage";
+import { timetableDayPanelBounds, timetableGridVerticalLines } from "../lib/timetableImage";
 
 function pixelsWithVerticalLines(width: number, height: number, lines: number[]) {
   const pixels = new Uint8ClampedArray(width * height * 4).fill(255);
@@ -31,19 +31,10 @@ describe("timetableGridVerticalLines", () => {
     expect(timetableGridVerticalLines(pixelsWithVerticalLines(100, 100, [10, 40, 80]), 100, 100)).toEqual([]);
   });
 
-  it("splits a five-day timetable into small provider-safe groups", () => {
-    expect(timetableDayPanelGroups(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])).toEqual([
-      ["Monday", "Tuesday", "Wednesday"],
-      ["Thursday", "Friday"],
-    ]);
-    expect(timetableContactSheetLayout([100, 100, 100], 400)).toEqual({
-      width: 324,
-      height: 400,
-      panels: [
-        { left: 0, top: 0 },
-        { left: 112, top: 0 },
-        { left: 224, top: 0 },
-      ],
-    });
+  it("returns a distinct bound for each weekday panel", () => {
+    const panels = timetableDayPanelBounds([10, 24, 46, 68, 90, 112, 134]);
+
+    expect(panels).toHaveLength(5);
+    expect(panels.map(({ dayLeft, dayRight }) => dayRight - dayLeft)).toEqual([22, 22, 22, 22, 22]);
   });
 });

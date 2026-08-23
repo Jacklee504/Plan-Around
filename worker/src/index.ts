@@ -23,7 +23,7 @@ import {
 
 const MAX_TEXT_REQUEST_BYTES = 25_000;
 const MAX_IMAGE_REQUEST_BYTES = 4_200_000;
-const MAX_TIMETABLE_ANALYSIS_SOURCES = 2;
+const MAX_TIMETABLE_ANALYSIS_SOURCES = 7;
 const MAX_UPSTREAM_RESPONSE_BYTES = 100_000;
 const ANALYSIS_TIMEOUT_MS = 60_000;
 const PROVIDER_TIMEOUT_MS = 50_000;
@@ -207,7 +207,7 @@ function parseTimetableAnalysisRequest(body: string): TimetableAnalysisSource {
   const payload = parseRequestPayload(body);
   if (Array.isArray(payload.sources)) {
     if (payload.sources.length < 1 || payload.sources.length > MAX_TIMETABLE_ANALYSIS_SOURCES) {
-      throw new ClientInputError("A timetable grid must contain one or two prepared weekday groups.");
+      throw new ClientInputError("A timetable grid must contain between one and seven prepared weekday panels.");
     }
     const images = payload.sources.map((source, index) => {
       let image: AssignmentAnalysisInput;
@@ -479,8 +479,8 @@ async function analyseTimetableSource(
     groups.map(async (group, index) => {
       const analysis = await analyseSource(group, timetableRoute, env, upstreamFetch, pause);
       console.log(JSON.stringify({
-        event: "timetable_group_analysed",
-        group: index + 1,
+        event: "timetable_weekday_panel_analysed",
+        panel: index + 1,
         entries: analysis.entries.length,
       }));
       return analysis;

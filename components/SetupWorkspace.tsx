@@ -988,14 +988,7 @@ async function importTimetable(file: File | undefined) {
         >
           <div>
             <p className="text-sm font-semibold">
-              {preparedTimetableImage.length === 1
-                ? `${preparedTimetableImage[0].filename} is ready to analyse.`
-                : `${uploadedFileName} was prepared as ${preparedTimetableImage.length} weekday panels.`}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">
-              The screenshot is prepared locally and sent only when you choose
-              Analyse. Grid timetables are split into weekday panels so their
-              times and multi-hour blocks can be read more reliably.
+              {uploadedFileName || "Your timetable"} is ready to analyse.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">

@@ -72,6 +72,10 @@ export type PreparedAnalysisImage = Extract<AssignmentAnalysisInput, { kind: "im
   preparedSize: number;
 };
 
+type PrepareAnalysisImageOptions = {
+  targetBytes?: number;
+};
+
 function preparedImage(file: File & { type: AnalysisImageMimeType }, blob: Blob, mimeType: AnalysisImageMimeType): Promise<PreparedAnalysisImage> {
   return blobToBase64(blob).then((base64) => ({
     kind: "image",
@@ -87,12 +91,15 @@ function preparedImage(file: File & { type: AnalysisImageMimeType }, blob: Blob,
  * Validates each screenshot locally. Crisp, already-bounded images keep their
  * original encoding so timetable text is not blurred by an unnecessary JPEG pass.
  */
-export async function prepareAnalysisImage(file: File): Promise<PreparedAnalysisImage> {
+export async function prepareAnalysisImage(
+  file: File,
+  { targetBytes = TARGET_IMAGE_BYTES }: PrepareAnalysisImageOptions = {},
+): Promise<PreparedAnalysisImage> {
   if (!supportedImageMimeType(file)) throw new Error("Choose a PNG, JPEG or WebP screenshot.");
   if (file.size > MAX_IMAGE_UPLOAD_BYTES) throw new Error("Choose a screenshot smaller than 8 MB.");
 
   await loadImage(file);
-  if (file.size <= TARGET_IMAGE_BYTES) return preparedImage(file, file, file.type);
+  if (file.size <= targetBytes) return preparedImage(file, file, file.type);
 
   const image = await loadImage(file);
   let smallestBlob: Blob | null = null;
@@ -102,7 +109,7 @@ export async function prepareAnalysisImage(file: File): Promise<PreparedAnalysis
     for (const quality of IMAGE_OUTPUT_QUALITIES) {
       const blob = await canvasToBlob(canvas, quality);
       if (!smallestBlob || blob.size < smallestBlob.size) smallestBlob = blob;
-      if (blob.size <= TARGET_IMAGE_BYTES) return preparedImage(file, blob, "image/jpeg");
+      if (blob.size <= targetBytes) return preparedImage(file, blob, "image/jpeg");
     }
   }
 

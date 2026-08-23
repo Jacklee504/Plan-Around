@@ -1497,7 +1497,7 @@ describe("hosted timetable analyser", () => {
     expect(response.status).toBe(200);
   });
 
-  it("analyses prepared weekday groups separately and merges their sessions", async () => {
+  it("analyses isolated weekday panels separately and merges their sessions", async () => {
     const providerRequests: string[] = [];
     const worker = createWorker(async (_input, init) => {
       const request = String(init?.body);
@@ -1513,6 +1513,9 @@ describe("hosted timetable analyser", () => {
       sources: [
         { kind: "image", mimeType: "image/jpeg", base64: "cGFuZWwtb25l" },
         { kind: "image", mimeType: "image/jpeg", base64: "cGFuZWwtdHdv" },
+        { kind: "image", mimeType: "image/jpeg", base64: "cGFuZWwtdGhyZWU=" },
+        { kind: "image", mimeType: "image/jpeg", base64: "cGFuZWwtZm91cg==" },
+        { kind: "image", mimeType: "image/jpeg", base64: "cGFuZWwtZml2ZQ==" },
       ],
     };
 
@@ -1521,7 +1524,7 @@ describe("hosted timetable analyser", () => {
     const requestsByPanel = providerRequests.map((request) => JSON.parse(request).messages[1].content);
 
     expect(response.status).toBe(200);
-    expect(providerRequests).toHaveLength(2);
+    expect(providerRequests).toHaveLength(5);
     expect(requestsByPanel).toEqual(expect.arrayContaining([
       [expect.objectContaining({ type: "text" }), { type: "image_url", image_url: { url: "data:image/jpeg;base64,cGFuZWwtb25l" } }],
       [expect.objectContaining({ type: "text" }), { type: "image_url", image_url: { url: "data:image/jpeg;base64,cGFuZWwtdHdv" } }],
