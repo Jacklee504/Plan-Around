@@ -64,6 +64,7 @@ export function AssignmentWorkspace() {
   const [draft, setDraft] = useState<AssignmentDraft>(emptyAssignmentDraft);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
   const [isReviewingTasks, setIsReviewingTasks] = useState(false);
+  const [showAssignmentDetails, setShowAssignmentDetails] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [briefText, setBriefText] = useState("");
   const [analysisImage, setAnalysisImage] = useState<PreparedAnalysisImage | null>(null);
@@ -121,6 +122,7 @@ export function AssignmentWorkspace() {
     setDraft(emptyAssignmentDraft);
     setTasks([]);
     setIsReviewingTasks(false);
+    setShowAssignmentDetails(false);
     updateBriefText("");
     setHasAnalysedBrief(false);
     setAnalysisError("");
@@ -135,6 +137,13 @@ export function AssignmentWorkspace() {
       return;
     resetForm();
     setStatus("");
+  }
+
+  function enterAssignmentDetailsManually() {
+    updateBriefText("");
+    setShowAnalysis(false);
+    setShowAssignmentDetails(true);
+    setError("");
   }
 
   function updateTask(id: string, changes: Partial<TaskDraft>) {
@@ -333,7 +342,8 @@ export function AssignmentWorkspace() {
       complexity: String(task.complexity) as TaskDraft["complexity"],
       notes: task.requirements.join("\n"),
     })));
-    setIsReviewingTasks(true);
+    setIsReviewingTasks(false);
+    setShowAssignmentDetails(true);
     setHasAnalysedBrief(true);
     setShowAnalysis(false);
     setStatus(analysis.tasks.length
@@ -397,8 +407,8 @@ export function AssignmentWorkspace() {
           <Link href="/setup" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Go to Calendar</Link>
         </section>
       ) : (
-        <form onSubmit={handleFormSubmit} className="max-w-3xl space-y-7">
-          <section className={isReviewingTasks ? "hidden" : "border-y border-[var(--line)] py-6"} aria-labelledby="assignment-form-heading">
+        <form onSubmit={handleFormSubmit} className="flex max-w-3xl flex-col gap-7">
+          <section className={isReviewingTasks || !showAssignmentDetails ? "hidden" : "order-2 border-y border-[var(--line)] py-6"} aria-labelledby="assignment-form-heading">
             <div>
               <div>
                 <h2 id="assignment-form-heading" className="text-xl font-semibold tracking-[-0.03em]">The essentials.</h2>
@@ -430,17 +440,20 @@ export function AssignmentWorkspace() {
             {hasUnconfirmedSelection ? <p className="mt-4 rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">This module still needs its credits confirmed in <Link href="/setup" className="font-semibold text-[var(--accent-strong)] underline underline-offset-2">Calendar</Link>.</p> : null}
           </section>
 
-            <section className={isReviewingTasks ? "hidden" : "border-t border-[var(--line)] pt-6"} aria-labelledby="analysis-heading">
+            <section className={isReviewingTasks ? "hidden" : "order-1 border-y border-[var(--line)] py-6"} aria-labelledby="analysis-heading">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 id="analysis-heading" className="text-lg font-semibold tracking-[-0.025em]">Have an assignment brief?</h3>
-                  <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Upload or paste it to have AI fill in the assignment details, then review the result before continuing.</p>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Upload or paste it to have AI fill in the assignment details, or enter them manually.</p>
                 </div>
                 {hasAnalysedBrief ? (
                   <button type="button" onClick={() => { updateBriefText(""); setShowAnalysis(true); }} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Replace brief</button>
                 ) : !showAnalysis ? (
-                  <button type="button" onClick={() => setShowAnalysis(true)} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Upload or paste a brief</button>
-                ) : null}
+                  <div className="flex flex-wrap gap-3">
+                    <button type="button" onClick={() => setShowAnalysis(true)} className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Upload or paste a brief</button>
+                    {!showAssignmentDetails ? <button type="button" onClick={enterAssignmentDetailsManually} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Enter details manually</button> : null}
+                  </div>
+                ) : !showAssignmentDetails ? <button type="button" onClick={enterAssignmentDetailsManually} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Enter details manually</button> : null}
               </div>
               {showAnalysis ? (
                 <div className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--surface-soft)] p-4 sm:p-5">
@@ -477,7 +490,7 @@ export function AssignmentWorkspace() {
             </section>
 
             {!isReviewingTasks && hasCompleteAssignmentDetails ? (
-              <section className="border-t border-[var(--line)] pt-6" aria-labelledby="review-next-heading">
+              <section className="order-3 border-t border-[var(--line)] pt-6" aria-labelledby="review-next-heading">
                 <h2 id="review-next-heading" className="text-xl font-semibold tracking-[-0.03em]">Review assignment tasks</h2>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Add tasks manually, or review the ones from your brief before creating the assignment plan.</p>
                 {error ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{error}</p> : null}
