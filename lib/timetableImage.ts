@@ -3,6 +3,7 @@ import {
   prepareAnalysisImage,
   type PreparedAnalysisImage,
 } from "./analysisImage";
+import { timetableWeekdays, type TimetableAnalysisEntry } from "./timetableAnalysis";
 
 const MAX_GRID_DAY_COLUMNS = 7;
 const MIN_GRID_DAY_COLUMNS = 2;
@@ -12,6 +13,8 @@ const PANEL_GAP = 12;
 // Seven panels at this limit remain under the Worker's 4.2 MB JSON body limit
 // after base64 encoding, while a normal digital timetable panel stays PNG.
 const WEEKDAY_PANEL_TARGET_BYTES = 400_000;
+export type TimetableSlot = Pick<TimetableAnalysisEntry, "day" | "start" | "end">;
+export type PreparedTimetableImage = PreparedAnalysisImage & { slots?: TimetableSlot[] };
 
 function isDarkPixel(pixels: Uint8ClampedArray, offset: number) {
   return pixels[offset] + pixels[offset + 1] + pixels[offset + 2] < DARK_PIXEL_SUM_THRESHOLD;
@@ -95,6 +98,26 @@ export function timetableGridRowBounds(
   return top >= 0 && bottom > top ? { top, bottom } : null;
 }
 
+function gridLinesInTimeColumn(pixels: Uint8ClampedArray, width: number, height: number, left: number, right: number) {
+  const rows: number[] = [];
+  for (let y = 0; y < height; y += 1) { let count = 0; for (let x = left + 2; x < right - 2; x += 1) { const offset = (y * width + x) * 4; if (pixels[offset] + pixels[offset + 1] + pixels[offset + 2] < 720) count += 1; } if (count >= (right - left) * 0.6) rows.push(y); }
+  const lines: number[] = [];
+  for (let index = 0; index < rows.length;) { const first = rows[index]; let last = first; index += 1; while (index < rows.length && rows[index] <= last + 1) last = rows[index++]; lines.push(Math.round((first + last) / 2)); }
+  return lines;
+}
+
+function detectedSlots(pixels: Uint8ClampedArray, width: number, verticalLines: number[]) {
+  const lines = gridLinesInTimeColumn(pixels, width, Math.floor(pixels.length / (width * 4)), verticalLines[0], verticalLines[1]);
+  if (lines.length < 4) return null;
+  const rows = lines.slice(1); const step = rows[1] - rows[0];
+  if (step < 12 || rows.slice(1).some((row, index) => Math.abs(row - rows[index] - step) > 5)) return null;
+  const asTime = (index: number) => { const minutes = 480 + index * 30; return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`; };
+  return timetableDayPanelBounds(verticalLines).map((panel, dayIndex) => {
+    const occupied = rows.slice(0, -1).map((top, index) => { let coloured = 0; let total = 0; for (let y = top + 4; y < rows[index + 1] - 3; y += 3) for (let x = panel.dayLeft + 5; x < panel.dayRight - 5; x += 3) { const offset = (y * width + x) * 4; const r = pixels[offset], g = pixels[offset + 1], b = pixels[offset + 2]; total += 1; if (Math.max(r, g, b) - Math.min(r, g, b) > 12) coloured += 1; } return coloured > total * 0.15; });
+    const slots: TimetableSlot[] = []; for (let index = 0; index < occupied.length;) { if (!occupied[index]) { index += 1; continue; } const start = index; while (occupied[index]) index += 1; slots.push({ day: timetableWeekdays[dayIndex], start: asTime(start), end: asTime(index) }); } return slots;
+  });
+}
+
 function loadImage(file: File) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -126,7 +149,7 @@ function canvasBlob(canvas: HTMLCanvasElement) {
  * to infer which day a block belongs to. Unknown layouts safely use the
  * original image.
  */
-export async function prepareTimetableAnalysisImages(file: File): Promise<PreparedAnalysisImage[]> {
+export async function prepareTimetableAnalysisImages(file: File): Promise<PreparedTimetableImage[]> {
   if (!file.type.match(/^image\/(?:jpeg|png|webp)$/)) {
     throw new Error("Choose a PNG, JPEG or WebP screenshot.");
   }
@@ -154,6 +177,7 @@ export async function prepareTimetableAnalysisImages(file: File): Promise<Prepar
   const sourceTop = rowBounds?.top ?? 0;
   const sourceHeight = rowBounds ? rowBounds.bottom - rowBounds.top : source.height;
   const dayPanels = timetableDayPanelBounds(verticalLines);
+  const slotsByDay = detectedSlots(pixels, source.width, verticalLines);
   return Promise.all(dayPanels.map(async (panel, panelIndex) => {
     const dayWidth = panel.dayRight - panel.dayLeft;
     const weekdayPanel = document.createElement("canvas");
@@ -171,6 +195,6 @@ export async function prepareTimetableAnalysisImages(file: File): Promise<Prepar
       `${file.name.replace(/\.[^.]+$/, "")}-weekday-panel-${panelIndex + 1}.png`,
       { type: "image/png" },
     );
-    return prepareAnalysisImage(weekdayPanelFile, { targetBytes: WEEKDAY_PANEL_TARGET_BYTES });
+    return { ...(await prepareAnalysisImage(weekdayPanelFile, { targetBytes: WEEKDAY_PANEL_TARGET_BYTES })), ...(slotsByDay?.[panelIndex]?.length ? { slots: slotsByDay[panelIndex] } : {}) };
   }));
 }
