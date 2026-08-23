@@ -76,18 +76,16 @@ function titleBaseFontSize(density: ReturnType<typeof calendarBlockDensity>) {
 }
 
 function titleMinimumFontSize(density: ReturnType<typeof calendarBlockDensity>) {
-  return density === "micro" ? 8 : 10;
+  return density === "micro" ? 7 : 8;
 }
 
 function FittedCalendarLabel({
   label,
   density,
-  wrapLabel,
   hasDetail,
 }: {
   label: string;
   density: ReturnType<typeof calendarBlockDensity>;
-  wrapLabel: boolean;
   hasDetail: boolean;
 }) {
   const containerRef = useRef<HTMLSpanElement>(null);
@@ -95,16 +93,15 @@ function FittedCalendarLabel({
   const baseFontSize = titleBaseFontSize(density);
   const [fontSize, setFontSize] = useState(baseFontSize);
   const isMicro = density === "micro";
-  const shouldWrap = !isMicro && (wrapLabel || label.length > 18);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
     const title = labelRef.current;
-    if (!container || !title || (!isMicro && !shouldWrap)) return;
+    if (!container || !title) return;
 
     const fitTitle = () => {
-      const available = isMicro ? container.clientWidth : container.clientHeight;
-      const required = isMicro ? title.scrollWidth : title.scrollHeight;
+      const available = container.clientWidth;
+      const required = title.scrollWidth;
       if (!available || !required) return;
 
       const nextFontSize = Math.max(
@@ -123,7 +120,7 @@ function FittedCalendarLabel({
     const observer = new ResizeObserver(fitTitle);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [baseFontSize, density, fontSize, isMicro, label, shouldWrap]);
+  }, [baseFontSize, density, fontSize, label]);
 
   return (
     <span
@@ -136,13 +133,7 @@ function FittedCalendarLabel({
     >
       <span
         ref={labelRef}
-        className={
-          isMicro
-            ? "block w-full truncate font-bold leading-3"
-            : shouldWrap
-              ? "block min-w-0 break-words font-bold leading-[1.15]"
-              : "block truncate font-bold"
-        }
+        className="block w-full whitespace-nowrap font-bold"
         style={{ fontSize: `${fontSize}px` }}
       >
         {label}
@@ -155,12 +146,10 @@ function CalendarCard({
   label,
   detail,
   density,
-  wrapLabel = false,
 }: {
   label: string;
   detail?: string;
   density: ReturnType<typeof calendarBlockDensity>;
-  wrapLabel?: boolean;
 }) {
   const isMicro = density === "micro";
   return (
@@ -169,7 +158,6 @@ function CalendarCard({
         key={`${label}-${density}-${detail ?? ""}`}
         label={label}
         density={density}
-        wrapLabel={wrapLabel}
         hasDetail={!isMicro && Boolean(detail)}
       />
       {!isMicro && detail ? <span className="block shrink-0 truncate">{detail}</span> : null}
@@ -417,7 +405,6 @@ function DayColumn({
               label={block.taskName}
               detail={completed ? "Completed" : missed ? "Missed" : undefined}
               density={density}
-              wrapLabel
             />
           );
 
