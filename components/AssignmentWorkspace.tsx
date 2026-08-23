@@ -408,7 +408,7 @@ export function AssignmentWorkspace() {
           <Link href="/setup" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Go to Calendar</Link>
         </section>
       ) : (
-        <form onSubmit={handleFormSubmit} className="flex max-w-3xl flex-col gap-7">
+        <form noValidate onSubmit={handleFormSubmit} className="flex max-w-3xl flex-col gap-7">
           <section className={isReviewingTasks || !showAssignmentDetails ? "hidden" : "order-2 border-y border-[var(--line)] py-6"} aria-labelledby="assignment-form-heading">
             <div>
               <div>
