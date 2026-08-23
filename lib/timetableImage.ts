@@ -57,9 +57,26 @@ export function timetableGridVerticalLines(
   }
 
   const dayColumns = lines.length - 2;
-  return dayColumns >= MIN_GRID_DAY_COLUMNS && dayColumns <= MAX_GRID_DAY_COLUMNS
-    ? lines
-    : [];
+  if (dayColumns < MIN_GRID_DAY_COLUMNS || dayColumns > MAX_GRID_DAY_COLUMNS) return [];
+
+  // Some exported tables omit the final vertical border below the day header.
+  // When the remaining weekday columns are consistently sized, recover that
+  // boundary instead of silently dropping the final day (usually Friday).
+  const widths = lines.slice(2).map((line, index) => line - lines[index + 1]);
+  const sortedWidths = [...widths].sort((a, b) => a - b);
+  const medianWidth = sortedWidths[Math.floor(sortedWidths.length / 2)];
+  const lastWidth = widths.at(-1);
+  const inferredRight = lines.at(-1)! + medianWidth;
+  if (
+    dayColumns < MAX_GRID_DAY_COLUMNS &&
+    lastWidth !== undefined &&
+    medianWidth > 0 &&
+    Math.abs(lastWidth - medianWidth) <= Math.max(4, medianWidth * 0.08) &&
+    inferredRight < width - 2
+  ) {
+    return [...lines, inferredRight];
+  }
+  return lines;
 }
 
 export function timetableDayPanelBounds(verticalLines: number[]) {

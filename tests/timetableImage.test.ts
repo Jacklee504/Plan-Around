@@ -31,6 +31,13 @@ describe("timetableGridVerticalLines", () => {
     expect(timetableGridVerticalLines(pixelsWithVerticalLines(100, 100, [10, 40, 80]), 100, 100)).toEqual([]);
   });
 
+  it("recovers a missing final weekday border from equal column widths", () => {
+    const lines = [10, 24, 46, 68, 90, 112];
+    expect(timetableGridVerticalLines(pixelsWithVerticalLines(150, 100, lines), 150, 100)).toEqual([
+      10, 24, 46, 68, 90, 112, 134,
+    ]);
+  });
+
   it("returns a distinct bound for each weekday panel", () => {
     const panels = timetableDayPanelBounds([10, 24, 46, 68, 90, 112, 134]);
 
