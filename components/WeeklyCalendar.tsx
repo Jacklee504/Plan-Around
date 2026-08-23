@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   blockPosition,
   CALENDAR_DAYS,
@@ -71,6 +71,86 @@ function snappedTime(offsetY: number, startHour: number, endHour: number) {
   return `${String(Math.floor(snappedMinutes / 60)).padStart(2, "0")}:${String(snappedMinutes % 60).padStart(2, "0")}`;
 }
 
+function titleBaseFontSize(density: ReturnType<typeof calendarBlockDensity>) {
+  return density === "micro" ? 12 : 14;
+}
+
+function titleMinimumFontSize(density: ReturnType<typeof calendarBlockDensity>) {
+  return density === "micro" ? 8 : 10;
+}
+
+function FittedCalendarLabel({
+  label,
+  density,
+  wrapLabel,
+  hasDetail,
+}: {
+  label: string;
+  density: ReturnType<typeof calendarBlockDensity>;
+  wrapLabel: boolean;
+  hasDetail: boolean;
+}) {
+  const containerRef = useRef<HTMLSpanElement>(null);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const baseFontSize = titleBaseFontSize(density);
+  const [fontSize, setFontSize] = useState(baseFontSize);
+  const isMicro = density === "micro";
+  const shouldWrap = !isMicro && (wrapLabel || label.length > 18);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const title = labelRef.current;
+    if (!container || !title || (!isMicro && !shouldWrap)) return;
+
+    const fitTitle = () => {
+      const available = isMicro ? container.clientWidth : container.clientHeight;
+      const required = isMicro ? title.scrollWidth : title.scrollHeight;
+      if (!available || !required) return;
+
+      const nextFontSize = Math.max(
+        titleMinimumFontSize(density),
+        Math.min(
+          baseFontSize,
+          Math.round(fontSize * Math.min(1, available / required) * 10) / 10,
+        ),
+      );
+      setFontSize((current) =>
+        Math.abs(current - nextFontSize) < 0.1 ? current : nextFontSize,
+      );
+    };
+
+    fitTitle();
+    const observer = new ResizeObserver(fitTitle);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [baseFontSize, density, fontSize, isMicro, label, shouldWrap]);
+
+  return (
+    <span
+      ref={containerRef}
+      className={
+        isMicro
+          ? "flex h-full min-w-0 items-end overflow-hidden"
+          : `block min-h-0 overflow-hidden ${hasDetail ? "flex-1" : "h-full"}`
+      }
+    >
+      <span
+        ref={labelRef}
+        className={
+          isMicro
+            ? "block w-full truncate font-bold leading-3"
+            : shouldWrap
+              ? "block min-w-0 break-words font-bold leading-[1.15]"
+              : "block truncate font-bold"
+        }
+        style={{ fontSize: `${fontSize}px` }}
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
+
 function CalendarCard({
   label,
   detail,
@@ -84,9 +164,15 @@ function CalendarCard({
 }) {
   const isMicro = density === "micro";
   return (
-    <span className={isMicro ? "relative top-3 block text-[12px] leading-3" : undefined}>
-      <span className={wrapLabel && density !== "micro" && density !== "compact" ? "block line-clamp-2 font-bold leading-4" : "block truncate font-bold"}>{label}</span>
-      {!isMicro && detail ? <span className="block truncate">{detail}</span> : null}
+    <span className="flex h-full min-w-0 flex-col overflow-hidden">
+      <FittedCalendarLabel
+        key={`${label}-${density}-${detail ?? ""}`}
+        label={label}
+        density={density}
+        wrapLabel={wrapLabel}
+        hasDetail={!isMicro && Boolean(detail)}
+      />
+      {!isMicro && detail ? <span className="block shrink-0 truncate">{detail}</span> : null}
     </span>
   );
 }
@@ -97,10 +183,6 @@ function cardPadding(density: ReturnType<typeof calendarBlockDensity>) {
     ? "px-1.5 py-0 text-[14px] leading-[18px]"
     : "px-2 py-1 text-[14px] leading-[18px]";
 }
-function cardOverflow(density: ReturnType<typeof calendarBlockDensity>) {
-  return density === "micro" ? "overflow-visible" : "overflow-hidden";
-}
-
 function HourAxis({ range }: { range: CalendarTimeRange }) {
   return (
     <div
@@ -198,7 +280,7 @@ function DayColumn({
           );
           const skipped = isEntrySkipped(entry, currentDate);
           const selected = selectedEntryId === entry.id;
-          const className = `absolute left-1 right-1 z-10 rounded-lg border text-left transition-colors ${cardOverflow(density)} ${cardPadding(density)} ${skipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : selected ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--ink)]" : "border-[var(--accent-soft)] bg-[var(--accent-soft)] text-[var(--ink)] hover:border-[var(--accent)]"}`;
+          const className = `absolute left-1 right-1 z-10 overflow-hidden rounded-lg border text-left transition-colors ${cardPadding(density)} ${skipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : selected ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--ink)]" : "border-[var(--accent-soft)] bg-[var(--accent-soft)] text-[var(--ink)] hover:border-[var(--accent)]"}`;
           const content = (
             <CalendarCard
               label={entry.moduleCode}
@@ -238,7 +320,7 @@ function DayColumn({
             commitment.start,
             commitment.end,
           );
-          const className = `absolute left-1 right-1 z-10 rounded-lg border border-[var(--line)] bg-[var(--surface)] text-left text-[var(--ink)] shadow-sm transition-colors hover:border-[var(--accent)] ${cardOverflow(density)} ${cardPadding(density)}`;
+          const className = `absolute left-1 right-1 z-10 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] text-left text-[var(--ink)] shadow-sm transition-colors hover:border-[var(--accent)] ${cardPadding(density)}`;
           const content = (
             <CalendarCard label={commitment.label} density={density} />
           );
@@ -280,7 +362,7 @@ function DayColumn({
             commitment.start,
             commitment.end,
           );
-          const className = `absolute left-1 right-1 z-10 rounded-lg border border-dashed border-amber-300 bg-amber-50 text-left text-amber-950 transition-colors hover:border-amber-500 ${cardOverflow(density)} ${cardPadding(density)}`;
+          const className = `absolute left-1 right-1 z-10 overflow-hidden rounded-lg border border-dashed border-amber-300 bg-amber-50 text-left text-amber-950 transition-colors hover:border-amber-500 ${cardPadding(density)}`;
           const content = (
             <CalendarCard
               label={commitment.label}
@@ -329,7 +411,7 @@ function DayColumn({
           const completed = Boolean(block.completedAt);
           const missed = Boolean(block.missedAt);
 
-          const className = `absolute left-1 right-1 z-20 rounded-lg border text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${cardOverflow(density)} ${cardPadding(density)} ${completed ? "border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)]" : missed ? "border-red-200 bg-red-50 text-red-700" : "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:border-[var(--accent-strong)]"}`;
+          const className = `absolute left-1 right-1 z-20 overflow-hidden rounded-lg border text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${cardPadding(density)} ${completed ? "border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)]" : missed ? "border-red-200 bg-red-50 text-red-700" : "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:border-[var(--accent-strong)]"}`;
           const content = (
             <CalendarCard
               label={block.taskName}
