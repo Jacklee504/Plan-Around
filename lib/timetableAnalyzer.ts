@@ -1,5 +1,10 @@
 import { getAnalyzerEndpoint, imageAnalysisIsAvailable } from "@/lib/analyzerEndpoint";
-import { type TimetableAnalysisInput, type TimetableAnalysisResponse, validateTimetableAnalysisResponse } from "@/lib/timetableAnalysis";
+import {
+  applyDetectedTimetableSlots,
+  type TimetableAnalysisInput,
+  type TimetableAnalysisResponse,
+  validateTimetableAnalysisResponse,
+} from "@/lib/timetableAnalysis";
 import type { PreparedTimetableImage } from "@/lib/timetableImage";
 
 const ANALYZER_TIMEOUT_MS = 70_000;
@@ -22,7 +27,13 @@ export async function analyzeTimetableScreenshot(input: (TimetableAnalysisInput 
     const images = Array.isArray(input) ? input : [input];
     const slots = images.flatMap((image) => "slots" in image && image.slots ? image.slots : []);
     if (!slots.length) return parsed;
-    return { ...parsed, analysis: { ...parsed.analysis, entries: slots.map((slot, index) => ({ ...parsed.analysis.entries[index], ...slot, moduleCode: parsed.analysis.entries[index]?.moduleCode ?? null, moduleName: parsed.analysis.entries[index]?.moduleName ?? null, sessionType: parsed.analysis.entries[index]?.sessionType ?? "other" })) } };
+    return {
+      ...parsed,
+      analysis: {
+        ...parsed.analysis,
+        entries: applyDetectedTimetableSlots(parsed.analysis.entries, slots),
+      },
+    };
   } catch (error) {
     if (controller.signal.aborted) throw new Error("The timetable analyser took too long. You can use the sample PDF instead.");
     if (error instanceof Error && (error.message.startsWith("Too many timetable") || error.message.startsWith("The analyser could not read"))) throw error;

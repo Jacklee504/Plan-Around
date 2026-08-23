@@ -13,6 +13,8 @@ export type TimetableAnalysisEntry = {
   sessionType: TimetableAnalysisSessionType;
 };
 
+export type TimetableSlot = Pick<TimetableAnalysisEntry, "day" | "start" | "end">;
+
 export type TimetableAnalysis = {
   entries: TimetableAnalysisEntry[];
   warnings: string[];
@@ -24,6 +26,32 @@ export type TimetableAnalysisResponse = {
   model: string;
   verifier: { used: boolean; model: string | null; reasons: string[] };
 };
+
+/**
+ * The model supplies lesson labels while the uploaded grid supplies block
+ * boundaries. Match by day and start time so one ambiguous visual split never
+ * shifts labels into later lessons.
+ */
+export function applyDetectedTimetableSlots(
+  entries: TimetableAnalysisEntry[],
+  slots: TimetableSlot[],
+) {
+  return entries.map((entry) => {
+    const daySlots = slots.filter((slot) => slot.day === entry.day);
+    const visualSlot = daySlots.find((slot) => slot.start === entry.start);
+    if (!visualSlot) return entry;
+
+    const modelHasNextBlock = entries.some((candidate) => (
+      candidate.day === entry.day && candidate.start === visualSlot.end
+    ));
+    const visualContinuation = daySlots.some((slot) => slot.start === visualSlot.end);
+    return {
+      ...entry,
+      start: visualSlot.start,
+      end: visualContinuation && !modelHasNextBlock ? entry.end : visualSlot.end,
+    };
+  });
+}
 
 export const MAX_TIMETABLE_ENTRIES = 50;
 export const MAX_TIMETABLE_WARNINGS = 12;

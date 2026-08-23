@@ -3,7 +3,7 @@ import {
   prepareAnalysisImage,
   type PreparedAnalysisImage,
 } from "./analysisImage";
-import { timetableWeekdays, type TimetableAnalysisEntry } from "./timetableAnalysis";
+import { timetableWeekdays, type TimetableSlot } from "./timetableAnalysis";
 
 const MAX_GRID_DAY_COLUMNS = 7;
 const MIN_GRID_DAY_COLUMNS = 2;
@@ -13,7 +13,6 @@ const PANEL_GAP = 12;
 // Seven panels at this limit remain under the Worker's 4.2 MB JSON body limit
 // after base64 encoding, while a normal digital timetable panel stays PNG.
 const WEEKDAY_PANEL_TARGET_BYTES = 400_000;
-export type TimetableSlot = Pick<TimetableAnalysisEntry, "day" | "start" | "end">;
 export type PreparedTimetableImage = PreparedAnalysisImage & { slots?: TimetableSlot[] };
 
 function isDarkPixel(pixels: Uint8ClampedArray, offset: number) {
@@ -72,7 +71,8 @@ export function timetableGridVerticalLines(
     lastWidth !== undefined &&
     medianWidth > 0 &&
     Math.abs(lastWidth - medianWidth) <= Math.max(4, medianWidth * 0.08) &&
-    inferredRight < width - 2
+    inferredRight < width - 2 &&
+    Math.abs(width - inferredRight) <= Math.max(20, medianWidth * 0.3)
   ) {
     return [...lines, inferredRight];
   }
@@ -115,23 +115,137 @@ export function timetableGridRowBounds(
   return top >= 0 && bottom > top ? { top, bottom } : null;
 }
 
-function gridLinesInTimeColumn(pixels: Uint8ClampedArray, width: number, height: number, left: number, right: number) {
+function gridLinesInTimeColumn(
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number,
+  left: number,
+  right: number,
+) {
   const rows: number[] = [];
-  for (let y = 0; y < height; y += 1) { let count = 0; for (let x = left + 2; x < right - 2; x += 1) { const offset = (y * width + x) * 4; if (pixels[offset] + pixels[offset + 1] + pixels[offset + 2] < 720) count += 1; } if (count >= (right - left) * 0.6) rows.push(y); }
+  for (let y = 0; y < height; y += 1) {
+    let count = 0;
+    for (let x = left + 2; x < right - 2; x += 1) {
+      const offset = (y * width + x) * 4;
+      if (pixels[offset] + pixels[offset + 1] + pixels[offset + 2] < 720) count += 1;
+    }
+    if (count >= (right - left) * 0.6) rows.push(y);
+  }
   const lines: number[] = [];
-  for (let index = 0; index < rows.length;) { const first = rows[index]; let last = first; index += 1; while (index < rows.length && rows[index] <= last + 1) last = rows[index++]; lines.push(Math.round((first + last) / 2)); }
+  for (let index = 0; index < rows.length;) {
+    const first = rows[index];
+    let last = first;
+    index += 1;
+    while (index < rows.length && rows[index] <= last + 1) last = rows[index++];
+    lines.push(Math.round((first + last) / 2));
+  }
   return lines;
 }
 
-function detectedSlots(pixels: Uint8ClampedArray, width: number, verticalLines: number[]) {
-  const lines = gridLinesInTimeColumn(pixels, width, Math.floor(pixels.length / (width * 4)), verticalLines[0], verticalLines[1]);
-  if (lines.length < 4) return null;
-  const rows = lines.slice(1); const step = rows[1] - rows[0];
-  if (step < 12 || rows.slice(1).some((row, index) => Math.abs(row - rows[index] - step) > 5)) return null;
-  const asTime = (index: number) => { const minutes = 480 + index * 30; return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`; };
+function regularGridRows(lines: number[]) {
+  let longest: number[] = [];
+  for (let start = 0; start < lines.length - 1; start += 1) {
+    const step = lines[start + 1] - lines[start];
+    if (step < 12) continue;
+    const run = [lines[start], lines[start + 1]];
+    for (let index = start + 2; index < lines.length; index += 1) {
+      if (Math.abs(lines[index] - run.at(-1)! - step) > Math.max(5, step * 0.08)) break;
+      run.push(lines[index]);
+    }
+    if (run.length > longest.length) longest = run;
+  }
+  return longest.length >= 4 ? longest : null;
+}
+
+type CellColour = readonly [number, number, number];
+
+function cellContent(
+  pixels: Uint8ClampedArray,
+  width: number,
+  top: number,
+  bottom: number,
+  left: number,
+  right: number,
+) {
+  let coloured = 0;
+  let total = 0;
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  for (let y = top + 4; y < bottom - 3; y += 3) {
+    for (let x = left + 5; x < right - 5; x += 3) {
+      const offset = (y * width + x) * 4;
+      const r = pixels[offset];
+      const g = pixels[offset + 1];
+      const b = pixels[offset + 2];
+      total += 1;
+      if (Math.max(r, g, b) - Math.min(r, g, b) > 12) {
+        coloured += 1;
+        red += r;
+        green += g;
+        blue += b;
+      }
+    }
+  }
+  return coloured > total * 0.15
+    ? { colour: [red / coloured, green / coloured, blue / coloured] as CellColour }
+    : null;
+}
+
+function coloursDiffer(first: CellColour, second: CellColour) {
+  return Math.hypot(
+    first[0] - second[0],
+    first[1] - second[1],
+    first[2] - second[2],
+  ) > 14;
+}
+
+export function timetableSlotsFromGrid(
+  pixels: Uint8ClampedArray,
+  width: number,
+  verticalLines: number[],
+) {
+  const candidateRows = gridLinesInTimeColumn(
+    pixels,
+    width,
+    Math.floor(pixels.length / (width * 4)),
+    verticalLines[0],
+    verticalLines[1],
+  );
+  const rows = regularGridRows(candidateRows);
+  if (!rows) return null;
+  const asTime = (index: number) => {
+    const minutes = 480 + index * 60;
+    return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  };
   return timetableDayPanelBounds(verticalLines).map((panel, dayIndex) => {
-    const occupied = rows.slice(0, -1).map((top, index) => { let coloured = 0; let total = 0; for (let y = top + 4; y < rows[index + 1] - 3; y += 3) for (let x = panel.dayLeft + 5; x < panel.dayRight - 5; x += 3) { const offset = (y * width + x) * 4; const r = pixels[offset], g = pixels[offset + 1], b = pixels[offset + 2]; total += 1; if (Math.max(r, g, b) - Math.min(r, g, b) > 12) coloured += 1; } return coloured > total * 0.15; });
-    const slots: TimetableSlot[] = []; for (let index = 0; index < occupied.length;) { if (!occupied[index]) { index += 1; continue; } const start = index; while (occupied[index]) index += 1; slots.push({ day: timetableWeekdays[dayIndex], start: asTime(start), end: asTime(index) }); } return slots;
+    const cells = rows.slice(0, -1).map((top, index) => cellContent(
+      pixels,
+      width,
+      top,
+      rows[index + 1],
+      panel.dayLeft,
+      panel.dayRight,
+    ));
+    const slots: TimetableSlot[] = [];
+    for (let index = 0; index < cells.length;) {
+      const first = cells[index];
+      if (!first) {
+        index += 1;
+        continue;
+      }
+      const start = index;
+      let previous = first.colour;
+      index += 1;
+      while (true) {
+        const next = cells[index];
+        if (!next || coloursDiffer(previous, next.colour)) break;
+        previous = next.colour;
+        index += 1;
+      }
+      slots.push({ day: timetableWeekdays[dayIndex], start: asTime(start), end: asTime(index) });
+    }
+    return slots;
   });
 }
 
@@ -194,7 +308,7 @@ export async function prepareTimetableAnalysisImages(file: File): Promise<Prepar
   const sourceTop = rowBounds?.top ?? 0;
   const sourceHeight = rowBounds ? rowBounds.bottom - rowBounds.top : source.height;
   const dayPanels = timetableDayPanelBounds(verticalLines);
-  const slotsByDay = detectedSlots(pixels, source.width, verticalLines);
+  const slotsByDay = timetableSlotsFromGrid(pixels, source.width, verticalLines);
   return Promise.all(dayPanels.map(async (panel, panelIndex) => {
     const dayWidth = panel.dayRight - panel.dayLeft;
     const weekdayPanel = document.createElement("canvas");
