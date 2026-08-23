@@ -72,7 +72,7 @@ function snappedTime(offsetY: number, startHour: number, endHour: number) {
 }
 
 function titleBaseFontSize(density: ReturnType<typeof calendarBlockDensity>) {
-  return density === "micro" ? 12 : 14;
+  return density === "micro" ? 12 : density === "compact" ? 12 : 14;
 }
 
 function titleMinimumFontSize(density: ReturnType<typeof calendarBlockDensity>) {
@@ -98,15 +98,28 @@ function FittedCalendarLabel({
     if (!container || !title) return;
 
     const fitTitle = () => {
-      const available = container.clientWidth;
-      const required = title.scrollWidth;
-      if (!available || !required) return;
+      const availableWidth = container.clientWidth;
+      const requiredWidth = title.scrollWidth;
+      const parent = container.parentElement;
+      const siblingHeight = parent
+        ? Array.from(parent.children)
+            .filter((child) => child !== container)
+            .reduce((total, child) => total + (child as HTMLElement).offsetHeight, 0)
+        : 0;
+      const availableHeight = parent ? parent.clientHeight - siblingHeight : 0;
+      const requiredHeight = title.scrollHeight;
+      if (!availableWidth || !requiredWidth) return;
+
+      const widthScale = availableWidth / requiredWidth;
+      const heightScale = density === "compact" && availableHeight
+        ? availableHeight / requiredHeight
+        : 1;
 
       const nextFontSize = Math.max(
         titleMinimumFontSize(density),
         Math.min(
           baseFontSize,
-          Math.round(fontSize * Math.min(1, available / required) * 10) / 10,
+          Math.round(fontSize * Math.min(1, widthScale, heightScale) * 10) / 10,
         ),
       );
       setFontSize((current) =>
@@ -134,7 +147,7 @@ function FittedCalendarLabel({
         className={
           isMicro
             ? "block w-full whitespace-nowrap font-bold"
-            : "block w-full font-bold [overflow-wrap:normal] [word-break:normal]"
+            : "block w-full font-bold leading-[1.15] [overflow-wrap:normal] [word-break:normal]"
         }
         style={{ fontSize: `${fontSize}px` }}
       >
@@ -273,7 +286,7 @@ function DayColumn({
           );
           const skipped = isEntrySkipped(entry, currentDate);
           const selected = selectedEntryId === entry.id;
-          const className = `absolute left-1 right-1 z-10 overflow-hidden rounded-lg border text-left transition-colors ${cardPadding(density)} ${skipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : selected ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--ink)]" : "border-[var(--accent-soft)] bg-[var(--accent-soft)] text-[var(--ink)] hover:border-[var(--accent)]"}`;
+          const className = `absolute left-1 right-1 z-10 overflow-hidden rounded-lg border text-left transition-colors ${cardPadding(density)} ${skipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : selected ? "border-blue-500 bg-blue-100 text-blue-950" : "border-blue-200 bg-blue-50 text-blue-950 hover:border-blue-400"}`;
           const content = (
             <CalendarCard
               label={entry.moduleCode}
@@ -359,7 +372,6 @@ function DayColumn({
           const content = (
             <CalendarCard
               label={commitment.label}
-              detail="One-off"
               density={density}
             />
           );
@@ -471,6 +483,7 @@ export function WeeklyCalendar({
   );
   const isAlreadyFullDay =
     compactRange.startHour === CALENDAR_START_HOUR && compactRange.endHour === CALENDAR_END_HOUR;
+  const hasOneOffCommitments = datedCommitments.length > 0;
   const visibleRange = showFullDay ? FULL_DAY_RANGE : compactRange;
 
   const dayColumnProps = {
@@ -490,19 +503,29 @@ export function WeeklyCalendar({
 
   return (
     <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
-      {!isAlreadyFullDay ? (
-        <div className="flex items-center justify-end gap-3 border-b border-[var(--line)] bg-[var(--surface-soft)] px-3 py-2 sm:px-4">
-          <span className="text-xs tabular-nums text-[var(--muted-ink)]" aria-live="polite">
-            {`${String(visibleRange.startHour).padStart(2, "0")}:00–${String(visibleRange.endHour).padStart(2, "0")}:00`}
-          </span>
-          <button
-            type="button"
-            onClick={() => setShowFullDay((current) => !current)}
-            className="min-h-9 rounded-lg px-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-            aria-pressed={showFullDay}
-          >
-            {showFullDay ? "Use compact hours" : "Show full day"}
-          </button>
+      {!isAlreadyFullDay || hasOneOffCommitments ? (
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-soft)] px-3 py-2 sm:px-4">
+          {hasOneOffCommitments ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--muted-ink)]">
+              <span aria-hidden="true" className="size-2.5 rounded-[3px] border border-dashed border-amber-400 bg-amber-50" />
+              One-off event
+            </span>
+          ) : <span />}
+          {!isAlreadyFullDay ? (
+            <div className="flex items-center gap-3">
+              <span className="text-xs tabular-nums text-[var(--muted-ink)]" aria-live="polite">
+                {`${String(visibleRange.startHour).padStart(2, "0")}:00–${String(visibleRange.endHour).padStart(2, "0")}:00`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowFullDay((current) => !current)}
+                className="min-h-9 rounded-lg px-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                aria-pressed={showFullDay}
+              >
+                {showFullDay ? "Use compact hours" : "Show full day"}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

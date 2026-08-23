@@ -381,8 +381,7 @@ function StudyBlockDialog({
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Study session</p>
-            <h2 id="study-block-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Adjust this session.</h2>
+            <h2 id="study-block-heading" className="text-xl font-semibold tracking-[-0.03em]">Adjust this session.</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">{block.taskName}</p>
           </div>
           <button type="button" onClick={onClose} className="min-h-10 px-2 text-sm font-semibold text-[var(--muted-ink)] hover:text-[var(--ink)]">Close</button>
@@ -703,12 +702,16 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
   function saveCalendarEvent() {
     if (!eventDraft) return;
     const label = eventDraft.label.trim();
-    if (
-      !label ||
-      eventDraft.end <= eventDraft.start ||
-      (eventDraft.mode === "dated" && !eventDraft.date)
-    ) {
-      setEventError("Add a label and valid start and end time.");
+    if (!label) {
+      setEventError("Add a name for this event.");
+      return;
+    }
+    if (eventDraft.mode === "dated" && !eventDraft.date) {
+      setEventError("Choose a date for this event.");
+      return;
+    }
+    if (!eventDraft.start || !eventDraft.end || eventDraft.end <= eventDraft.start) {
+      setEventError("Choose an end time after the start time.");
       return;
     }
   if (eventDraft.mode === "recurring") {
