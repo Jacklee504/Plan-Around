@@ -105,6 +105,7 @@ export function AssignmentWorkspace() {
       Number(draft.moduleWeight) > 0 &&
       Number(draft.moduleWeight) <= 100,
   );
+  const isTaskReviewVisible = isReviewingTasks || hasAnalysedBrief;
   const taskMarks = tasks.reduce((total, task) => total + (Number(task.marks) || 0), 0);
   const canAnalyseScreenshot = imageAnalysisIsAvailable();
   const hasDraftContent = Boolean(
@@ -290,7 +291,7 @@ export function AssignmentWorkspace() {
   }
 
   function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
-    if (isReviewingTasks) {
+    if (isTaskReviewVisible) {
       saveAssignment(event);
       return;
     }
@@ -489,7 +490,7 @@ export function AssignmentWorkspace() {
               ) : null}
             </section>
 
-            {!isReviewingTasks && hasCompleteAssignmentDetails ? (
+            {!isReviewingTasks && !hasAnalysedBrief && hasCompleteAssignmentDetails ? (
               <section className="order-3 border-t border-[var(--line)] pt-6" aria-labelledby="review-next-heading">
                 <h2 id="review-next-heading" className="text-xl font-semibold tracking-[-0.03em]">Review assignment tasks</h2>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Add tasks manually, or review the ones from your brief before creating the assignment plan.</p>
@@ -521,7 +522,7 @@ export function AssignmentWorkspace() {
               </section>
             ) : null}
 
-            <section className={isReviewingTasks ? "border-t border-[var(--line)] pt-6" : "hidden"} aria-labelledby="tasks-heading">
+            <section className={isTaskReviewVisible ? "order-3 border-t border-[var(--line)] pt-6" : "hidden"} aria-labelledby="tasks-heading">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Task breakdown</p>
@@ -565,7 +566,7 @@ export function AssignmentWorkspace() {
               ) : null}
             </section>
 
-          <section className={isReviewingTasks ? "border-t border-[var(--line)] pt-6" : "hidden"} aria-labelledby="save-assignment-heading">
+          <section className={isTaskReviewVisible ? "order-4 border-t border-[var(--line)] pt-6" : "hidden"} aria-labelledby="save-assignment-heading">
             <h2 id="save-assignment-heading" className="text-xl font-semibold tracking-[-0.03em]">Create assignment plan</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Your reviewed details will be used to create the workload and calendar plan.</p>
             {error ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{error}</p> : null}
