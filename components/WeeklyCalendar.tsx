@@ -43,6 +43,7 @@ type WeeklyCalendarProps = {
   commitments: Commitment[];
   datedCommitments?: DatedCommitment[];
   studyBlocks?: StudyBlock[];
+  studyBlockLabels?: Record<string, string>;
   visibleWeekStart?: string;
   selectedEntryId?: string | null;
   isEntrySkipped?: (entry: TimetableEntry, date?: string) => boolean;
@@ -234,6 +235,7 @@ type DayColumnProps = {
   commitments: Commitment[];
   datedCommitments: DatedCommitment[];
   studyBlocks: StudyBlock[];
+  studyBlockLabels: Record<string, string>;
   selectedEntryId: string | null;
   isEntrySkipped: (entry: TimetableEntry, date?: string) => boolean;
   onSelectEntry?: (entry: TimetableEntry) => void;
@@ -251,6 +253,7 @@ function DayColumn({
   commitments,
   datedCommitments,
   studyBlocks,
+  studyBlockLabels,
   selectedEntryId,
   isEntrySkipped,
   onSelectEntry,
@@ -419,7 +422,7 @@ function DayColumn({
           const className = `absolute left-1 right-1 z-20 overflow-hidden rounded-lg border text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${cardPadding(density)} ${completed ? "border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)]" : missed ? "border-red-200 bg-red-50 text-red-700" : "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:border-[var(--accent-strong)]"}`;
           const content = (
             <CalendarCard
-              label={block.taskName}
+              label={studyBlockLabels[block.id] ?? block.taskName}
               detail={completed ? "Completed" : missed ? "Missed" : undefined}
               density={density}
             />
@@ -451,6 +454,7 @@ export function WeeklyCalendar({
   commitments,
   datedCommitments = [],
   studyBlocks = [],
+  studyBlockLabels = {},
   visibleWeekStart,
   selectedEntryId = null,
   isEntrySkipped = () => false,
@@ -492,6 +496,7 @@ export function WeeklyCalendar({
     commitments,
     datedCommitments,
     studyBlocks,
+    studyBlockLabels,
     selectedEntryId,
     isEntrySkipped,
     onSelectEntry,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { parseTimetablePdf } from "@/lib/timetableParser";
 import { renderPdfToImageFile } from "@/lib/pdfDocument";
 import {
@@ -19,6 +19,7 @@ import {
 } from "@/lib/calendarWeek";
 import { WeeklyCalendar, type CalendarSlot } from "@/components/WeeklyCalendar";
 import { useOnboardingState } from "@/lib/onboarding";
+import { assignmentPartNumber } from "@/lib/assignmentParts";
 import { type PreparedAnalysisImage } from "@/lib/analysisImage";
 import { prepareTimetableAnalysisImages } from "@/lib/timetableImage";
 import { analyzeTimetableScreenshot } from "@/lib/timetableAnalyzer";
@@ -636,6 +637,27 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
   const totalBlockedTime = timetableEntries.length + commitments.length;
   const hasBaseline = totalBlockedTime > 0;
   const canCompleteSetup = hasBaseline;
+  const studyBlockLabels = useMemo(() => {
+    const assignmentsById = new Map(
+      assignments.map((assignment) => [assignment.id, assignment]),
+    );
+    const modulesById = new Map(modules.map((module) => [module.id, module]));
+
+    return studyBlocks.reduce<Record<string, string>>((labels, block) => {
+      const assignment = assignmentsById.get(block.assignmentId);
+      const moduleCode = assignment
+        ? modulesById.get(assignment.moduleId)?.code?.trim()
+        : undefined;
+      const partNumber = assignment
+        ? assignmentPartNumber(assignment, block.taskId)
+        : null;
+
+      if (moduleCode && partNumber) {
+        labels[block.id] = `${moduleCode} · Pt ${partNumber}`;
+      }
+      return labels;
+    }, {});
+  }, [assignments, modules, studyBlocks]);
   const shouldShowImporter =
     !reviewEntries && (showImporter || !timetableEntries.length);
   const shouldShowPreUploadGuide =
@@ -1348,6 +1370,7 @@ async function importTimetable(file: File | undefined) {
                 commitments={commitments}
                 datedCommitments={onboardingCompleted ? datedCommitments : []}
                 studyBlocks={onboardingCompleted ? studyBlocks : []}
+                studyBlockLabels={studyBlockLabels}
                 visibleWeekStart={
                   onboardingCompleted ? visibleCalendarWeekStart : undefined
                 }

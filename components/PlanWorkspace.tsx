@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { calculateOverallInsights } from "@/lib/insights";
+import { assignmentPartNumber, formatAssignmentPart } from "@/lib/assignmentParts";
 import { createPlanFingerprint, getPlanChangeReasons, getReservableStudyBlocks, type PlanChangeReason } from "@/lib/planSnapshot";
 import { generateStudySchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
@@ -414,7 +415,7 @@ export function PlanWorkspace() {
           <section className="border-b border-[var(--line)] pb-5" aria-labelledby="plan-task-summary-heading">
             <h3 id="plan-task-summary-heading" className="text-sm font-semibold">Work split</h3>
             <ul className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
-              {workload.taskHours.map((task) => <li key={task.id} className="flex items-center justify-between gap-4 py-2.5 text-sm"><span>{task.name}</span><span className="font-semibold tabular-nums">{formatHours(task.recommendedHours)}</span></li>)}
+              {workload.taskHours.map((task) => <li key={task.id} className="flex items-center justify-between gap-4 py-2.5 text-sm"><span>{formatAssignmentPart(task.name, task.isFallback ? null : assignmentPartNumber(selectedAssignment, task.id))}</span><span className="font-semibold tabular-nums">{formatHours(task.recommendedHours)}</span></li>)}
             </ul>
           </section>
 
@@ -500,7 +501,7 @@ export function PlanWorkspace() {
                         {blocks.map((block) => (
                           <li key={block.id} className={`grid gap-1 py-3 sm:grid-cols-[8rem_minmax(0,1fr)_auto_auto] sm:items-center ${block.completedAt ? "text-[var(--muted-ink)]" : block.missedAt ? "text-red-700" : ""}`}>
                             <p className="font-semibold tabular-nums">{block.start}–{block.end}</p>
-                            <p className="text-sm text-[var(--muted-ink)]">{block.taskName}</p>
+                            <p className="text-sm text-[var(--muted-ink)]">{formatAssignmentPart(block.taskName, assignmentPartNumber(selectedAssignment, block.taskId))}</p>
                             <p className="text-sm font-semibold tabular-nums sm:text-right">{blockDuration(block)}</p>
                             <div className="flex flex-wrap items-center justify-end gap-2">
                               {block.completedAt || canCompleteStudyBlock(block) ? (

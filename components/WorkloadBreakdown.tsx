@@ -1,6 +1,7 @@
 "use client";
 
 import type { Assignment, Module } from "@/types";
+import { assignmentPartNumber, formatAssignmentPart } from "@/lib/assignmentParts";
 import { calculateWorkloadBreakdown, COMPLEXITY_MULTIPLIERS } from "@/lib/workload";
 
 type WorkloadBreakdownProps = {
@@ -67,7 +68,7 @@ export function WorkloadBreakdown({ assignment, module, onOverrideChange }: Work
           {workload.taskHours.map((task) => (
             <li key={task.id} className="grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div>
-                <p className="font-semibold">{task.name}</p>
+                <p className="font-semibold">{formatAssignmentPart(task.name, task.isFallback ? null : assignmentPartNumber(assignment, task.id))}</p>
                 <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">{task.isFallback ? "No task split has been added yet." : `${task.marks} marks × ${COMPLEXITY_MULTIPLIERS[task.complexity] ?? 1} (${complexityLabels[task.complexity] ?? "custom"}) = ${formatWeight(task.adjustedWeight)} weighting points, ${formatPercentage(task.proportion)} of focused task time.`}</p>
               </div>
               <span className="text-lg font-semibold tabular-nums sm:text-right">{formatHours(task.recommendedHours)}</span>

@@ -509,12 +509,12 @@ export function AssignmentWorkspace() {
                 <div className="mt-5 space-y-4">
                   {tasks.map((task, index) => (
                     <fieldset key={task.id} className="border-t border-[var(--line)] pt-4">
-                      <legend className="sr-only">Task {index + 1}</legend>
+                      <legend className="sr-only">Part {index + 1}</legend>
                       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_9rem_auto] sm:items-end">
-                        <label className="text-sm font-medium">Task<input value={task.name} onChange={(event) => updateTask(task.id, { name: event.target.value })} className={inputClassName} placeholder="Technical report" /></label>
+                        <label className="text-sm font-medium">Pt {index + 1}<input value={task.name} onChange={(event) => updateTask(task.id, { name: event.target.value })} className={inputClassName} placeholder="Technical report" /></label>
                         <label className="text-sm font-medium">Marks<input value={task.marks} onChange={(event) => updateTask(task.id, { marks: event.target.value })} className={inputClassName} type="number" min="1" placeholder="20" /></label>
                         <label className="text-sm font-medium">Complexity<select value={task.complexity} onChange={(event) => updateTask(task.id, { complexity: event.target.value as TaskDraft["complexity"] })} className={inputClassName}><option value="1">Low</option><option value="2">Medium</option><option value="3">High</option></select></label>
-                        <button type="button" onClick={() => setTasks((current) => current.filter((item) => item.id !== task.id))} aria-label={`Remove task ${index + 1}`} className="min-h-11 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:text-red-700">Remove</button>
+                        <button type="button" onClick={() => setTasks((current) => current.filter((item) => item.id !== task.id))} aria-label={`Remove part ${index + 1}`} className="min-h-11 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:text-red-700">Remove</button>
                       </div>
                       <details className="mt-3 text-sm">
                         <summary className="cursor-pointer font-semibold text-[var(--accent-strong)]">{task.notes.trim() ? "Edit notes" : "Add notes"}</summary>
