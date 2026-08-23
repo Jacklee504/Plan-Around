@@ -32,7 +32,7 @@ export function WorkloadBreakdown({ assignment, module, onOverrideChange }: Work
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Workload recommendation</p>
           <h2 id="workload-heading" className="mt-1 text-2xl font-semibold tracking-[-0.035em]">{formatHours(workload.totalHours)} for {assignment.title}</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-ink)]">A transparent prototype estimate based on {module.credits} ECTS, the {assignment.moduleWeight}% assessment weighting and the rubric you entered.</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-ink)]">A transparent prototype estimate based on {module.credits} credits, the {assignment.moduleWeight}% assessment weighting and the rubric you entered.</p>
         </div>
         <label className="text-sm font-medium">
           Override total hours

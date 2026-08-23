@@ -1,6 +1,6 @@
 import type { Assignment, AssignmentTask, WorkloadBreakdown, WorkloadTask } from "@/types";
 
-export const HOURS_PER_ECTS = 22.5;
+export const HOURS_PER_CREDIT = 22.5;
 export const ASSESSMENT_WORKLOAD_FACTOR = 0.4;
 export const BUFFER_FACTOR = 0.1;
 export const WORKLOAD_INCREMENT_HOURS = 0.5;
@@ -23,7 +23,7 @@ export function roundToWorkloadIncrement(hours: number) {
 }
 
 export function calculateModuleWorkload(credits: number) {
-  return credits * HOURS_PER_ECTS;
+  return credits * HOURS_PER_CREDIT;
 }
 
 export function calculateAssessmentWorkloadPool(moduleWorkloadHours: number) {

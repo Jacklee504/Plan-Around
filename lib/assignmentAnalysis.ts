@@ -8,6 +8,8 @@ export type AssignmentAnalysisInput =
   | { kind: "image"; mimeType: AnalysisImageMimeType; base64: string };
 
 export type AssignmentAnalysisEvidence = {
+  moduleCode: string | null;
+  moduleName: string | null;
   title: string | null;
   deadline: string | null;
   moduleWeight: string | null;
@@ -28,6 +30,8 @@ export type AssignmentAnalysisTask = {
 };
 
 export type AssignmentAnalysis = {
+  moduleCode: string | null;
+  moduleName: string | null;
   title: string | null;
   deadline: string | null;
   moduleWeight: number | null;
@@ -44,6 +48,8 @@ export type GroundedField = {
 export type AssignmentAnalysisProvenance = {
   source: "text" | "image";
   fields: {
+    moduleCode: GroundedField;
+    moduleName: GroundedField;
     title: GroundedField;
     deadline: GroundedField;
     moduleWeight: GroundedField;
@@ -198,15 +204,26 @@ function nullableEvidence(value: unknown, label: string) {
   return nullableText(value, label, MAX_EVIDENCE_CHARACTERS);
 }
 
-function validateTopLevelEvidence(value: unknown, title: string | null, deadline: string | null, moduleWeight: number | null): AssignmentAnalysisEvidence {
+function validateTopLevelEvidence(
+  value: unknown,
+  moduleCode: string | null,
+  moduleName: string | null,
+  title: string | null,
+  deadline: string | null,
+  moduleWeight: number | null,
+): AssignmentAnalysisEvidence {
   const source = asRecord(value);
   if (!source) throw new Error("evidence must be an object.");
   const evidence = {
+    moduleCode: nullableEvidence(source.moduleCode, "moduleCode evidence"),
+    moduleName: nullableEvidence(source.moduleName, "moduleName evidence"),
     title: nullableEvidence(source.title, "title evidence"),
     deadline: nullableEvidence(source.deadline, "deadline evidence"),
     moduleWeight: nullableEvidence(source.moduleWeight, "moduleWeight evidence"),
   };
 
+  if (moduleCode === null && evidence.moduleCode !== null) throw new Error("moduleCode evidence must be null when moduleCode is null.");
+  if (moduleName === null && evidence.moduleName !== null) throw new Error("moduleName evidence must be null when moduleName is null.");
   if (title === null && evidence.title !== null) throw new Error("title evidence must be null when title is null.");
   if (deadline === null && evidence.deadline !== null) throw new Error("deadline evidence must be null when deadline is null.");
   if (moduleWeight === null && evidence.moduleWeight !== null) throw new Error("moduleWeight evidence must be null when moduleWeight is null.");
@@ -228,6 +245,8 @@ export function validateAssignmentAnalysis(value: unknown): AssignmentAnalysis {
   const source = asRecord(value);
   if (!source) throw new Error("The analysis was not an object.");
 
+  const moduleCode = nullableText(source.moduleCode, "moduleCode", 80);
+  const moduleName = nullableText(source.moduleName, "moduleName");
   const title = nullableText(source.title, "title");
   const deadline = nullableText(source.deadline, "deadline", 10);
   if (deadline && !isValidDate(deadline)) throw new Error("deadline must be a valid YYYY-MM-DD date.");
@@ -255,11 +274,13 @@ export function validateAssignmentAnalysis(value: unknown): AssignmentAnalysis {
   });
 
   return {
+    moduleCode,
+    moduleName,
     title,
     deadline,
     moduleWeight,
     tasks,
-    evidence: validateTopLevelEvidence(source.evidence, title, deadline, moduleWeight),
+    evidence: validateTopLevelEvidence(source.evidence, moduleCode, moduleName, title, deadline, moduleWeight),
     warnings: normaliseWarnings(source.warnings),
   };
 }
@@ -340,6 +361,8 @@ export function createTextAnalysisProvenance(source: string, analysis: Assignmen
   return {
     source: "text",
     fields: {
+      moduleCode: groundedTextField(source, analysis.moduleCode, analysis.evidence.moduleCode, (value, evidence) => evidenceSupportsTitle(String(value), evidence)),
+      moduleName: groundedTextField(source, analysis.moduleName, analysis.evidence.moduleName, (value, evidence) => evidenceSupportsTitle(String(value), evidence)),
       title: groundedTextField(source, analysis.title, analysis.evidence.title, (value, evidence) => evidenceSupportsTitle(String(value), evidence)),
       deadline: groundedTextField(source, analysis.deadline, analysis.evidence.deadline, (value, evidence) => evidenceSupportsDate(String(value), evidence)),
       moduleWeight: groundedTextField(source, analysis.moduleWeight, analysis.evidence.moduleWeight, (value, evidence) => evidenceSupportsScoredValue(Number(value), evidence, "weight")),
@@ -360,6 +383,8 @@ export function createImageAnalysisProvenance(analysis: AssignmentAnalysis): Ass
   return {
     source: "image",
     fields: {
+      moduleCode: visualSourceField(analysis.moduleCode, analysis.evidence.moduleCode),
+      moduleName: visualSourceField(analysis.moduleName, analysis.evidence.moduleName),
       title: visualSourceField(analysis.title, analysis.evidence.title),
       deadline: visualSourceField(analysis.deadline, analysis.evidence.deadline),
       moduleWeight: visualSourceField(analysis.moduleWeight, analysis.evidence.moduleWeight),
@@ -383,6 +408,12 @@ function validateGroundedField(value: unknown, label: string): GroundedField {
   return { state, evidence };
 }
 
+function validateOptionalGroundedField(value: unknown, label: string): GroundedField {
+  return value === undefined
+    ? { state: "missing-evidence", evidence: null }
+    : validateGroundedField(value, label);
+}
+
 export function validateAssignmentAnalysisResponse(value: unknown): AssignmentAnalysisResponse {
   const source = asRecord(value);
   if (!source) throw new Error("The analyser response was invalid.");
@@ -398,6 +429,8 @@ export function validateAssignmentAnalysisResponse(value: unknown): AssignmentAn
   const provenance: AssignmentAnalysisProvenance = {
     source: provenanceSource.source,
     fields: {
+      moduleCode: validateOptionalGroundedField(fields.moduleCode, "moduleCode provenance"),
+      moduleName: validateOptionalGroundedField(fields.moduleName, "moduleName provenance"),
       title: validateGroundedField(fields.title, "title provenance"),
       deadline: validateGroundedField(fields.deadline, "deadline provenance"),
       moduleWeight: validateGroundedField(fields.moduleWeight, "moduleWeight provenance"),
@@ -425,6 +458,8 @@ export const analysisSystemPrompt = `You extract assignment information into a J
 
 Return JSON only with this exact shape:
 {
+  "moduleCode": string | null,
+  "moduleName": string | null,
   "title": string | null,
   "deadline": string | null,
   "moduleWeight": number | null,
@@ -436,14 +471,14 @@ Return JSON only with this exact shape:
     "requirements": string[],
     "evidence": { "name": string | null, "marks": string | null }
   }],
-  "evidence": { "title": string | null, "deadline": string | null, "moduleWeight": string | null },
+  "evidence": { "moduleCode": string | null, "moduleName": string | null, "title": string | null, "deadline": string | null, "moduleWeight": string | null },
   "warnings": string[]
 }
 
 Rules:
 - Extract only information stated in the brief.
-- For title, deadline, moduleWeight, task names and task marks, provide a short exact source excerpt when the source explicitly states it. Evidence excerpts must be copied from the brief, never paraphrased.
-- If title, deadline, moduleWeight or task marks are null, their evidence must be null. Never invent marks or moduleWeight.
+- For moduleCode, moduleName, title, deadline, moduleWeight, task names and task marks, provide a short exact source excerpt when the source explicitly states it. Evidence excerpts must be copied from the brief, never paraphrased.
+- If moduleCode, moduleName, title, deadline, moduleWeight or task marks are null, their evidence must be null. Never invent module details, marks or moduleWeight.
 - A deadline is only valid when explicit and must be YYYY-MM-DD. Use null and explain in warnings when ambiguous or missing.
 - Complexity may be estimated: 1 low, 2 medium, 3 high. Its concise rationale must use only stated requirements, must not estimate hours, and must not provide hidden reasoning.
 - Requirements must be directly stated in the brief or a close paraphrase. Do not add implied standards, quality criteria, deliverables or advice. When none are stated, return an empty requirements array.

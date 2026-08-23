@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parseTimetablePdf } from "@/lib/timetableParser";
 import { renderPdfToImageFile } from "@/lib/pdfDocument";
 import {
-  clearPlanAroundStorage,
   readStoredValue,
   storageKeys,
   writeStoredValue,
@@ -19,7 +18,7 @@ import {
   getMondayWeekKeyForDateKey,
 } from "@/lib/calendarWeek";
 import { WeeklyCalendar, type CalendarSlot } from "@/components/WeeklyCalendar";
-import { initialOnboardingState, useOnboardingState } from "@/lib/onboarding";
+import { useOnboardingState } from "@/lib/onboarding";
 import { type PreparedAnalysisImage } from "@/lib/analysisImage";
 import { prepareTimetableAnalysisImages } from "@/lib/timetableImage";
 import { analyzeTimetableScreenshot } from "@/lib/timetableAnalyzer";
@@ -66,6 +65,13 @@ type CalendarEventDraft = {
   end: string;
   category: CommitmentCategory;
 };
+type StudyBlockEditDraft = {
+  id: string;
+  date: string;
+  start: string;
+  end: string;
+  missed: boolean;
+};
 type LegacyTimetableEntry = Omit<
   TimetableEntry,
   "attendance" | "skippedWeeks"
@@ -76,7 +82,6 @@ type LegacyTimetableEntry = Omit<
 type SetupWorkspaceContentProps = {
   onboardingCompleted: boolean;
   onCompleteOnboarding: () => void;
-  onResetOnboarding: () => void;
 };
 
 const createId = () =>
@@ -326,10 +331,88 @@ function EventDialog({
   );
 }
 
+function StudyBlockDialog({
+  block,
+  onSave,
+  onClose,
+}: {
+  block: StudyBlock;
+  onSave: (draft: StudyBlockEditDraft) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<StudyBlockEditDraft>({
+    id: block.id,
+    date: block.date,
+    start: block.start,
+    end: block.end,
+    missed: Boolean(block.missedAt),
+  });
+  const [error, setError] = useState("");
+  const isCompleted = Boolean(block.completedAt);
+
+  function updateDraft(changes: Partial<StudyBlockEditDraft>) {
+    setDraft((current) => ({ ...current, ...changes }));
+    setError("");
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-[oklch(0.18_0.02_260_/_0.35)] p-4"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <form
+        className="w-full max-w-md rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!draft.date || !/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) {
+            setError("Choose a valid date.");
+            return;
+          }
+          if (draft.start < "08:00" || draft.end > "22:00" || draft.end <= draft.start) {
+            setError("Choose an end time after the start, between 08:00 and 22:00.");
+            return;
+          }
+          onSave(draft);
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
+        aria-labelledby="study-block-heading"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Study session</p>
+            <h2 id="study-block-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Adjust this session.</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">{block.taskName}</p>
+          </div>
+          <button type="button" onClick={onClose} className="min-h-10 px-2 text-sm font-semibold text-[var(--muted-ink)] hover:text-[var(--ink)]">Close</button>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <label className="text-sm font-medium sm:col-span-2">Date<input value={draft.date} onChange={(event) => updateDraft({ date: event.target.value })} className={inputClassName} type="date" autoFocus /></label>
+          <label className="text-sm font-medium">Start<input value={draft.start} onChange={(event) => updateDraft({ start: event.target.value })} className={inputClassName} type="time" min="08:00" max="22:00" /></label>
+          <label className="text-sm font-medium">End<input value={draft.end} onChange={(event) => updateDraft({ end: event.target.value })} className={inputClassName} type="time" min="08:00" max="22:00" /></label>
+        </div>
+
+        {isCompleted ? <p className="mt-4 rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">This session is marked complete.</p> : (
+          <button type="button" onClick={() => updateDraft({ missed: !draft.missed })} className={`mt-4 min-h-10 rounded-xl px-4 text-sm font-semibold ${draft.missed ? "bg-red-50 text-red-700" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-red-300 hover:text-red-700"}`}>
+            {draft.missed ? "Restore session" : "Mark missed"}
+          </button>
+        )}
+        <p className="mt-4 text-sm leading-6 text-[var(--muted-ink)]">Replanning this assignment can replace unfinished sessions.</p>
+        {error ? <p className="mt-3 text-sm text-red-700" role="alert">{error}</p> : null}
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] hover:border-[var(--accent)]">Cancel</button>
+          <button type="submit" className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">Save session</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function SetupWorkspaceContent({
   onboardingCompleted,
   onCompleteOnboarding,
-  onResetOnboarding,
 }: SetupWorkspaceContentProps) {
   const [modules, setModules] = useState<Module[]>([]);
 const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -347,6 +430,7 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
   );
   const [eventDraft, setEventDraft] = useState<CalendarEventDraft | null>(null);
   const [eventError, setEventError] = useState("");
+  const [studyBlockDraft, setStudyBlockDraft] = useState<StudyBlock | null>(null);
   const [showImporter, setShowImporter] = useState(!onboardingCompleted);
   const [importState, setImportState] = useState<
     "idle" | "reading" | "complete" | "error"
@@ -407,6 +491,9 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
     if (isLoaded) writeStoredValue(storageKeys.modules, modules);
   }, [isLoaded, modules]);
   useEffect(() => {
+    if (isLoaded) writeStoredValue(storageKeys.studyBlocks, studyBlocks);
+  }, [isLoaded, studyBlocks]);
+  useEffect(() => {
     if (isLoaded) writeStoredValue(storageKeys.commitments, commitments);
   }, [isLoaded, commitments]);
   useEffect(() => {
@@ -417,35 +504,6 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
     if (isLoaded)
       writeStoredValue(storageKeys.timetableEntries, timetableEntries);
   }, [isLoaded, timetableEntries]);
-
-  // Lets a scroll gesture over the week-navigation controls step through weeks
-  // quickly (several weeks per real scroll) instead of only one click at a
-  // time. A callback ref (not useRef+useEffect) because this component itself
-  // gates its whole calendar section behind an `isLoaded` hydration flag, so
-  // the div this attaches to doesn't exist yet on the render(s) where an
-  // effect keyed on a prop like `onboardingCompleted` would fire - a callback
-  // ref runs exactly when the DOM node itself mounts, regardless of that.
-  // Native addEventListener (not React's onWheel) so preventDefault reliably
-  // stops the page itself from scrolling while over this control.
-  const weekNavCallbackRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node) return;
-
-    const WHEEL_STEP_THROTTLE_MS = 120;
-    let lastStepAt = 0;
-
-    function handleWheel(event: WheelEvent) {
-      const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
-      if (delta === 0) return;
-      event.preventDefault();
-      const now = Date.now();
-      if (now - lastStepAt < WHEEL_STEP_THROTTLE_MS) return;
-      lastStepAt = now;
-      setVisibleCalendarWeekStart((current) => addCalendarWeeks(current, delta > 0 ? 1 : -1));
-    }
-
-    node.addEventListener("wheel", handleWheel, { passive: false });
-    return () => node.removeEventListener("wheel", handleWheel);
-  }, []);
 
   const selectedEntry =
     timetableEntries.find((entry) => entry.id === selectedEntryId) ?? null;
@@ -463,14 +521,19 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
   const isEntrySkippedOnDate = (entry: TimetableEntry, date?: string) =>
     entry.attendance === "skip-every-week" ||
     (date ? entry.skippedWeeks.includes(getMondayWeekKeyForDateKey(date)) : false);
-  const unconfirmedCreditCount = modules.filter(
-    (module) => module.creditsConfirmed !== true,
-  ).length;
   const totalBlockedTime = timetableEntries.length + commitments.length;
   const hasBaseline = totalBlockedTime > 0;
-  const canCompleteSetup = hasBaseline && unconfirmedCreditCount === 0;
+  const canCompleteSetup = hasBaseline;
   const shouldShowImporter =
     !reviewEntries && (showImporter || !timetableEntries.length);
+  const shouldShowPreUploadGuide =
+    !onboardingCompleted &&
+    shouldShowImporter &&
+    importState === "idle" &&
+    !preparedTimetableImage &&
+    !isPreparingTimetableImage &&
+    !isAnalysingTimetable &&
+    !timetableAnalysisError;
 
   function openSlot(slot: CalendarSlot) {
     setSelectedEntryId(null);
@@ -601,23 +664,21 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
     setEventDraft(null);
   }
 
-  function updateModuleCredits(moduleId: string, value: string) {
-    const credits = Number(value);
-    if (Number.isFinite(credits) && credits > 0)
-      setModules((current) =>
-        current.map((module) =>
-          module.id === moduleId
-            ? { ...module, credits, creditsConfirmed: false }
-            : module,
-        ),
-      );
-  }
-  function confirmModuleCredits(moduleId: string) {
-    setModules((current) =>
-      current.map((module) =>
-        module.id === moduleId ? { ...module, creditsConfirmed: true } : module,
-      ),
-    );
+  function saveStudyBlock(draft: StudyBlockEditDraft) {
+    setStudyBlocks((current) => current.map((block) => {
+      if (block.id !== draft.id) return block;
+      const isCompleted = Boolean(block.completedAt);
+      return {
+        ...block,
+        date: draft.date,
+        start: draft.start,
+        end: draft.end,
+        missedAt: isCompleted || !draft.missed
+          ? undefined
+          : block.missedAt ?? new Date().toISOString(),
+      };
+    }));
+    setStudyBlockDraft(null);
   }
 
 async function importTimetable(file: File | undefined) {
@@ -781,7 +842,7 @@ async function importTimetable(file: File | undefined) {
       if (timetableImageVersion.current === version) setIsAnalysingTimetable(false);
     }
   }
-  function confirmReviewedTimetable() {
+  function confirmReviewedTimetable(creditsByModuleCode: Record<string, number>) {
     if (!reviewEntries?.length) {
       setReviewError(
         "Add at least one teaching session before confirming the timetable.",
@@ -836,8 +897,8 @@ async function importTimetable(file: File | undefined) {
         id: existing?.id ?? createId(),
         code: entry.moduleCode,
         name: entry.moduleName,
-        credits: existing?.credits ?? 5,
-        creditsConfirmed: existing?.creditsConfirmed ?? false,
+        credits: creditsByModuleCode[entry.moduleCode.toUpperCase()] ?? existing?.credits ?? 5,
+        creditsConfirmed: true,
       };
     });
     const importedIds = new Set(imported.map((module) => module.id));
@@ -894,40 +955,6 @@ async function importTimetable(file: File | undefined) {
       ),
     );
   }
-  function resetPlanAround() {
-    if (
-      !window.confirm(
-        "Reset all saved PlanAround data on this device? This cannot be undone.",
-      )
-    )
-      return;
-    clearPlanAroundStorage();
-    setModules([]);
-    setAssignments([]);
-    setCommitments([]);
-    setDatedCommitments([]);
-    setTimetableEntries([]);
-    setStudyBlocks([]);
-    setSelectedEntryId(null);
-    setEventDraft(null);
-    setImportState("idle");
-    setUploadedFileName("");
-    setImportMessage("");
-    // A prepared screenshot or in-progress review is in-memory only, but it
-    // must not survive a reset until reload - it would otherwise still show
-    // an importer/review step that no longer matches the wiped stored data.
-    timetableImageVersion.current += 1;
-    setPreparedTimetableImage(null);
-    setIsPreparingTimetableImage(false);
-    setIsAnalysingTimetable(false);
-    setTimetableAnalysisError("");
-    setReviewEntries(null);
-    setReviewWarnings([]);
-    setReviewError("");
-    if (timetableImageInput.current) timetableImageInput.current.value = "";
-    onResetOnboarding();
-  }
-
   const importControls = (
     <>
       <section
@@ -1064,9 +1091,62 @@ async function importTimetable(file: File | undefined) {
   return (
     <div className="space-y-8">
       {shouldShowImporter ? importControls : null}
+      {shouldShowPreUploadGuide ? (
+        <section
+          aria-labelledby="setup-next-steps-heading"
+          className="border-t border-[var(--line)] pt-6"
+        >
+          <h2
+            id="setup-next-steps-heading"
+            className="text-xl font-semibold tracking-[-0.03em]"
+          >
+            What happens next
+          </h2>
+          <ol className="mt-4 grid gap-5 sm:grid-cols-3">
+            <li className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
+              <span className="grid size-9 place-items-center rounded-full bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-strong)]">
+                1
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold">Check your classes</h3>
+                <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">
+                  Edit any day, time or module name before saving.
+                </p>
+              </div>
+            </li>
+            <li className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
+              <span className="grid size-9 place-items-center rounded-full bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-strong)]">
+                2
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold">Add your routine</h3>
+                <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">
+                  Include work, exercise and other regular commitments.
+                </p>
+              </div>
+            </li>
+            <li className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
+              <span className="grid size-9 place-items-center rounded-full bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-strong)]">
+                3
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold">Plan around your week</h3>
+                <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">
+                  Turn the finished calendar into a realistic study plan.
+                </p>
+              </div>
+            </li>
+          </ol>
+          <p className="mt-6 max-w-2xl text-sm leading-6 text-[var(--muted-ink)]">
+            <span className="font-semibold text-[var(--ink)]">For a cleaner import:</span>{" "}
+            use a timetable where the weekday labels, times and module names are all visible.
+          </p>
+        </section>
+      ) : null}
       {reviewEntries ? (
         <TimetableReview
           entries={reviewEntries}
+          existingModules={modules}
           warnings={reviewWarnings}
           error={reviewError}
           onChange={(entries) => {
@@ -1122,11 +1202,7 @@ async function importTimetable(file: File | undefined) {
               )}
             </div>
             {onboardingCompleted ? (
-              <div
-                ref={weekNavCallbackRef}
-                className="mt-3 flex flex-wrap items-center gap-3"
-                title="Scroll here to browse weeks quickly"
-              >
+              <div className="mt-3 flex flex-wrap items-center gap-3">
                 <div className="inline-flex items-center gap-1 rounded-xl border border-[var(--line)] p-1">
                   <button
                     type="button"
@@ -1188,6 +1264,15 @@ async function importTimetable(file: File | undefined) {
                 onSelectDatedCommitment={
                   onboardingCompleted
                     ? (commitment) => openDatedCommitment(commitment)
+                    : undefined
+                }
+                onSelectStudyBlock={
+                  onboardingCompleted
+                    ? (block) => {
+                        setSelectedEntryId(null);
+                        setEventDraft(null);
+                        setStudyBlockDraft(block);
+                      }
                     : undefined
                 }
                 onSelectEmptySlot={openSlot}
@@ -1264,109 +1349,22 @@ async function importTimetable(file: File | undefined) {
                 </button>
               </section>
               <section className="border-t border-[var(--line)] pt-6">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">
-                  Step 3 · Check your normal week
-                </p>
-                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-                  <span>
-                    <strong>{modules.length}</strong> modules
-                  </span>
-                  <span>
-                    <strong>{totalBlockedTime}</strong> weekly blocks
-                  </span>
-                  <span>
-                    {timetableEntries.length
-                      ? "✓ Calendar reviewed"
-                      : "! Calendar needed"}
-                  </span>
-                  <span>
-                    {commitments.length
-                      ? "✓ Recurring commitments added"
-                      : "Add commitments if needed"}
-                  </span>
-                  <span
-                    className={
-                      unconfirmedCreditCount
-                        ? "text-amber-800"
-                        : "text-[var(--accent-strong)]"
-                    }
-                  >
-                    {unconfirmedCreditCount
-                      ? `! ${unconfirmedCreditCount} module credit value${unconfirmedCreditCount === 1 ? "" : "s"} need confirmation`
-                      : "✓ Module credits confirmed"}
-                  </span>
-                </div>
-                {modules.length ? (
-                  <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {modules.map((module) => (
-                      <div
-                        key={module.id}
-                        className="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3"
-                      >
-                        <p className="text-sm font-semibold">{module.name}</p>
-                        <p className="mt-1 text-xs text-[var(--muted-ink)]">
-                          {module.code ?? "No code"}
-                        </p>
-                        <label className="mt-3 block text-xs font-semibold text-[var(--muted-ink)]">
-                          ECTS
-                          <input
-                            value={module.credits}
-                            onChange={(event) =>
-                              updateModuleCredits(module.id, event.target.value)
-                            }
-                            className="mt-1 min-h-10 w-full rounded-lg border border-[var(--line)] bg-[var(--surface-soft)] px-3 text-sm text-[var(--ink)]"
-                            type="number"
-                            min="0.5"
-                            step="0.5"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => confirmModuleCredits(module.id)}
-                          className={`mt-3 min-h-10 w-full rounded-lg px-3 text-sm font-semibold ${module.creditsConfirmed ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]"}`}
-                        >
-                          {module.creditsConfirmed
-                            ? "Credits confirmed"
-                            : `Confirm ${module.credits} ECTS`}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
                 <button
                   type="button"
                   onClick={onCompleteOnboarding}
                   disabled={!canCompleteSetup}
-                  className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]"
+                  className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]"
                 >
-                  {unconfirmedCreditCount
-                    ? "Confirm credits to continue"
-                    : hasBaseline
-                      ? "Complete setup"
-                      : "Add a recurring constraint"}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetPlanAround}
-                  className="mt-3 min-h-10 px-2 text-sm font-semibold text-[var(--muted-ink)] hover:text-red-700"
-                >
-                  Reset PlanAround
+                  {hasBaseline ? "Complete setup" : "Add a recurring constraint"}
                 </button>
               </section>
             </>
           ) : (
-            <section className="flex flex-wrap items-center justify-between gap-4 border-t border-[var(--line)] pt-5">
+            <section className="border-t border-[var(--line)] pt-5">
               <p className="text-sm leading-6 text-[var(--muted-ink)]">
-                Click a class to manage attendance, or any commitment to edit or
-                delete it.
+                Click a class to manage attendance, a commitment to edit it, or a
+                study session to adjust its time or mark it missed.
               </p>
-              <button
-                type="button"
-                onClick={resetPlanAround}
-                className="min-h-10 px-2 text-sm font-semibold text-[var(--muted-ink)] hover:text-red-700"
-              >
-                Reset all PlanAround data
-              </button>
             </section>
           )}
         </>
@@ -1386,6 +1384,13 @@ async function importTimetable(file: File | undefined) {
             setEventError("");
           }}
           error={eventError}
+        />
+      ) : null}
+      {studyBlockDraft ? (
+        <StudyBlockDialog
+          block={studyBlockDraft}
+          onSave={saveStudyBlock}
+          onClose={() => setStudyBlockDraft(null)}
         />
       ) : null}
     </div>
@@ -1411,16 +1416,10 @@ export function SetupWorkspace() {
     setOnboarding(nextState);
     window.dispatchEvent(new Event("planaround:onboarding"));
   }
-  function resetOnboarding() {
-    writeStoredValue(storageKeys.onboarding, initialOnboardingState);
-    setOnboarding(initialOnboardingState);
-    window.dispatchEvent(new Event("planaround:onboarding"));
-  }
   return (
     <SetupWorkspaceContent
       onboardingCompleted={onboarding.completed}
       onCompleteOnboarding={completeOnboarding}
-      onResetOnboarding={resetOnboarding}
     />
   );
 }

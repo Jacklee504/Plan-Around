@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { analyzeAssignmentBrief, imageAnalysisIsAvailable } from "@/lib/assignmentAnalyzer";
 import { prepareAnalysisImage, type PreparedAnalysisImage } from "@/lib/analysisImage";
 import { extractPdfEmbeddedText, hasUsefulEmbeddedText, isPdfFile, renderPdfToImageFile } from "@/lib/pdfDocument";
-import { assignmentAnalysisInputKey, MAX_BRIEF_CHARACTERS, type AssignmentAnalysisInput, type AssignmentAnalysisResponse, type GroundedField } from "@/lib/assignmentAnalysis";
+import { assignmentAnalysisInputKey, MAX_BRIEF_CHARACTERS, type AssignmentAnalysisInput, type AssignmentAnalysisResponse } from "@/lib/assignmentAnalysis";
+import { findMatchingModule } from "@/lib/moduleMatch";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { removeAssignmentPlanningState, restoreAssignmentPlanningState } from "@/lib/studyProgress";
 import type { Assignment, AssignmentTask, Module, StudyBlock } from "@/types";
-import { WorkloadBreakdown } from "@/components/WorkloadBreakdown";
 import { OnboardingRequired } from "@/components/OnboardingRequired";
 import { useOnboardingState } from "@/lib/onboarding";
 
@@ -61,27 +63,8 @@ function formatDeadline(date: string) {
   return new Intl.DateTimeFormat("en-IE", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${date}T12:00:00`));
 }
 
-function formatAnalysisProvider(provider: AssignmentAnalysisResponse["provider"]) {
-  return provider === "local-ollama" ? "Local AI" : "Featherless AI";
-}
-
-function sourceStatus(field: GroundedField) {
-  if (field.state === "verified-text") return "Verified from text";
-  if (field.state === "visual-source") return "Found in screenshot";
-  if (field.state === "evidence-mismatch") return "Source excerpt needs review";
-  return "Needs confirmation";
-}
-
-function EvidenceDetail({ field }: { field: GroundedField }) {
-  return (
-    <details className="mt-2 text-xs leading-5 text-[var(--muted-ink)]">
-      <summary className="cursor-pointer font-semibold text-[var(--accent-strong)]">{sourceStatus(field)}</summary>
-      {field.evidence ? <p className="mt-1">“{field.evidence}”</p> : <p className="mt-1">No exact source excerpt was found for this suggestion.</p>}
-    </details>
-  );
-}
-
 export function AssignmentWorkspace() {
+  const router = useRouter();
   const { onboarding, isOnboardingLoaded } = useOnboardingState();
   const [modules, setModules] = useState<Module[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -94,16 +77,13 @@ export function AssignmentWorkspace() {
   const currentAnalysisInputKey = useRef("");
   const imagePreparationVersion = useRef(0);
   const imageInput = useRef<HTMLInputElement>(null);
-  const [analysisResult, setAnalysisResult] = useState<AssignmentAnalysisResponse | null>(null);
-  const [analysisSource, setAnalysisSource] = useState<Assignment["analysisSource"]>();
+  const [hasAnalysedBrief, setHasAnalysedBrief] = useState(false);
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [isPreparingImage, setIsPreparingImage] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
-  const [needsReplacementConfirmation, setNeedsReplacementConfirmation] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [deletedAssignment, setDeletedAssignment] = useState<DeletedAssignmentUndo | null>(null);
-  const [selectedWorkloadAssignmentId, setSelectedWorkloadAssignmentId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -111,7 +91,6 @@ export function AssignmentWorkspace() {
       setModules(readStoredValue<Module[]>(storageKeys.modules, []));
       const storedAssignments = readStoredValue<Assignment[]>(storageKeys.assignments, []);
       setAssignments(storedAssignments);
-      setSelectedWorkloadAssignmentId(storedAssignments.at(-1)?.id ?? null);
       setIsLoaded(true);
     }, 0);
 
@@ -126,17 +105,35 @@ export function AssignmentWorkspace() {
   const hasUnconfirmedSelection = selectedModule?.creditsConfirmed === false;
   const taskMarks = tasks.reduce((total, task) => total + (Number(task.marks) || 0), 0);
   const canAnalyseScreenshot = imageAnalysisIsAvailable();
+  const hasDraftContent = Boolean(
+    draft.moduleId ||
+      draft.title ||
+      draft.deadline ||
+      draft.moduleWeight ||
+      tasks.length ||
+      briefText.trim() ||
+      analysisImage ||
+      hasAnalysedBrief,
+  );
 
   function resetForm() {
     setDraft(emptyAssignmentDraft);
     setTasks([]);
     setShowTasks(false);
     updateBriefText("");
-    setAnalysisResult(null);
-    setAnalysisSource(undefined);
+    setHasAnalysedBrief(false);
     setAnalysisError("");
-    setNeedsReplacementConfirmation(false);
     setError("");
+  }
+
+  function discardDraft() {
+    if (
+      hasDraftContent &&
+      !window.confirm("Discard this unsaved assignment draft?")
+    )
+      return;
+    resetForm();
+    setStatus("");
   }
 
   function updateTask(id: string, changes: Partial<TaskDraft>) {
@@ -149,10 +146,9 @@ export function AssignmentWorkspace() {
     currentAnalysisInputKey.current = assignmentAnalysisInputKey({ kind: "text", text: nextBriefText });
     setBriefText(nextBriefText);
     setAnalysisImage(null);
+    setHasAnalysedBrief(false);
     if (imageInput.current) imageInput.current.value = "";
     setAnalysisError("");
-    setAnalysisResult(null);
-    setNeedsReplacementConfirmation(false);
   }
 
   function clearAnalysisImage() {
@@ -160,10 +156,9 @@ export function AssignmentWorkspace() {
     setIsPreparingImage(false);
     currentAnalysisInputKey.current = assignmentAnalysisInputKey({ kind: "text", text: "" });
     setAnalysisImage(null);
+    setHasAnalysedBrief(false);
     if (imageInput.current) imageInput.current.value = "";
     setAnalysisError("");
-    setAnalysisResult(null);
-    setNeedsReplacementConfirmation(false);
   }
 
   async function selectAnalysisFile(file: File | undefined) {
@@ -174,9 +169,8 @@ export function AssignmentWorkspace() {
     setIsPreparingImage(true);
     setBriefText("");
     setAnalysisImage(null);
+    setHasAnalysedBrief(false);
     setAnalysisError("");
-    setAnalysisResult(null);
-    setNeedsReplacementConfirmation(false);
     try {
       // A PDF is routed client-side, never sent to Featherless as raw bytes:
       // embedded text goes through the existing text-analysis path, and only
@@ -215,8 +209,6 @@ export function AssignmentWorkspace() {
       currentAnalysisInputKey.current = assignmentAnalysisInputKey(image);
       setBriefText("");
       setAnalysisImage(image);
-      setAnalysisResult(null);
-      setNeedsReplacementConfirmation(false);
     } catch (fileError) {
       if (imagePreparationVersion.current !== version) return;
       setAnalysisImage(null);
@@ -238,7 +230,7 @@ export function AssignmentWorkspace() {
     }
 
     if (hasUnconfirmedSelection) {
-      setError("Confirm this module's ECTS in Calendar before saving an assignment for it.");
+      setError("Confirm this module's credits in Calendar before saving an assignment for it.");
       return;
     }
 
@@ -261,14 +253,15 @@ export function AssignmentWorkspace() {
       deadline: draft.deadline,
       moduleWeight,
       tasks: savedTasks,
-      ...(analysisSource ? { analysisSource } : {}),
     };
 
-    setAssignments((current) => [...current, assignment]);
-    setSelectedWorkloadAssignmentId(assignment.id);
-    setStatus(`${title} is saved and ready for workload planning.`);
+    const nextAssignments = [...assignments, assignment];
+    // Persist before navigating so Plan can load the newly saved assignment on
+    // its first render rather than waiting for this component's effect.
+    writeStoredValue(storageKeys.assignments, nextAssignments);
+    setAssignments(nextAssignments);
     setDeletedAssignment(null);
-    resetForm();
+    router.push(`/plan?assignment=${encodeURIComponent(assignment.id)}`);
   }
 
   function loadDemo() {
@@ -278,6 +271,8 @@ export function AssignmentWorkspace() {
       return;
     }
 
+    updateBriefText("");
+    setShowAnalysis(false);
     setDraft({
       moduleId: demoModule.id,
       title: "Coursework project",
@@ -291,10 +286,8 @@ export function AssignmentWorkspace() {
       { id: createId(), name: "Presentation", marks: "10", complexity: "1", notes: "Five-minute presentation." },
     ]);
     setShowTasks(true);
-    setAnalysisResult(null);
-    setAnalysisSource(undefined);
+    setHasAnalysedBrief(false);
     setAnalysisError("");
-    setNeedsReplacementConfirmation(false);
     setStatus("Demo details loaded. Review them, then save when ready.");
     setError("");
     setDeletedAssignment(null);
@@ -308,50 +301,48 @@ export function AssignmentWorkspace() {
     setIsAnalysing(true);
     setAnalysisError("");
     setStatus("");
-    setNeedsReplacementConfirmation(false);
     try {
       const result = await analyzeAssignmentBrief(input);
       if (currentAnalysisInputKey.current !== analysedInputKey) return;
-      setAnalysisResult(result);
+      applyAnalysis(result);
     } catch (analysisFailure) {
       if (currentAnalysisInputKey.current !== analysedInputKey) return;
-      setAnalysisResult(null);
       setAnalysisError(analysisFailure instanceof Error ? analysisFailure.message : "The analyser could not read this brief. You can still enter the rubric manually.");
     } finally {
       setIsAnalysing(false);
     }
   }
 
-  function applySuggestions(forceReplace = false) {
-    if (!analysisResult) return;
-    if (analysisResult.analysis.tasks.length && tasks.length && !forceReplace) {
-      setNeedsReplacementConfirmation(true);
-      return;
-    }
-
-    const { analysis } = analysisResult;
+  function applyAnalysis(result: AssignmentAnalysisResponse) {
+    const { analysis } = result;
+    const matchedModule = findMatchingModule(
+      modules,
+      analysis.moduleCode,
+      analysis.moduleName,
+    );
     setDraft((current) => ({
       ...current,
-      title: current.title.trim() || analysis.title || "",
-      deadline: current.deadline || analysis.deadline || "",
-      moduleWeight: current.moduleWeight || (analysis.moduleWeight ? String(analysis.moduleWeight) : ""),
+      moduleId: matchedModule?.id ?? current.moduleId,
+      title: analysis.title ?? current.title,
+      deadline: analysis.deadline ?? current.deadline,
+      moduleWeight: analysis.moduleWeight ? String(analysis.moduleWeight) : current.moduleWeight,
     }));
-    if (analysis.tasks.length) {
-      setTasks(analysis.tasks.map((task) => ({
-        id: createId(),
-        name: task.name,
-        marks: task.marks === null ? "" : String(task.marks),
-        complexity: String(task.complexity) as TaskDraft["complexity"],
-        notes: task.requirements.join("\n"),
-      })));
-      setShowTasks(true);
-    }
-    setAnalysisSource({ provider: analysisResult.provider, model: analysisResult.model });
-    setAnalysisResult(null);
-    setNeedsReplacementConfirmation(false);
-    setStatus(analysis.tasks.some((task) => task.marks === null)
-      ? "Suggestions applied. Add the missing task marks before saving."
-      : "Suggestions applied. Review every field, then save when ready.");
+    // A brief is one coherent source of truth for its rubric. A successful
+    // analysis always replaces the current list; the editable task list is
+    // where the student verifies and adjusts the result.
+    setTasks(analysis.tasks.map((task) => ({
+      id: createId(),
+      name: task.name,
+      marks: task.marks === null ? "" : String(task.marks),
+      complexity: String(task.complexity) as TaskDraft["complexity"],
+      notes: task.requirements.join("\n"),
+    })));
+    setShowTasks(true);
+    setHasAnalysedBrief(true);
+    setShowAnalysis(false);
+    setStatus(analysis.tasks.length
+      ? `Brief analysed. Review the ${analysis.tasks.length} task${analysis.tasks.length === 1 ? "" : "s"}, then save when ready.`
+      : "Brief analysed. Add any task parts you want to use, then save when ready.");
     setError("");
   }
 
@@ -367,7 +358,6 @@ export function AssignmentWorkspace() {
     );
 
     setAssignments((current) => current.filter((item) => item.id !== assignment.id));
-    if (selectedWorkloadAssignmentId === assignment.id) setSelectedWorkloadAssignmentId(null);
 
     if (removedStudyBlocks.length) writeStoredValue(storageKeys.studyBlocks, remainingStudyBlocks);
     if (removedPlanSnapshot !== undefined) writeStoredValue(storageKeys.planSnapshots, remainingPlanSnapshots);
@@ -381,7 +371,6 @@ export function AssignmentWorkspace() {
     const { assignment, studyBlocks, planSnapshot } = deletedAssignment;
 
     setAssignments((current) => [...current, assignment]);
-    setSelectedWorkloadAssignmentId(assignment.id);
 
     const { restoredStudyBlocks, restoredPlanSnapshots } = restoreAssignmentPlanningState(
       readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []),
@@ -397,13 +386,6 @@ export function AssignmentWorkspace() {
     setStatus("Assignment restored.");
   }
 
-  function updateWorkloadOverride(assignmentId: string, workloadOverrideHours: number | undefined) {
-    setAssignments((current) => current.map((assignment) => assignment.id === assignmentId ? { ...assignment, workloadOverrideHours } : assignment));
-  }
-
-  const selectedWorkloadAssignment = assignments.find((assignment) => assignment.id === selectedWorkloadAssignmentId) ?? null;
-  const selectedWorkloadModule = selectedWorkloadAssignment ? modules.find((module) => module.id === selectedWorkloadAssignment.moduleId) ?? null : null;
-
   if (!isLoaded || !isOnboardingLoaded) {
     return <div className="h-44 animate-pulse border-y border-[var(--line)] bg-[var(--surface-soft)]" aria-label="Loading assignment" />;
   }
@@ -415,8 +397,8 @@ export function AssignmentWorkspace() {
       <section className="grid gap-5 border-y border-[var(--line)] py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center" aria-labelledby="assignment-form-heading">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Assignment details</p>
-          <h2 id="assignment-form-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Start with what you already know.</h2>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Module, deadline and weighting are enough to begin. Add rubric tasks only when you have them.</p>
+          <h2 id="assignment-form-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Start with the essentials.</h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Module, deadline and weighting are enough. Add a brief or tasks when you have them.</p>
         </div>
         <button type="button" onClick={loadDemo} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]">
           Load demo assignment
@@ -430,8 +412,7 @@ export function AssignmentWorkspace() {
           <Link href="/setup" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Go to Calendar</Link>
         </section>
       ) : (
-        <form onSubmit={saveAssignment} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.58fr)]">
-          <div className="space-y-7">
+        <form onSubmit={saveAssignment} className="max-w-3xl space-y-7">
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="text-sm font-medium sm:col-span-2">
                 Module
@@ -454,16 +435,18 @@ export function AssignmentWorkspace() {
               </label>
             </div>
 
-            {hasUnconfirmedSelection ? <p className="rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">This module still needs its ECTS confirmed in <Link href="/setup" className="font-semibold text-[var(--accent-strong)] underline underline-offset-2">Calendar</Link>.</p> : null}
+            {hasUnconfirmedSelection ? <p className="rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">This module still needs its credits confirmed in <Link href="/setup" className="font-semibold text-[var(--accent-strong)] underline underline-offset-2">Calendar</Link>.</p> : null}
 
             <section className="border-t border-[var(--line)] pt-6" aria-labelledby="analysis-heading">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Optional</p>
-                  <h3 id="analysis-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Analyse an assignment brief.</h3>
-                  <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Paste the assessment text to extract a draft rubric. You review it before anything is added.</p>
+                  <h3 id="analysis-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Use an assignment brief.</h3>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Paste or upload a brief to draft the assignment details and rubric.</p>
                 </div>
-                {showAnalysis ? (
+                {hasAnalysedBrief ? (
+                  <button type="button" onClick={() => { updateBriefText(""); setShowAnalysis(true); }} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Replace brief</button>
+                ) : showAnalysis ? (
                   <button type="button" onClick={() => updateBriefText("CS301 Coursework Project\n\nThis coursework contributes 40% of the module grade.\nSubmission deadline: 28 August 2026.\n\nAssessment:\nDesign and implementation, 45 marks\nDevelop a working application implementing the required core functionality.\n\nTesting and evaluation, 25 marks\nProvide appropriate test cases and critically evaluate the finished solution.\n\nTechnical report, 20 marks\nSubmit a report of approximately 2,500 words documenting architecture, implementation decisions and evaluation.\n\nPresentation, 10 marks\nDeliver a five-minute presentation demonstrating the completed system.")} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Load sample brief</button>
                 ) : (
                   <button type="button" onClick={() => setShowAnalysis(true)} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Add a brief to analyse</button>
@@ -489,43 +472,27 @@ export function AssignmentWorkspace() {
                     <button type="button" onClick={analyseBrief} disabled={(!briefText.trim() && !analysisImage) || isAnalysing || isPreparingImage} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">
                       {isAnalysing ? "Analysing source…" : analysisImage ? "Analyse screenshot with AI" : "Analyse brief with AI"}
                     </button>
-                    <p className="text-sm text-[var(--muted-ink)]">It extracts details only. Workload and scheduling stay explainable.</p>
+                    <p className="text-sm text-[var(--muted-ink)]">It fills this form and replaces the task list. You can edit everything before saving.</p>
                   </div>
                   {analysisError ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{analysisError}</p> : null}
                 </>
               ) : null}
 
-              {analysisResult ? (
-                <div className="mt-5 border-y border-[var(--line)] py-5" aria-live="polite">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Review suggestions</p>
-                      <h4 className="mt-1 text-base font-semibold">Nothing is added until you use these suggestions.</h4>
-                    </div>
-                    <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-strong)]">{formatAnalysisProvider(analysisResult.provider)} · {analysisResult.model}</span>
-                  </div>
-                  <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                    <div><dt className="text-[var(--muted-ink)]">Title</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.title ?? "Not found"}</dd><EvidenceDetail field={analysisResult.provenance.fields.title} /></div>
-                    <div><dt className="text-[var(--muted-ink)]">Deadline</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.deadline ? formatDeadline(analysisResult.analysis.deadline) : "Not found"}</dd><EvidenceDetail field={analysisResult.provenance.fields.deadline} /></div>
-                    <div><dt className="text-[var(--muted-ink)]">Module weighting</dt><dd className="mt-1 font-semibold">{analysisResult.analysis.moduleWeight ? `${analysisResult.analysis.moduleWeight}%` : "Not found"}</dd><EvidenceDetail field={analysisResult.provenance.fields.moduleWeight} /></div>
-                  </dl>
-                  {analysisResult.analysis.tasks.length ? <ul className="mt-5 divide-y divide-[var(--line)] border-y border-[var(--line)]">{analysisResult.analysis.tasks.map((task, index) => <li key={`${task.name}-${task.marks}`} className="py-3"><p className="font-semibold">{task.name}</p><p className="mt-1 text-sm text-[var(--muted-ink)]">{task.marks === null ? "Marks need confirmation" : `${task.marks} marks`} · {task.complexity === 1 ? "Low" : task.complexity === 2 ? "Medium" : "High"} complexity</p><p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]"><span className="font-semibold text-[var(--ink)]">Why this complexity?</span> {task.complexityRationale}</p><EvidenceDetail field={task.marks === null ? analysisResult.provenance.tasks[index].name : analysisResult.provenance.tasks[index].marks} />{task.requirements.length ? <ul className="mt-2 space-y-1 text-sm leading-6 text-[var(--muted-ink)]">{task.requirements.map((requirement) => <li key={requirement}>• {requirement}</li>)}</ul> : null}</li>)}</ul> : <p className="mt-4 text-sm leading-6 text-[var(--muted-ink)]">No clear rubric tasks were found. You can still use any title, deadline or weighting suggestion.</p>}
-                  {analysisResult.analysis.warnings.length ? <ul className="mt-4 space-y-1 text-sm leading-6 text-[var(--muted-ink)]">{analysisResult.analysis.warnings.map((warning) => <li key={warning}>• {warning}</li>)}</ul> : null}
-                  {needsReplacementConfirmation ? <p className="mt-4 rounded-xl bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-ink)]">Using the task suggestions will replace the {tasks.length} task{tasks.length === 1 ? "" : "s"} currently in this form.</p> : null}
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    <button type="button" onClick={() => applySuggestions(needsReplacementConfirmation)} className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">{needsReplacementConfirmation ? "Replace with suggestions" : "Use suggestions"}</button>
-                    <button type="button" onClick={() => { setAnalysisResult(null); setNeedsReplacementConfirmation(false); }} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">Discard</button>
-                  </div>
-                </div>
+              {hasAnalysedBrief ? (
+                <details className="mt-5 border-y border-[var(--line)] py-4 text-sm leading-6 text-[var(--muted-ink)]">
+                  <summary className="cursor-pointer font-semibold text-[var(--accent-strong)]">View analysed brief</summary>
+                  {briefText ? <p className="mt-3 max-h-80 overflow-y-auto whitespace-pre-wrap">{briefText}</p> : null}
+                  {analysisImage ? <Image src={`data:${analysisImage.mimeType};base64,${analysisImage.base64}`} alt="Uploaded assignment brief" width={800} height={1100} unoptimized className="mt-3 h-auto max-h-[32rem] w-full rounded-lg border border-[var(--line)] object-contain" /> : null}
+                </details>
               ) : null}
             </section>
 
             <section className="border-t border-[var(--line)] pt-6" aria-labelledby="tasks-heading">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 id="tasks-heading" className="text-lg font-semibold tracking-[-0.025em]">Tasks from rubric</h3>
+                <h3 id="tasks-heading" className="text-lg font-semibold tracking-[-0.025em]">Rubric tasks</h3>
 
                 {tasks.length ? (
-                  <p className="text-sm font-semibold text-[var(--muted-ink)]">{taskMarks}% allocated</p>
+                  <p className="text-sm font-semibold text-[var(--muted-ink)]">{taskMarks}% of weighting allocated</p>
                 ) : !showTasks ? (
                   <button
                     type="button"
@@ -541,34 +508,36 @@ export function AssignmentWorkspace() {
                 <div className="mt-5 space-y-4">
                   {tasks.map((task, index) => (
                     <fieldset key={task.id} className="border-t border-[var(--line)] pt-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <legend className="text-sm font-semibold">Task {index + 1}</legend>
-                        <button type="button" onClick={() => setTasks((current) => current.filter((item) => item.id !== task.id))} className="min-h-10 px-2 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:text-red-700">Delete task</button>
-                      </div>
-                      <div className="mt-2 grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_9.5rem]">
-                        <label className="text-sm font-medium">Task name<input value={task.name} onChange={(event) => updateTask(task.id, { name: event.target.value })} className={inputClassName} placeholder="Technical report" /></label>
+                      <legend className="sr-only">Task {index + 1}</legend>
+                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_9rem_auto] sm:items-end">
+                        <label className="text-sm font-medium">Task<input value={task.name} onChange={(event) => updateTask(task.id, { name: event.target.value })} className={inputClassName} placeholder="Technical report" /></label>
                         <label className="text-sm font-medium">Marks<input value={task.marks} onChange={(event) => updateTask(task.id, { marks: event.target.value })} className={inputClassName} type="number" min="1" placeholder="20" /></label>
                         <label className="text-sm font-medium">Complexity<select value={task.complexity} onChange={(event) => updateTask(task.id, { complexity: event.target.value as TaskDraft["complexity"] })} className={inputClassName}><option value="1">Low</option><option value="2">Medium</option><option value="3">High</option></select></label>
+                        <button type="button" onClick={() => setTasks((current) => current.filter((item) => item.id !== task.id))} aria-label={`Remove task ${index + 1}`} className="min-h-11 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:text-red-700">Remove</button>
                       </div>
-                      <label className="mt-3 block text-sm font-medium">Notes <span className="font-normal text-[var(--muted-ink)]">(optional)</span><textarea value={task.notes} onChange={(event) => updateTask(task.id, { notes: event.target.value })} className={`${inputClassName} min-h-20 py-2`} placeholder="e.g. 2,500 words or a five-minute presentation" /></label>
+                      <details className="mt-3 text-sm">
+                        <summary className="cursor-pointer font-semibold text-[var(--accent-strong)]">{task.notes.trim() ? "Edit notes" : "Add notes"}</summary>
+                        <label className="mt-2 block text-sm font-medium">Notes<textarea value={task.notes} onChange={(event) => updateTask(task.id, { notes: event.target.value })} className={`${inputClassName} min-h-20 py-2`} placeholder="e.g. 2,500 words or a five-minute presentation" /></label>
+                      </details>
                     </fieldset>
                   ))}
 
-                  <button type="button" onClick={() => setTasks((current) => [...current, createEmptyTask()])} className="min-h-11 rounded-xl border border-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]">Add another task</button>
+                  <button type="button" onClick={() => setTasks((current) => [...current, createEmptyTask()])} className="min-h-11 rounded-xl border border-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]">Add task</button>
                 </div>
               ) : null}
             </section>
-          </div>
 
-          <aside className="h-fit border-t border-[var(--line)] pt-5 lg:sticky lg:top-6">
+          <section className="border-t border-[var(--line)] pt-6" aria-labelledby="save-assignment-heading">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Ready when you are</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Save the assignment.</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">The next step will use these details to explain the workload before it schedules anything.</p>
+            <h2 id="save-assignment-heading" className="mt-2 text-xl font-semibold tracking-[-0.03em]">Save and review your plan.</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround will take this reviewed assignment straight to its workload and plan.</p>
             {error ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-red-800" role="alert">{error}</p> : null}
             {status ? <p className="mt-4 rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-sm leading-6 text-[var(--accent-strong)]" role="status">{status}</p> : null}
-            <button type="submit" disabled={!modules.length || hasUnconfirmedSelection} className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">Save assignment</button>
-            <button type="button" onClick={resetForm} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">Clear form</button>
-          </aside>
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <button type="submit" disabled={!modules.length || hasUnconfirmedSelection} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]">Save assignment and review plan</button>
+              <button type="button" onClick={discardDraft} className="inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:text-red-700">Discard draft</button>
+            </div>
+          </section>
         </form>
       )}
 
@@ -592,10 +561,9 @@ export function AssignmentWorkspace() {
                   <div>
                     <p className="font-semibold">{assignment.title}</p>
                     <p className="mt-1 text-sm text-[var(--muted-ink)]">{linkedModule?.code ?? linkedModule?.name ?? "Module removed"} · Due {formatDeadline(assignment.deadline)} · {assignment.moduleWeight}% · {assignment.tasks.length ? `${assignment.tasks.length} task${assignment.tasks.length === 1 ? "" : "s"}` : "No task breakdown"}</p>
-                    {assignment.analysisSource ? <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent-strong)]">AI-assisted rubric · {formatAnalysisProvider(assignment.analysisSource.provider)}</p> : null}
                   </div>
                   <div className="flex flex-wrap gap-1 sm:justify-self-end">
-                    <button type="button" onClick={() => setSelectedWorkloadAssignmentId(assignment.id)} className="min-h-10 rounded-lg px-3 text-sm font-semibold text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]">{selectedWorkloadAssignmentId === assignment.id ? "Viewing workload" : "View workload"}</button>
+                    <Link href={`/plan?assignment=${encodeURIComponent(assignment.id)}`} className="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]">Open plan</Link>
                     <button type="button" onClick={() => deleteAssignment(assignment)} className="min-h-10 rounded-lg px-3 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:bg-red-50 hover:text-red-700">Delete</button>
                   </div>
                 </li>
@@ -605,7 +573,6 @@ export function AssignmentWorkspace() {
         ) : <p className="mt-4 text-sm leading-6 text-[var(--muted-ink)]">No assignments saved yet. Add one above, or load the demo details to see the full flow.</p>}
       </section>
 
-      {selectedWorkloadAssignment && selectedWorkloadModule ? <WorkloadBreakdown assignment={selectedWorkloadAssignment} module={selectedWorkloadModule} onOverrideChange={(hours) => updateWorkloadOverride(selectedWorkloadAssignment.id, hours)} /> : null}
     </div>
   );
 }

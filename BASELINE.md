@@ -18,7 +18,7 @@ Everything after this commit is new work for the Pixel Forge submission; the ful
 - AI timetable interpretation (screenshot/PDF import).
 - AI assignment interpretation (screenshot or pasted text).
 - Editable, user-reviewed AI extraction – nothing is auto-accepted.
-- Deterministic workload calculation from ECTS, assessment weighting and rubric structure.
+- Deterministic workload calculation from credits, assessment weighting and rubric structure.
 - Deterministic study scheduling around real availability.
 - Generated study blocks rendered in Calendar.
 - Stale-plan detection via input fingerprints.

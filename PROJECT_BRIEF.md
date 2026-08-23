@@ -34,7 +34,7 @@ The student can:
 
 - import a timetable screenshot using AI-assisted extraction;
 - review and correct detected teaching sessions;
-- confirm module ECTS values;
+- confirm module credit values;
 - add recurring commitments directly through the calendar;
 - complete setup once the normal week is ready.
 
@@ -89,7 +89,7 @@ The student can adjust how the scheduler places sessions without changing what w
 - preferred time of day (morning, afternoon, evening or no preference);
 - which days study sessions can be placed on.
 
-Defaults reproduce the pre-Settings scheduler behaviour exactly. Preferences change where the scheduler places sessions - they never change the underlying ECTS-based workload, assignment weighting, buffer, task-mark weighting or complexity adjustment, and they never alter completed work.
+Defaults reproduce the pre-Settings scheduler behaviour exactly. Preferences change where the scheduler places sessions - they never change the underlying credit-based workload, assignment weighting, buffer, task-mark weighting or complexity adjustment, and they never alter completed work.
 
 Settings also covers data and lifecycle, independent of scheduling preferences:
 
@@ -128,7 +128,7 @@ A larger model (Qwen3.5-397B-A17B) was evaluated earlier in development but is n
 
 ## Planning Approach
 
-PlanAround estimates assignment workload using module ECTS, assessment weighting and rubric structure rather than asking an AI model to guess a study duration.
+PlanAround estimates assignment workload using module credits, assessment weighting and rubric structure rather than asking an AI model to guess a study duration.
 
 The workload is then scheduled deterministically around the student's classes and commitments before the deadline.
 

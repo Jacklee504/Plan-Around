@@ -103,8 +103,12 @@ export function PlanWorkspace() {
       setStudyBlocks(readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []));
       setPlanSnapshots(readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {}));
       setPlanningPreferences(normalizePlanningPreferences(readStoredValue<unknown>(storageKeys.planningPreferences, DEFAULT_PLANNING_PREFERENCES)));
+      const requestedAssignmentId = new URLSearchParams(window.location.search).get("assignment");
+      const requestedAssignment = requestedAssignmentId
+        ? storedAssignments.find((assignment) => assignment.id === requestedAssignmentId && storedModules.some((module) => module.id === assignment.moduleId))
+        : null;
       const latestSchedulableAssignment = [...storedAssignments].reverse().find((assignment) => storedModules.some((module) => module.id === assignment.moduleId));
-      setSelectedAssignmentId(latestSchedulableAssignment?.id ?? "");
+      setSelectedAssignmentId(requestedAssignment?.id ?? latestSchedulableAssignment?.id ?? "");
       setIsLoaded(true);
     }, 0);
 
@@ -364,12 +368,15 @@ export function PlanWorkspace() {
           <h2 id="plan-controls-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Make room for the work.</h2>
           <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround checks the Calendar and commitments you entered, then places the workload into the remaining time before the deadline.</p>
         </div>
-        <label className="text-sm font-medium">
-          Assignment
-          <select value={selectedAssignmentId} onChange={(event) => chooseAssignment(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)] outline-none transition-colors focus:border-[var(--accent)]">
-            {schedulableAssignments.map((assignment) => <option key={assignment.id} value={assignment.id}>{assignment.title}</option>)}
-          </select>
-        </label>
+        <div className="lg:justify-self-end">
+          <label className="text-sm font-medium">
+            Assignment
+            <select value={selectedAssignmentId} onChange={(event) => chooseAssignment(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)] outline-none transition-colors focus:border-[var(--accent)]">
+              {schedulableAssignments.map((assignment) => <option key={assignment.id} value={assignment.id}>{assignment.title}</option>)}
+            </select>
+          </label>
+          <Link href="/assignment" className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-[var(--accent-strong)] underline underline-offset-2">Add another assignment</Link>
+        </div>
       </section>
 
       {selectedAssignment && selectedModule && workload ? (

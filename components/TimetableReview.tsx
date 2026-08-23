@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   WeeklyCalendar,
   type CalendarSlot,
@@ -10,7 +10,7 @@ import type {
   TimetableAnalysisSessionType,
   TimetableWeekday,
 } from "@/lib/timetableAnalysis";
-import type { TimetableEntry } from "@/types";
+import type { Module, TimetableEntry } from "@/types";
 
 const weekdays: TimetableWeekday[] = [
   "Monday",
@@ -35,10 +35,11 @@ const inputClassName =
 
 type TimetableReviewProps = {
   entries: TimetableAnalysisEntry[];
+  existingModules: Module[];
   warnings: string[];
   error?: string;
   onChange: (entries: TimetableAnalysisEntry[]) => void;
-  onConfirm: () => void;
+  onConfirm: (creditsByModuleCode: Record<string, number>) => void;
   onCancel: () => void;
 };
 
@@ -61,6 +62,10 @@ function plusHour(time: string) {
 
 function draftEntryId(index: number) {
   return `draft-session-${index}`;
+}
+
+function moduleKey(moduleCode: string) {
+  return moduleCode.trim().toUpperCase();
 }
 
 function asCalendarEntries(entries: TimetableAnalysisEntry[]): TimetableEntry[] {
@@ -253,6 +258,7 @@ function DraftTeachingSessionDialog({
 
 export function TimetableReview({
   entries,
+  existingModules,
   warnings,
   error,
   onChange,
@@ -262,9 +268,32 @@ export function TimetableReview({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [addingSession, setAddingSession] = useState(false);
   const [newSession, setNewSession] = useState(emptyEntry);
+  const [creditDrafts, setCreditDrafts] = useState<Record<string, string>>({});
+  const [creditError, setCreditError] = useState("");
   const calendarEntries = asCalendarEntries(entries);
   const editingEntry =
     editingIndex === null ? null : (entries[editingIndex] ?? null);
+  const reviewedModules = useMemo(() => {
+    const byCode = new Map<string, { code: string; name: string }>();
+
+    for (const entry of entries) {
+      const code = entry.moduleCode?.trim();
+      const name = entry.moduleName?.trim();
+      if (!code || !name) continue;
+      byCode.set(moduleKey(code), { code, name });
+    }
+
+    return [...byCode.values()];
+  }, [entries]);
+  const existingCreditsByModuleCode = useMemo(
+    () =>
+      Object.fromEntries(
+        existingModules
+          .filter((module) => module.code?.trim())
+          .map((module) => [moduleKey(module.code!), module.credits]),
+      ),
+    [existingModules],
+  );
 
   function openNewSession(slot?: CalendarSlot) {
     setEditingIndex(null);
@@ -296,6 +325,36 @@ export function TimetableReview({
     closeEditor();
   }
 
+  function creditValue(moduleCode: string) {
+    const key = moduleKey(moduleCode);
+    return creditDrafts[key] ?? String(existingCreditsByModuleCode[key] ?? 5);
+  }
+
+  function updateCredits(moduleCode: string, value: string) {
+    if (!/^\d*$/.test(value)) return;
+    setCreditDrafts((current) => ({
+      ...current,
+      [moduleKey(moduleCode)]: value,
+    }));
+    setCreditError("");
+  }
+
+  function confirmReview() {
+    const creditsByModuleCode: Record<string, number> = {};
+
+    for (const reviewedModule of reviewedModules) {
+      const value = creditValue(reviewedModule.code);
+      if (!/^[1-9]\d*$/.test(value)) {
+        setCreditError("Each module needs a whole-number credit value of at least 1.");
+        return;
+      }
+      creditsByModuleCode[moduleKey(reviewedModule.code)] = Number(value);
+    }
+
+    setCreditError("");
+    onConfirm(creditsByModuleCode);
+  }
+
   return (
     <section
       className="border-t border-[var(--line)] pt-7"
@@ -314,8 +373,8 @@ export function TimetableReview({
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-ink)]">
             We found {entries.length} teaching session
-            {entries.length === 1 ? "" : "s"}. Check the week before
-            continuing, nothing is saved yet.
+            {entries.length === 1 ? "" : "s"}. Check the week and confirm
+            each module&apos;s credits before saving.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -325,13 +384,6 @@ export function TimetableReview({
             className="min-h-11 rounded-xl border border-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
           >
             + Add missing session
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
-          >
-            Confirm timetable
           </button>
           <button
             type="button"
@@ -375,6 +427,42 @@ export function TimetableReview({
         Click a class to correct it, or an empty time slot to add a missing
         session.
       </p>
+      <section className="mt-7 border-t border-[var(--line)] pt-6" aria-labelledby="credit-review-heading">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Module credits</p>
+        <h3 id="credit-review-heading" className="mt-1 text-lg font-semibold tracking-[-0.025em]">Confirm each module&apos;s credits.</h3>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-ink)]">Credits must be whole numbers. They help PlanAround estimate the workload for each assignment.</p>
+        {reviewedModules.length ? (
+          <dl className="mt-4 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+            {reviewedModules.map((reviewedModule) => (
+              <div key={moduleKey(reviewedModule.code)} className="flex flex-wrap items-end justify-between gap-3 py-3">
+                <div>
+                  <dt className="text-sm font-semibold">{reviewedModule.name}</dt>
+                  <dd className="mt-1 text-xs text-[var(--muted-ink)]">{reviewedModule.code}</dd>
+                </div>
+                <label className="w-28 text-sm font-medium">
+                  Credits
+                  <input
+                    value={creditValue(reviewedModule.code)}
+                    onChange={(event) => updateCredits(reviewedModule.code, event.target.value)}
+                    className={inputClassName}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    aria-describedby={creditError ? "credit-review-error" : undefined}
+                  />
+                </label>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+        {creditError ? <p id="credit-review-error" className="mt-3 text-sm text-red-700" role="alert">{creditError}</p> : null}
+        <button
+          type="button"
+          onClick={confirmReview}
+          className="mt-5 min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
+        >
+          Save timetable and confirm credits
+        </button>
+      </section>
       {editingEntry ? (
         <DraftTeachingSessionDialog
           entry={editingEntry}

@@ -11,7 +11,7 @@ export const HOUR_HEIGHT = 64;
 export const CALENDAR_DAYS = [1, 2, 3, 4, 5, 6, 0] as const;
 export const MIN_VISIBLE_CALENDAR_HOURS = 8;
 
-export type CalendarBlockDensity = "compact" | "tight" | "normal";
+export type CalendarBlockDensity = "micro" | "compact" | "tight" | "normal";
 
 export type CalendarTimeRange = {
   startHour: number;
@@ -120,6 +120,7 @@ export function calendarVisibleRange({
 
 export function calendarBlockDensity(start: string, end: string): CalendarBlockDensity {
   const duration = minutesFromTime(end) - minutesFromTime(start);
+  if (duration < 30) return "micro";
   if (duration < 60) return "compact";
   if (duration === 60) return "tight";
   return "normal";

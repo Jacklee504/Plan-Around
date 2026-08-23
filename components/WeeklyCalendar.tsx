@@ -49,6 +49,7 @@ type WeeklyCalendarProps = {
   onSelectEntry?: (entry: TimetableEntry) => void;
   onSelectCommitment?: (commitment: Commitment) => void;
   onSelectDatedCommitment?: (commitment: DatedCommitment) => void;
+  onSelectStudyBlock?: (block: StudyBlock) => void;
   onSelectEmptySlot?: (slot: CalendarSlot) => void;
 };
 
@@ -73,21 +74,31 @@ function snappedTime(offsetY: number, startHour: number, endHour: number) {
 function CalendarCard({
   label,
   detail,
+  density,
+  wrapLabel = false,
 }: {
   label: string;
   detail?: string;
+  density: ReturnType<typeof calendarBlockDensity>;
+  wrapLabel?: boolean;
 }) {
+  const isMicro = density === "micro";
   return (
-    <span>
-      <span className="block truncate font-bold">{label}</span>
-      {detail ? <span className="block truncate">{detail}</span> : null}
+    <span className={isMicro ? "relative top-3 block text-[12px] leading-3" : undefined}>
+      <span className={wrapLabel && density !== "micro" && density !== "compact" ? "block line-clamp-2 font-bold leading-4" : "block truncate font-bold"}>{label}</span>
+      {!isMicro && detail ? <span className="block truncate">{detail}</span> : null}
     </span>
   );
 }
 function cardPadding(density: ReturnType<typeof calendarBlockDensity>) {
-  return density === "compact"
+  return density === "micro"
+    ? "px-1.5 py-0 text-[12px] leading-3"
+    : density === "compact"
     ? "px-1.5 py-0 text-[14px] leading-[18px]"
     : "px-2 py-1 text-[14px] leading-[18px]";
+}
+function cardOverflow(density: ReturnType<typeof calendarBlockDensity>) {
+  return density === "micro" ? "overflow-visible" : "overflow-hidden";
 }
 
 function HourAxis({ range }: { range: CalendarTimeRange }) {
@@ -140,6 +151,7 @@ type DayColumnProps = {
   onSelectEntry?: (entry: TimetableEntry) => void;
   onSelectCommitment?: (commitment: Commitment) => void;
   onSelectDatedCommitment?: (commitment: DatedCommitment) => void;
+  onSelectStudyBlock?: (block: StudyBlock) => void;
   onSelectEmptySlot?: (slot: CalendarSlot) => void;
 };
 
@@ -156,6 +168,7 @@ function DayColumn({
   onSelectEntry,
   onSelectCommitment,
   onSelectDatedCommitment,
+  onSelectStudyBlock,
   onSelectEmptySlot,
 }: DayColumnProps) {
   return (
@@ -185,11 +198,12 @@ function DayColumn({
           );
           const skipped = isEntrySkipped(entry, currentDate);
           const selected = selectedEntryId === entry.id;
-          const className = `absolute left-1 right-1 z-10 overflow-hidden rounded-lg border text-left transition-colors ${cardPadding(density)} ${skipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : selected ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--ink)]" : "border-[var(--accent-soft)] bg-[var(--accent-soft)] text-[var(--ink)] hover:border-[var(--accent)]"}`;
+          const className = `absolute left-1 right-1 z-10 rounded-lg border text-left transition-colors ${cardOverflow(density)} ${cardPadding(density)} ${skipped ? "border-dashed border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)] line-through" : selected ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--ink)]" : "border-[var(--accent-soft)] bg-[var(--accent-soft)] text-[var(--ink)] hover:border-[var(--accent)]"}`;
           const content = (
             <CalendarCard
               label={entry.moduleCode}
               detail={sessionLabels[entry.sessionType]}
+              density={density}
             />
           );
           return onSelectEntry ? (
@@ -224,9 +238,9 @@ function DayColumn({
             commitment.start,
             commitment.end,
           );
-          const className = `absolute left-1 right-1 z-10 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] text-left text-[var(--ink)] shadow-sm transition-colors hover:border-[var(--accent)] ${cardPadding(density)}`;
+          const className = `absolute left-1 right-1 z-10 rounded-lg border border-[var(--line)] bg-[var(--surface)] text-left text-[var(--ink)] shadow-sm transition-colors hover:border-[var(--accent)] ${cardOverflow(density)} ${cardPadding(density)}`;
           const content = (
-            <CalendarCard label={commitment.label} />
+            <CalendarCard label={commitment.label} density={density} />
           );
           return onSelectCommitment ? (
             <button
@@ -266,11 +280,12 @@ function DayColumn({
             commitment.start,
             commitment.end,
           );
-          const className = `absolute left-1 right-1 z-10 overflow-hidden rounded-lg border border-dashed border-amber-300 bg-amber-50 text-left text-amber-950 transition-colors hover:border-amber-500 ${cardPadding(density)}`;
+          const className = `absolute left-1 right-1 z-10 rounded-lg border border-dashed border-amber-300 bg-amber-50 text-left text-amber-950 transition-colors hover:border-amber-500 ${cardOverflow(density)} ${cardPadding(density)}`;
           const content = (
             <CalendarCard
               label={commitment.label}
               detail="One-off"
+              density={density}
             />
           );
           return onSelectDatedCommitment ? (
@@ -314,18 +329,32 @@ function DayColumn({
           const completed = Boolean(block.completedAt);
           const missed = Boolean(block.missedAt);
 
-          return (
-            <div
+          const className = `absolute left-1 right-1 z-20 rounded-lg border text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${cardOverflow(density)} ${cardPadding(density)} ${completed ? "border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)]" : missed ? "border-red-200 bg-red-50 text-red-700" : "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:border-[var(--accent-strong)]"}`;
+          const content = (
+            <CalendarCard
+              label={block.taskName}
+              detail={completed ? "Completed" : missed ? "Missed" : undefined}
+              density={density}
+              wrapLabel
+            />
+          );
+
+          return onSelectStudyBlock ? (
+            <button
               key={block.id}
-              className={`absolute left-1 right-1 z-20 overflow-hidden rounded-lg border text-left ${cardPadding(density)} ${completed ? "border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)]" : missed ? "border-red-200 bg-red-50 text-red-700" : "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"}`}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelectStudyBlock(block);
+              }}
+              aria-label={`Edit study session: ${block.taskName}, ${block.start} to ${block.end}`}
+              title={block.taskName}
+              className={className}
               style={blockPosition(block.start, block.end, range.startHour)}
             >
-              <CalendarCard
-                label={block.taskName}
-                detail={completed ? "Completed" : missed ? "Missed" : "Study plan"}
-              />
-            </div>
-          );
+              {content}
+            </button>
+          ) : <div key={block.id} className={className} style={blockPosition(block.start, block.end, range.startHour)}>{content}</div>;
         })}
     </div>
   );
@@ -342,6 +371,7 @@ export function WeeklyCalendar({
   onSelectEntry,
   onSelectCommitment,
   onSelectDatedCommitment,
+  onSelectStudyBlock,
   onSelectEmptySlot,
 }: WeeklyCalendarProps) {
   const todayDateKey = localDateKey(new Date());
@@ -380,6 +410,7 @@ export function WeeklyCalendar({
     onSelectEntry,
     onSelectCommitment,
     onSelectDatedCommitment,
+    onSelectStudyBlock,
     onSelectEmptySlot,
   };
 
