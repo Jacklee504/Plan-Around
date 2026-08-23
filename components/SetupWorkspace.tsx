@@ -564,6 +564,7 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
   const [isLoaded, setIsLoaded] = useState(false);
   const timetableImageInput = useRef<HTMLInputElement>(null);
   const timetableImageVersion = useRef(0);
+  const timetableAnalysisAbortController = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -813,6 +814,7 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
 async function importTimetable(file: File | undefined) {
   if (!file) return;
 
+  timetableAnalysisAbortController.current?.abort();
   const version = timetableImageVersion.current + 1;
   timetableImageVersion.current = version;
   setImportState("reading");
@@ -897,6 +899,7 @@ async function importTimetable(file: File | undefined) {
 
   async function selectTimetableImage(file: File | undefined) {
     if (!file) return;
+    timetableAnalysisAbortController.current?.abort();
     const version = timetableImageVersion.current + 1;
     timetableImageVersion.current = version;
     setUploadedFileName(file.name);
@@ -931,10 +934,16 @@ async function importTimetable(file: File | undefined) {
     }
   }
   function clearTimetableImage() {
+    timetableAnalysisAbortController.current?.abort();
+    timetableAnalysisAbortController.current = null;
     timetableImageVersion.current += 1;
     setIsPreparingTimetableImage(false);
+    setIsAnalysingTimetable(false);
     setPreparedTimetableImage(null);
     setTimetableAnalysisError("");
+    setImportState("idle");
+    setImportMessage("");
+    setUploadedFileName("");
     if (timetableImageInput.current) timetableImageInput.current.value = "";
   }
   async function analyseTimetableImage(
@@ -942,13 +951,16 @@ async function importTimetable(file: File | undefined) {
     version = timetableImageVersion.current,
   ) {
     if (!image) return;
+    const controller = new AbortController();
+    timetableAnalysisAbortController.current?.abort();
+    timetableAnalysisAbortController.current = controller;
     setIsAnalysingTimetable(true);
     setTimetableAnalysisError("");
     setReviewEntries(null);
     setReviewWarnings([]);
     setReviewError("");
     try {
-      const response = await analyzeTimetableScreenshot(image);
+      const response = await analyzeTimetableScreenshot(image, controller.signal);
       if (timetableImageVersion.current !== version) return;
       setReviewEntries(response.analysis.entries);
       setReviewWarnings(response.analysis.warnings);
@@ -969,6 +981,8 @@ async function importTimetable(file: File | undefined) {
           : "This timetable could not be analysed.",
       );
     } finally {
+      if (timetableAnalysisAbortController.current === controller)
+        timetableAnalysisAbortController.current = null;
       if (timetableImageVersion.current === version) setIsAnalysingTimetable(false);
     }
   }
@@ -1161,7 +1175,7 @@ async function importTimetable(file: File | undefined) {
       </section>
       {preparedTimetableImage && !reviewEntries && (isAnalysingTimetable || timetableAnalysisError) ? (
         <section
-          className={`grid border-y border-[var(--line)] py-5 ${isAnalysingTimetable ? "grid-cols-1" : "gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"}`}
+          className="grid gap-4 border-y border-[var(--line)] py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
           aria-live="polite"
         >
           <div>
@@ -1173,7 +1187,19 @@ async function importTimetable(file: File | undefined) {
                   : null}
             </p>
           </div>
-          {!isAnalysingTimetable ? (
+          {isAnalysingTimetable ? (
+            <button
+              type="button"
+              onClick={clearTimetableImage}
+              aria-label="Cancel timetable analysis"
+              title="Cancel analysis"
+              className="inline-flex size-9 items-center justify-center self-start rounded-full border border-[var(--line)] text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700 sm:self-center"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true">
+                <path d="m7 7 10 10M17 7 7 17" />
+              </svg>
+            </button>
+          ) : (
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
@@ -1188,7 +1214,7 @@ async function importTimetable(file: File | undefined) {
                 Remove
               </button>
             </div>
-          ) : null}
+          )}
         </section>
       ) : null}
       {timetableAnalysisError ? (
@@ -1359,34 +1385,34 @@ async function importTimetable(file: File | undefined) {
                   Add work, exercise and other regular commitments next. Then
                   you&apos;ll be ready to add an assignment and create its plan.
                 </p>
-                <button
-                  type="button"
-                  onClick={() =>
-                  setEventDraft({
-                    mode: "recurring",
-                    label: "",
-                    dayOfWeek: 1,
-                    selectedDays: [1],
-                    date: "",
-                    start: "16:00",
-                    end: "17:00",
-                    category: "other",
-                  })
-                }
-                  className="mt-4 min-h-11 rounded-xl border border-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
-                >
-                  + Add recurring commitment
-                </button>
-              </section>
-              <section className="border-t border-[var(--line)] pt-6">
-                <button
-                  type="button"
-                  onClick={onCompleteOnboarding}
-                  disabled={!canCompleteSetup}
-                  className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]"
-                >
-                  {hasBaseline ? "Complete setup" : "Add a recurring constraint"}
-                </button>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEventDraft({
+                        mode: "recurring",
+                        label: "",
+                        dayOfWeek: 1,
+                        selectedDays: [1],
+                        date: "",
+                        start: "16:00",
+                        end: "17:00",
+                        category: "other",
+                      })
+                    }
+                    className="min-h-11 rounded-xl border border-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
+                  >
+                    + Add recurring commitment
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCompleteOnboarding}
+                    disabled={!canCompleteSetup}
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--line)] disabled:text-[var(--muted-ink)]"
+                  >
+                    {hasBaseline ? "Complete setup" : "Add a recurring constraint"}
+                  </button>
+                </div>
               </section>
             </>
           ) : (

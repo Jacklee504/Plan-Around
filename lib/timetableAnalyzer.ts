@@ -9,10 +9,20 @@ import type { PreparedTimetableImage } from "@/lib/timetableImage";
 
 const ANALYZER_TIMEOUT_MS = 110_000;
 
-export async function analyzeTimetableScreenshot(input: (TimetableAnalysisInput | PreparedTimetableImage) | (TimetableAnalysisInput | PreparedTimetableImage)[]): Promise<TimetableAnalysisResponse> {
+export async function analyzeTimetableScreenshot(
+  input: (TimetableAnalysisInput | PreparedTimetableImage) | (TimetableAnalysisInput | PreparedTimetableImage)[],
+  signal?: AbortSignal,
+): Promise<TimetableAnalysisResponse> {
   if (!imageAnalysisIsAvailable()) throw new Error("Timetable screenshot analysis uses the hosted analyser. Use the deployed app or configure NEXT_PUBLIC_ANALYZER_URL locally.");
 
   const controller = new AbortController();
+  let cancelledByCaller = false;
+  const cancelFromCaller = () => {
+    cancelledByCaller = true;
+    controller.abort();
+  };
+  if (signal?.aborted) cancelFromCaller();
+  else signal?.addEventListener("abort", cancelFromCaller, { once: true });
   const timeout = setTimeout(() => controller.abort(), ANALYZER_TIMEOUT_MS);
   try {
     const response = await fetch(getAnalyzerEndpoint("/analyze-timetable"), {
@@ -36,10 +46,12 @@ export async function analyzeTimetableScreenshot(input: (TimetableAnalysisInput 
       },
     };
   } catch (error) {
+    if (cancelledByCaller) throw new Error("Timetable analysis was cancelled.");
     if (controller.signal.aborted) throw new Error("The timetable analyser took too long. Please try again.");
     if (error instanceof Error && (error.message.startsWith("Too many timetable") || error.message.startsWith("The timetable analyser took too long") || error.message.startsWith("The analyser could not read"))) throw error;
     throw new Error("The timetable analyser is not available. You can use the sample PDF instead.");
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener("abort", cancelFromCaller);
   }
 }

@@ -128,7 +128,7 @@ A larger model (Qwen3.5-397B-A17B) was evaluated earlier in development but is n
 
 ## Planning Approach
 
-PlanAround estimates assignment workload using module credits, assessment weighting and rubric structure rather than asking an AI model to guess a assignment duration.
+PlanAround estimates assignment workload using module credits, assessment weighting and rubric structure rather than asking an AI model to guess an assignment duration.
 
 The workload is then scheduled deterministically around the student's classes and commitments before the deadline.
 
