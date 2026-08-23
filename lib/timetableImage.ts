@@ -121,7 +121,7 @@ function canvasBlob(canvas: HTMLCanvasElement) {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error("This timetable screenshot could not be prepared."));
-    }, "image/jpeg", 0.9);
+    }, "image/png");
   });
 }
 
@@ -177,8 +177,8 @@ export async function prepareTimetableAnalysisImages(file: File): Promise<Prepar
 
     const contactSheetFile = new File(
       [await canvasBlob(contactSheet)],
-      `${file.name.replace(/\.[^.]+$/, "")}-weekday-panels-${groupIndex + 1}.jpg`,
-      { type: "image/jpeg" },
+      `${file.name.replace(/\.[^.]+$/, "")}-weekday-panels-${groupIndex + 1}.png`,
+      { type: "image/png" },
     );
     return prepareAnalysisImage(contactSheetFile);
   }));
