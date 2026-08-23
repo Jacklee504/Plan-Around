@@ -893,10 +893,13 @@ async function importTimetable(file: File | undefined) {
   setImportState("idle");
   setImportMessage("");
   void analyseTimetableImage(prepared, version);
-}  async function selectTimetableImage(file: File | undefined) {
+}
+
+  async function selectTimetableImage(file: File | undefined) {
     if (!file) return;
     const version = timetableImageVersion.current + 1;
     timetableImageVersion.current = version;
+    setUploadedFileName(file.name);
     setIsPreparingTimetableImage(true);
     setIsAnalysingTimetable(false);
     setPreparedTimetableImage(null);
@@ -905,15 +908,15 @@ async function importTimetable(file: File | undefined) {
     setReviewWarnings([]);
     setReviewError("");
     // A direct image upload is its own attempt, not a continuation of a PDF's
-    // text-parse-then-visual-fallback attempt, so any message left over from
-    // that (shown alongside the shared "ready to analyse" section) must not
-    // carry over here.
+    // text-parse-then-visual-fallback attempt.
     setImportState("idle");
     setImportMessage("");
     try {
       const prepared = await prepareTimetableAnalysisImages(file);
-      if (timetableImageVersion.current === version)
+      if (timetableImageVersion.current === version) {
         setPreparedTimetableImage(prepared);
+        void analyseTimetableImage(prepared, version);
+      }
     } catch (error) {
       if (timetableImageVersion.current === version)
         setTimetableAnalysisError(
@@ -1156,7 +1159,7 @@ async function importTimetable(file: File | undefined) {
           </p>
         ) : null}
       </section>
-      {preparedTimetableImage && !reviewEntries ? (
+      {preparedTimetableImage && !reviewEntries && (isAnalysingTimetable || timetableAnalysisError) ? (
         <section
           className={`grid border-y border-[var(--line)] py-5 ${isAnalysingTimetable ? "grid-cols-1" : "gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"}`}
           aria-live="polite"
@@ -1167,7 +1170,7 @@ async function importTimetable(file: File | undefined) {
                 ? `Analysing ${uploadedFileName || "your timetable"}...`
                 : timetableAnalysisError
                   ? "Try again or choose another file."
-                  : `${uploadedFileName || "Your timetable"} is ready for analysis.`}
+                  : null}
             </p>
           </div>
           {!isAnalysingTimetable ? (
@@ -1176,9 +1179,7 @@ async function importTimetable(file: File | undefined) {
                 type="button"
                 onClick={() => void analyseTimetableImage()}
                 className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
-              >
-                {timetableAnalysisError ? "Try again" : "Analyse timetable"}
-              </button>
+              >Try again</button>
               <button
                 type="button"
                 onClick={clearTimetableImage}
