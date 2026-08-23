@@ -623,10 +623,14 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
 async function importTimetable(file: File | undefined) {
   if (!file) return;
 
+  const version = timetableImageVersion.current + 1;
+  timetableImageVersion.current = version;
   setImportState("reading");
   setUploadedFileName(file.name);
   setImportMessage("");
   setPreparedTimetableImage(null);
+  setIsPreparingTimetableImage(false);
+  setIsAnalysingTimetable(false);
   setTimetableAnalysisError("");
   setReviewEntries(null);
   setReviewWarnings([]);
@@ -634,6 +638,7 @@ async function importTimetable(file: File | undefined) {
 
   try {
     const parsed = parseTimetablePdf(await file.text());
+    if (timetableImageVersion.current !== version) return;
 
     setReviewEntries(
       parsed.entries.map((entry) => ({
@@ -657,10 +662,12 @@ async function importTimetable(file: File | undefined) {
     // text layout, so a PDF it can't read is not necessarily unreadable.
   }
 
+  if (timetableImageVersion.current !== version) return;
+
   // The deterministic parser found no valid rows (compressed content stream,
   // scanned/image-only page, or a different layout). Render the PDF locally
-  // and prepare it exactly like an uploaded screenshot, reusing the existing
-  // "ready to analyse" review step instead of failing outright.
+  // and send the prepared image straight to the analyser, then let the student
+  // review its results before saving.
   if (!imageAnalysisIsAvailable()) {
     setImportState("error");
     setImportMessage(
@@ -669,18 +676,16 @@ async function importTimetable(file: File | undefined) {
     return;
   }
 
-  const version = timetableImageVersion.current + 1;
-  timetableImageVersion.current = version;
   setIsPreparingTimetableImage(true);
+  let prepared: PreparedAnalysisImage[] | null = null;
   try {
     const renderedImage = await renderPdfToImageFile(file);
-    const prepared = await prepareTimetableAnalysisImages(renderedImage);
+    // PDF renderings retain the useful weekday crops, but their source layouts
+    // vary too much for the screenshot-only grid-time correction.
+    prepared = await prepareTimetableAnalysisImages(renderedImage, {
+      deriveSlots: false,
+    });
     if (timetableImageVersion.current !== version) return;
-    setPreparedTimetableImage(prepared);
-    setImportState("complete");
-    setImportMessage(
-      "This PDF's timetable text could not be read directly, so it was prepared as an image instead. Click Analyse timetable to read it with AI.",
-    );
   } catch (renderError) {
     if (timetableImageVersion.current !== version) return;
     setImportState("error");
@@ -692,11 +697,20 @@ async function importTimetable(file: File | undefined) {
   } finally {
     if (timetableImageVersion.current === version) setIsPreparingTimetableImage(false);
   }
+
+  if (!prepared || timetableImageVersion.current !== version) return;
+  setPreparedTimetableImage(prepared);
+  setImportState("complete");
+  setImportMessage(
+    "We couldn't read the timetable text, so AI is reading the PDF as an image.",
+  );
+  void analyseTimetableImage(prepared, version);
 }  async function selectTimetableImage(file: File | undefined) {
     if (!file) return;
     const version = timetableImageVersion.current + 1;
     timetableImageVersion.current = version;
     setIsPreparingTimetableImage(true);
+    setIsAnalysingTimetable(false);
     setPreparedTimetableImage(null);
     setTimetableAnalysisError("");
     setReviewEntries(null);
@@ -732,25 +746,39 @@ async function importTimetable(file: File | undefined) {
     setTimetableAnalysisError("");
     if (timetableImageInput.current) timetableImageInput.current.value = "";
   }
-  async function analyseTimetableImage() {
-    if (!preparedTimetableImage) return;
+  async function analyseTimetableImage(
+    image = preparedTimetableImage,
+    version = timetableImageVersion.current,
+  ) {
+    if (!image) return;
     setIsAnalysingTimetable(true);
     setTimetableAnalysisError("");
     setReviewEntries(null);
     setReviewWarnings([]);
     setReviewError("");
     try {
-      const response = await analyzeTimetableScreenshot(preparedTimetableImage);
+      const response = await analyzeTimetableScreenshot(image);
+      if (timetableImageVersion.current !== version) return;
       setReviewEntries(response.analysis.entries);
       setReviewWarnings(response.analysis.warnings);
+      const sessionCount = response.analysis.entries.length;
+      setImportState("complete");
+      setImportMessage(
+        `Found ${sessionCount} teaching session${sessionCount === 1 ? "" : "s"}. Review ${sessionCount === 1 ? "it" : "them"} before saving.`,
+      );
     } catch (error) {
+      if (timetableImageVersion.current !== version) return;
+      setImportState("error");
+      setImportMessage(
+        "We couldn't analyse the timetable image. Try again or choose another file.",
+      );
       setTimetableAnalysisError(
         error instanceof Error
           ? error.message
           : "This timetable could not be analysed.",
       );
     } finally {
-      setIsAnalysingTimetable(false);
+      if (timetableImageVersion.current === version) setIsAnalysingTimetable(false);
     }
   }
   function confirmReviewedTimetable() {
@@ -910,7 +938,7 @@ async function importTimetable(file: File | undefined) {
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">
             {onboardingCompleted
               ? "Update timetable"
-              : "Step 1 · Import timetable"}
+              : "Step 1"}
           </p>
           <h2
             id="upload-heading"
@@ -918,11 +946,11 @@ async function importTimetable(file: File | undefined) {
           >
             {onboardingCompleted
               ? "Replace your recurring teaching week."
-              : "Import your normal teaching week."}
+              : "Import your teaching week."}
           </h2>
           <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">
-            Upload a timetable screenshot or supported text PDF, then review every
-            detected class in the calendar before confirming.
+            Upload a screenshot or PDF. You&apos;ll review the extracted classes before
+            saving.
           </p>
         </div>
         <div className="flex flex-wrap gap-3 lg:justify-end">
@@ -967,7 +995,7 @@ async function importTimetable(file: File | undefined) {
             download
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
           >
-            Download sample PDF
+            Download sample
           </a>
         </div>
         {importState !== "idle" ? (
@@ -981,36 +1009,38 @@ async function importTimetable(file: File | undefined) {
           </p>
         ) : null}
       </section>
-      {preparedTimetableImage ? (
+      {preparedTimetableImage && !reviewEntries ? (
         <section
-          className="grid gap-4 border-y border-[var(--line)] py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+          className={`grid border-y border-[var(--line)] py-5 ${isAnalysingTimetable ? "grid-cols-1" : "gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"}`}
           aria-live="polite"
         >
           <div>
             <p className="text-sm font-semibold">
-              {uploadedFileName || "Your timetable"} is ready to analyse.
+              {isAnalysingTimetable
+                ? `Analysing ${uploadedFileName || "your timetable"}...`
+                : timetableAnalysisError
+                  ? "Try again or choose another file."
+                  : `${uploadedFileName || "Your timetable"} is ready for analysis.`}
             </p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => void analyseTimetableImage()}
-              disabled={isAnalysingTimetable}
-              className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] disabled:cursor-wait disabled:opacity-70"
-            >
-              {isAnalysingTimetable
-                ? "Analysing timetable..."
-                : "Analyse timetable"}
-            </button>
-            <button
-              type="button"
-              onClick={clearTimetableImage}
-              disabled={isAnalysingTimetable}
-              className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] hover:border-[var(--accent)]"
-            >
-              Remove
-            </button>
-          </div>
+          {!isAnalysingTimetable ? (
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void analyseTimetableImage()}
+                className="min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
+              >
+                {timetableAnalysisError ? "Try again" : "Analyse timetable"}
+              </button>
+              <button
+                type="button"
+                onClick={clearTimetableImage}
+                className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] hover:border-[var(--accent)]"
+              >
+                Remove
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : null}
       {timetableAnalysisError ? (
@@ -1340,11 +1370,6 @@ async function importTimetable(file: File | undefined) {
             </section>
           )}
         </>
-      ) : !reviewEntries ? (
-        <section className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--surface-soft)] px-5 py-8 text-sm leading-6 text-[var(--muted-ink)]">
-          Import a timetable screenshot, or use the supported sample PDF, to
-          start your editable Semester 1 calendar.
-        </section>
       ) : null}
       {eventDraft ? (
         <EventDialog

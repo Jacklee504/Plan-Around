@@ -7,7 +7,7 @@ import {
 } from "@/lib/timetableAnalysis";
 import type { PreparedTimetableImage } from "@/lib/timetableImage";
 
-const ANALYZER_TIMEOUT_MS = 70_000;
+const ANALYZER_TIMEOUT_MS = 110_000;
 
 export async function analyzeTimetableScreenshot(input: (TimetableAnalysisInput | PreparedTimetableImage) | (TimetableAnalysisInput | PreparedTimetableImage)[]): Promise<TimetableAnalysisResponse> {
   if (!imageAnalysisIsAvailable()) throw new Error("Timetable screenshot analysis uses the hosted analyser. Use the deployed app or configure NEXT_PUBLIC_ANALYZER_URL locally.");
@@ -22,6 +22,7 @@ export async function analyzeTimetableScreenshot(input: (TimetableAnalysisInput 
       signal: controller.signal,
     });
     if (response.status === 429) throw new Error("Too many timetable analysis requests. Please wait a minute before trying again.");
+    if (response.status === 504) throw new Error("The timetable analyser took too long. Please try again.");
     if (!response.ok) throw new Error("The analyser could not read this timetable. You can use the sample PDF instead.");
     const parsed = validateTimetableAnalysisResponse(await response.json());
     const images = Array.isArray(input) ? input : [input];
@@ -35,8 +36,8 @@ export async function analyzeTimetableScreenshot(input: (TimetableAnalysisInput 
       },
     };
   } catch (error) {
-    if (controller.signal.aborted) throw new Error("The timetable analyser took too long. You can use the sample PDF instead.");
-    if (error instanceof Error && (error.message.startsWith("Too many timetable") || error.message.startsWith("The analyser could not read"))) throw error;
+    if (controller.signal.aborted) throw new Error("The timetable analyser took too long. Please try again.");
+    if (error instanceof Error && (error.message.startsWith("Too many timetable") || error.message.startsWith("The timetable analyser took too long") || error.message.startsWith("The analyser could not read"))) throw error;
     throw new Error("The timetable analyser is not available. You can use the sample PDF instead.");
   } finally {
     clearTimeout(timeout);

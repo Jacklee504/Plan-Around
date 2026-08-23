@@ -27,6 +27,8 @@ const MAX_TIMETABLE_ANALYSIS_SOURCES = 7;
 const MAX_UPSTREAM_RESPONSE_BYTES = 100_000;
 const ANALYSIS_TIMEOUT_MS = 60_000;
 const PROVIDER_TIMEOUT_MS = 50_000;
+const TIMETABLE_ANALYSIS_TIMEOUT_MS = 95_000;
+const TIMETABLE_PROVIDER_TIMEOUT_MS = 85_000;
 const PROVIDER_RETRY_DELAY_MS = 500;
 const MIN_PROVIDER_WINDOW_MS = 1_000;
 const MAX_PROVIDER_CALLS = 3;
@@ -55,9 +57,17 @@ function wait(milliseconds: number) {
 
 class AnalysisBudget {
   readonly controller = new AbortController();
-  readonly deadline = Date.now() + ANALYSIS_TIMEOUT_MS;
+  readonly deadline: number;
   providerCalls = 0;
-  private readonly timeout = setTimeout(() => this.controller.abort(), ANALYSIS_TIMEOUT_MS);
+  private readonly timeout: ReturnType<typeof setTimeout>;
+
+  constructor(
+    private readonly analysisTimeoutMs: number,
+    private readonly providerTimeoutMs: number,
+  ) {
+    this.deadline = Date.now() + analysisTimeoutMs;
+    this.timeout = setTimeout(() => this.controller.abort(), analysisTimeoutMs);
+  }
 
   remainingMilliseconds() {
     return Math.max(0, this.deadline - Date.now());
@@ -76,7 +86,7 @@ class AnalysisBudget {
     }
 
     this.providerCalls += 1;
-    return Math.min(PROVIDER_TIMEOUT_MS, this.remainingMilliseconds());
+    return Math.min(this.providerTimeoutMs, this.remainingMilliseconds());
   }
 
   async pauseBeforeRetry(pause: Wait) {
@@ -348,6 +358,8 @@ type AnalysisRoute<T> = {
   repairPrompt: (validationError: string) => string;
   errorMessage: string;
   allowsText: boolean;
+  analysisTimeoutMs: number;
+  providerTimeoutMs: number;
 };
 
 const assignmentRoute: AnalysisRoute<AssignmentAnalysis> = {
@@ -366,6 +378,8 @@ const assignmentRoute: AnalysisRoute<AssignmentAnalysis> = {
     "use YYYY-MM-DD for the deadline, and do not add commentary.",
   errorMessage: "The analyser could not read this brief.",
   allowsText: true,
+  analysisTimeoutMs: ANALYSIS_TIMEOUT_MS,
+  providerTimeoutMs: PROVIDER_TIMEOUT_MS,
 };
 
 const timetableRoute: AnalysisRoute<TimetableAnalysis> = {
@@ -382,6 +396,8 @@ const timetableRoute: AnalysisRoute<TimetableAnalysis> = {
     "Use each panel's header and horizontal grid lines; preserve multi-hour blocks and do not invent sessions.",
   errorMessage: "The analyser could not read this timetable.",
   allowsText: false,
+  analysisTimeoutMs: TIMETABLE_ANALYSIS_TIMEOUT_MS,
+  providerTimeoutMs: TIMETABLE_PROVIDER_TIMEOUT_MS,
 };
 
 function createMessages(source: AnalysisSource, route: AnalysisRoute<unknown>): ChatMessage[] {
@@ -404,7 +420,7 @@ function createMessages(source: AnalysisSource, route: AnalysisRoute<unknown>): 
 }
 
 async function analyseSource<T>(source: AnalysisSource, route: AnalysisRoute<T>, env: Env, upstreamFetch: typeof fetch, pause: Wait) {
-  const budget = new AnalysisBudget();
+  const budget = new AnalysisBudget(route.analysisTimeoutMs, route.providerTimeoutMs);
   const messages = createMessages(source, route);
   const model = route.model(env);
 
@@ -562,6 +578,9 @@ export function createWorker(upstreamFetch: typeof fetch = fetch, pause: Wait = 
           error: error instanceof Error ? error.message : "Unknown analysis error.",
         }));
         if (error instanceof ClientInputError) return jsonResponse({ error: error.message }, 400, origin, env);
+        if (error instanceof AnalysisBudgetError && route === timetableRoute) {
+          return jsonResponse({ error: "The timetable analyser took too long. Please try again." }, 504, origin, env);
+        }
         return jsonResponse({ error: route.errorMessage }, 502, origin, env);
       }
     },
