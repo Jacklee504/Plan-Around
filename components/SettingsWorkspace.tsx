@@ -4,28 +4,28 @@ import { useRouter } from "next/navigation";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { CALENDAR_DAYS } from "@/lib/calendarLayout";
 import { applyPlanAroundImport, buildPlanAroundExport, parsePlanAroundExport, serializePlanAroundExport } from "@/lib/dataPortability";
-import { buildStudyCalendarIcs } from "@/lib/icsExport";
-import { createPlanFingerprint, getReservableStudyBlocks } from "@/lib/planSnapshot";
+import { buildAssignmentCalendarIcs } from "@/lib/icsExport";
+import { createPlanFingerprint, getReservableAssignmentSessions } from "@/lib/planSnapshot";
 import { DEFAULT_PLANNING_PREFERENCES, normalizePlanningPreferences } from "@/lib/planningPreferences";
 import { resetForNewSemester } from "@/lib/semesterReset";
-import { generateStudySchedule } from "@/lib/scheduler";
+import { generateAssignmentSchedule } from "@/lib/scheduler";
 import { clearPlanAroundStorage, readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
-import { calculateRemainingWorkload, replaceIncompleteBlocksForAssignment } from "@/lib/studyProgress";
+import { calculateRemainingWorkload, replaceIncompleteBlocksForAssignment } from "@/lib/assignmentProgress";
 import {
   getNotificationPermission,
   isNotificationSupported,
   readNotificationsEnabled,
   requestNotificationPermission,
   writeNotificationsEnabled,
-} from "@/lib/studyNotifications";
+} from "@/lib/assignmentNotifications";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
-import type { Assignment, Commitment, DatedCommitment, Module, PlanningPreferences, PreferredStudyTime, StudyBlock, TimetableEntry } from "@/types";
+import type { Assignment, Commitment, DatedCommitment, Module, PlanningPreferences, PreferredAssignmentTime, AssignmentSession, TimetableEntry } from "@/types";
 
 const dayLabels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const SESSION_LENGTH_OPTIONS: PlanningPreferences["preferredSessionMinutes"][] = [60, 90, 120];
-const DAILY_TARGET_OPTIONS: PlanningPreferences["dailyStudyTargetMinutes"][] = [120, 180, 240, 300];
-const TIME_OF_DAY_OPTIONS: { value: PreferredStudyTime; label: string }[] = [
+const DAILY_TARGET_OPTIONS: PlanningPreferences["dailyAssignmentTargetMinutes"][] = [120, 180, 240, 300];
+const TIME_OF_DAY_OPTIONS: { value: PreferredAssignmentTime; label: string }[] = [
   { value: "none", label: "No preference" },
   { value: "morning", label: "Morning" },
   { value: "afternoon", label: "Afternoon" },
@@ -43,9 +43,6 @@ function timeFromMinutes(minutes: number) {
   return `${hours}:${remainder}`;
 }
 
-// 08:00 through 22:00 in 30-minute steps, matching the Calendar's own visible range.
-const STUDY_WINDOW_OPTIONS = Array.from({ length: 29 }, (_, index) => timeFromMinutes(8 * 60 + index * 30));
-
 function toggleButtonClassName(selected: boolean) {
   return `min-h-11 rounded-xl border px-3 text-sm font-semibold transition-colors ${
     selected
@@ -54,8 +51,8 @@ function toggleButtonClassName(selected: boolean) {
   }`;
 }
 
-const selectClassName =
-  "mt-1.5 min-h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)] outline-none transition-colors focus:border-[var(--accent)]";
+const inputClassName =
+  "mt-1.5 min-h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)] outline-none transition-colors placeholder:text-[var(--muted-ink)] focus:border-[var(--accent)]";
 
 export function SettingsWorkspace() {
   const router = useRouter();
@@ -109,8 +106,8 @@ export function SettingsWorkspace() {
   }
 
   function downloadIcs() {
-    const ics = buildStudyCalendarIcs({
-      studyBlocks: readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []),
+    const ics = buildAssignmentCalendarIcs({
+      assignmentSessions: readStoredValue<AssignmentSession[]>(storageKeys.assignmentSessions, []),
       timetableEntries: readStoredValue<TimetableEntry[]>(storageKeys.timetableEntries, []),
       commitments: readStoredValue<Commitment[]>(storageKeys.commitments, []),
       datedCommitments: readStoredValue<DatedCommitment[]>(storageKeys.datedCommitments, []),
@@ -176,29 +173,31 @@ export function SettingsWorkspace() {
     setNotificationsEnabled(next);
   }
 
-  function updateStudyStart(nextStart: string) {
-    const nextEnd = minutesFromTime(preferences.studyEnd) - minutesFromTime(nextStart) < 60
-      ? timeFromMinutes(Math.min(minutesFromTime(nextStart) + 60, minutesFromTime(DEFAULT_PLANNING_PREFERENCES.studyEnd)))
-      : preferences.studyEnd;
-    setPreferences({ ...preferences, studyStart: nextStart, studyEnd: nextEnd });
+  function updateAssignmentStart(nextStart: string) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(nextStart)) return;
+    const nextEnd = minutesFromTime(preferences.assignmentEnd) - minutesFromTime(nextStart) < 60
+      ? timeFromMinutes(Math.min(minutesFromTime(nextStart) + 60, minutesFromTime(DEFAULT_PLANNING_PREFERENCES.assignmentEnd)))
+      : preferences.assignmentEnd;
+    setPreferences({ ...preferences, assignmentStart: nextStart, assignmentEnd: nextEnd });
   }
 
-  function updateStudyEnd(nextEnd: string) {
-    const nextStart = minutesFromTime(nextEnd) - minutesFromTime(preferences.studyStart) < 60
-      ? timeFromMinutes(Math.max(minutesFromTime(nextEnd) - 60, minutesFromTime(DEFAULT_PLANNING_PREFERENCES.studyStart)))
-      : preferences.studyStart;
-    setPreferences({ ...preferences, studyStart: nextStart, studyEnd: nextEnd });
+  function updateAssignmentEnd(nextEnd: string) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(nextEnd)) return;
+    const nextStart = minutesFromTime(nextEnd) - minutesFromTime(preferences.assignmentStart) < 60
+      ? timeFromMinutes(Math.max(minutesFromTime(nextEnd) - 60, minutesFromTime(DEFAULT_PLANNING_PREFERENCES.assignmentStart)))
+      : preferences.assignmentStart;
+    setPreferences({ ...preferences, assignmentStart: nextStart, assignmentEnd: nextEnd });
   }
 
-  function toggleStudyDay(day: number) {
-    const isEnabled = preferences.enabledStudyDays.includes(day);
-    // At least one study day must always remain enabled.
-    if (isEnabled && preferences.enabledStudyDays.length <= 1) return;
+  function toggleAssignmentDay(day: number) {
+    const isEnabled = preferences.enabledAssignmentDays.includes(day);
+    // At least one assignment day must always remain enabled.
+    if (isEnabled && preferences.enabledAssignmentDays.length <= 1) return;
 
-    const enabledStudyDays = isEnabled
-      ? preferences.enabledStudyDays.filter((enabledDay) => enabledDay !== day)
-      : [...preferences.enabledStudyDays, day].sort((first, second) => first - second);
-    setPreferences({ ...preferences, enabledStudyDays });
+    const enabledAssignmentDays = isEnabled
+      ? preferences.enabledAssignmentDays.filter((enabledDay) => enabledDay !== day)
+      : [...preferences.enabledAssignmentDays, day].sort((first, second) => first - second);
+    setPreferences({ ...preferences, enabledAssignmentDays });
   }
 
   function updateActivePlan() {
@@ -223,25 +222,25 @@ export function SettingsWorkspace() {
     const timetableEntries = readStoredValue<TimetableEntry[]>(storageKeys.timetableEntries, []);
     const commitments = readStoredValue<Commitment[]>(storageKeys.commitments, []);
     const datedCommitments = readStoredValue<DatedCommitment[]>(storageKeys.datedCommitments, []);
-    const studyBlocks = readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []);
+    const assignmentSessions = readStoredValue<AssignmentSession[]>(storageKeys.assignmentSessions, []);
     const planSnapshots = readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {});
     const workload = calculateWorkloadBreakdown(assignmentModule.credits, assignment);
-    const completedBlocks = studyBlocks.filter(
+    const completedBlocks = assignmentSessions.filter(
       (block) => block.assignmentId === assignment.id && block.completedAt,
     );
     const remainingWorkload = calculateRemainingWorkload(workload, completedBlocks);
-    const reservedBlocks = getReservableStudyBlocks({
+    const reservedBlocks = getReservableAssignmentSessions({
       currentAssignmentId: assignment.id,
       assignments,
       modules,
-      studyBlocks,
+      assignmentSessions,
       planSnapshots,
       timetableEntries,
       commitments,
       datedCommitments,
       planningPreferences: nextPreferences,
     });
-    const scheduled = generateStudySchedule({
+    const scheduled = generateAssignmentSchedule({
       assignment,
       workload: remainingWorkload,
       timetableEntries,
@@ -252,8 +251,8 @@ export function SettingsWorkspace() {
     });
 
     writeStoredValue(
-      storageKeys.studyBlocks,
-      replaceIncompleteBlocksForAssignment(studyBlocks, assignment.id, scheduled.studyBlocks),
+      storageKeys.assignmentSessions,
+      replaceIncompleteBlocksForAssignment(assignmentSessions, assignment.id, scheduled.assignmentSessions),
     );
     writeStoredValue(storageKeys.planSnapshots, {
       ...planSnapshots,
@@ -269,172 +268,189 @@ export function SettingsWorkspace() {
     router.push(`/plan?assignment=${encodeURIComponent(assignment.id)}`);
   }
 
-  const startOptions = STUDY_WINDOW_OPTIONS.filter((time) => minutesFromTime(preferences.studyEnd) - minutesFromTime(time) >= 60);
-  const endOptions = STUDY_WINDOW_OPTIONS.filter((time) => minutesFromTime(time) - minutesFromTime(preferences.studyStart) >= 60);
-
   if (!isLoaded) {
     return <div className="h-44 animate-pulse border-y border-[var(--line)] bg-[var(--surface-soft)]" aria-label="Loading settings" />;
   }
 
   return (
-    <div className="space-y-9">
-      <section className="border-y border-[var(--line)] pb-6" aria-labelledby="study-window-heading">
-        <h2 id="study-window-heading" className="text-sm font-semibold">When to study</h2>
-        <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Set the earliest start and latest finish for scheduled sessions.</p>
-
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <label className="text-sm font-medium">
-            Earliest start
-            <select value={preferences.studyStart} onChange={(event) => updateStudyStart(event.target.value)} className={selectClassName}>
-              {startOptions.map((time) => <option key={time} value={time}>{time}</option>)}
-            </select>
-          </label>
-          <label className="text-sm font-medium">
-            Latest finish
-            <select value={preferences.studyEnd} onChange={(event) => updateStudyEnd(event.target.value)} className={selectClassName}>
-              {endOptions.map((time) => <option key={time} value={time}>{time}</option>)}
-            </select>
-          </label>
-        </div>
+    <div className="space-y-10">
+      <section className="border-y border-[var(--line)] py-6" aria-labelledby="availability-heading">
+        <h2 id="availability-heading" className="text-xl font-semibold tracking-[-0.03em]">When you have time</h2>
+        <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Choose the parts of your week that PlanAround may use for assignment work.</p>
 
         <div className="mt-5">
-          <p className="text-sm font-medium">Study days</p>
-          <div className="mt-2 grid grid-cols-7 gap-1.5">
+          <p className="text-sm font-medium">Available days</p>
+          <div className="mt-2 grid max-w-xl grid-cols-7 gap-1.5">
             {CALENDAR_DAYS.map((day) => (
               <button
                 key={day}
                 type="button"
-                onClick={() => toggleStudyDay(day)}
-                aria-pressed={preferences.enabledStudyDays.includes(day)}
-                className={toggleButtonClassName(preferences.enabledStudyDays.includes(day))}
+                onClick={() => toggleAssignmentDay(day)}
+                aria-pressed={preferences.enabledAssignmentDays.includes(day)}
+                className={toggleButtonClassName(preferences.enabledAssignmentDays.includes(day))}
               >
                 {dayLabels[day].slice(0, 3)}
               </button>
             ))}
           </div>
         </div>
+
+        <div className="mt-5 grid max-w-xl gap-4 sm:grid-cols-2">
+          <label className="text-sm font-medium">
+            Earliest start
+            <input
+              value={preferences.assignmentStart}
+              onChange={(event) => updateAssignmentStart(event.target.value)}
+              className={inputClassName}
+              type="time"
+              min="08:00"
+              max={timeFromMinutes(minutesFromTime(preferences.assignmentEnd) - 60)}
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Latest finish
+            <input
+              value={preferences.assignmentEnd}
+              onChange={(event) => updateAssignmentEnd(event.target.value)}
+              className={inputClassName}
+              type="time"
+              min={timeFromMinutes(minutesFromTime(preferences.assignmentStart) + 60)}
+              max="22:00"
+            />
+          </label>
+        </div>
       </section>
 
-      <section className="border-b border-[var(--line)] pb-6" aria-labelledby="session-structure-heading">
-        <h2 id="session-structure-heading" className="text-sm font-semibold">How to structure sessions</h2>
+      <section className="border-b border-[var(--line)] pb-8" aria-labelledby="session-preferences-heading">
+        <h2 id="session-preferences-heading" className="text-xl font-semibold tracking-[-0.03em]">How to plan your sessions</h2>
+        <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">These guide the plan when more than one valid time is available.</p>
 
-        <div className="mt-4">
-          <p className="text-sm font-medium">Preferred session length</p>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">A preference, not a guarantee. PlanAround may use a different valid length to avoid an unusable short remainder or to fit the available space.</p>
+        <div className="mt-5 grid gap-6 md:grid-cols-2">
+          <div>
+            <p className="text-sm font-medium">Preferred session length</p>
+            <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">Usually schedule work in sessions around this long.</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {SESSION_LENGTH_OPTIONS.map((minutes) => (
+                <button key={minutes} type="button" onClick={() => setPreferences({ ...preferences, preferredSessionMinutes: minutes })} aria-pressed={preferences.preferredSessionMinutes === minutes} className={toggleButtonClassName(preferences.preferredSessionMinutes === minutes)}>
+                  {minutes} min
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-medium">Daily work target</p>
+            <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">Aim for this much assignment work on each day.</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {DAILY_TARGET_OPTIONS.map((minutes) => (
+                <button key={minutes} type="button" onClick={() => setPreferences({ ...preferences, dailyAssignmentTargetMinutes: minutes })} aria-pressed={preferences.dailyAssignmentTargetMinutes === minutes} className={toggleButtonClassName(preferences.dailyAssignmentTargetMinutes === minutes)}>
+                  {minutes / 60}h
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <p className="text-sm font-medium">Preferred time of day</p>
+          <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">Use this part of a free day first, when possible.</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            {SESSION_LENGTH_OPTIONS.map((minutes) => (
-              <button key={minutes} type="button" onClick={() => setPreferences({ ...preferences, preferredSessionMinutes: minutes })} aria-pressed={preferences.preferredSessionMinutes === minutes} className={toggleButtonClassName(preferences.preferredSessionMinutes === minutes)}>
-                {minutes} min
+            {TIME_OF_DAY_OPTIONS.map((option) => (
+              <button key={option.value} type="button" onClick={() => setPreferences({ ...preferences, preferredTimeOfDay: option.value })} aria-pressed={preferences.preferredTimeOfDay === option.value} className={toggleButtonClassName(preferences.preferredTimeOfDay === option.value)}>
+                {option.label}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="mt-5">
-          <p className="text-sm font-medium">Daily study target</p>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround aims to spread each assignment around this amount per day, but can use more available time when needed to meet the deadline.</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {DAILY_TARGET_OPTIONS.map((minutes) => (
-              <button key={minutes} type="button" onClick={() => setPreferences({ ...preferences, dailyStudyTargetMinutes: minutes })} aria-pressed={preferences.dailyStudyTargetMinutes === minutes} className={toggleButtonClassName(preferences.dailyStudyTargetMinutes === minutes)}>
-                {minutes / 60}h
-              </button>
-            ))}
-          </div>
+        <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <p className="text-sm text-[var(--muted-ink)]">Changes save automatically.</p>
+          <button type="button" onClick={() => setPreferences(normalizePlanningPreferences(DEFAULT_PLANNING_PREFERENCES))} className="text-sm font-semibold text-[var(--accent-strong)] underline underline-offset-2">
+            Restore defaults
+          </button>
         </div>
       </section>
 
-      <section className="border-b border-[var(--line)] pb-6" aria-labelledby="time-of-day-heading">
-        <h2 id="time-of-day-heading" className="text-sm font-semibold">When to prioritise</h2>
-        <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround will try this part of each available day first, then fall back to other available times when needed. It does not remove availability outside this window.</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {TIME_OF_DAY_OPTIONS.map((option) => (
-            <button key={option.value} type="button" onClick={() => setPreferences({ ...preferences, preferredTimeOfDay: option.value })} aria-pressed={preferences.preferredTimeOfDay === option.value} className={toggleButtonClassName(preferences.preferredTimeOfDay === option.value)}>
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="border-b border-[var(--line)] pb-6" aria-labelledby="update-plan-heading">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Active assignment</p>
-        <h2 id="update-plan-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Update your plan.</h2>
+      <section className="rounded-2xl border border-[var(--accent)] bg-[var(--accent-soft)] px-5 py-5" aria-labelledby="update-plan-heading">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Current assignment</p>
+        <h2 id="update-plan-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Update its plan</h2>
         {activeAssignment ? (
           <>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Apply these study preferences to the remaining sessions for <span className="font-semibold text-[var(--ink)]">{activeAssignment.title}</span>. Completed sessions stay as they are.</p>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]"><span className="font-semibold text-[var(--ink)]">{activeAssignment.title}</span> will be rescheduled using these preferences. Completed sessions stay unchanged.</p>
             <button type="button" onClick={updateActivePlan} className="mt-4 min-h-11 rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">
-              Update plan
+              Update assignment plan
             </button>
           </>
         ) : (
-          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Open an assignment plan first, then return here to update its remaining study sessions.</p>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Open an assignment plan first, then return here to reschedule its remaining sessions.</p>
         )}
       </section>
 
-      <section className="border-b border-[var(--line)] pb-6" aria-labelledby="notifications-heading">
-        <h2 id="notifications-heading" className="text-sm font-semibold">Notifications</h2>
-        {!notificationSupported ? (
-          <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">This browser doesn&apos;t support notifications.</p>
-        ) : notificationPermission === "denied" ? (
-          <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">Notifications are blocked for this site in your browser settings.</p>
-        ) : notificationPermission !== "granted" ? (
-          <>
-            <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Get a browser notification 15 minutes before a scheduled study session starts, while a PlanAround tab is open.</p>
-            <button type="button" onClick={enableNotifications} className="mt-3 min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
-              Enable session reminders
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button type="button" onClick={toggleNotifications} aria-pressed={notificationsEnabled} className={toggleButtonClassName(notificationsEnabled)}>
-                {notificationsEnabled ? "Reminders on" : "Reminders off"}
-              </button>
+      <section className="border-t border-[var(--line)] pt-8" aria-labelledby="other-preferences-heading">
+        <h2 id="other-preferences-heading" className="text-xl font-semibold tracking-[-0.03em]">Other</h2>
+
+        <div className="mt-4 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+          <details className="py-4">
+            <summary className="cursor-pointer text-sm font-semibold marker:text-[var(--muted-ink)]">Session reminders</summary>
+            <div className="mt-3">
+              {!notificationSupported ? (
+                <p className="text-sm leading-6 text-[var(--muted-ink)]">This browser doesn&apos;t support reminders.</p>
+              ) : notificationPermission === "denied" ? (
+                <p className="text-sm leading-6 text-[var(--muted-ink)]">Reminders are blocked for this site in your browser settings.</p>
+              ) : notificationPermission !== "granted" ? (
+                <>
+                  <p className="max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Get a reminder 15 minutes before a scheduled session, while PlanAround is open in this browser.</p>
+                  <button type="button" onClick={enableNotifications} className="mt-3 min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
+                    Enable reminders
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={toggleNotifications} aria-pressed={notificationsEnabled} className={`mt-1 ${toggleButtonClassName(notificationsEnabled)}`}>
+                    {notificationsEnabled ? "Reminders on" : "Reminders off"}
+                  </button>
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Reminders appear 15 minutes before a scheduled session while PlanAround is open in this browser.</p>
+                </>
+              )}
             </div>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">A notification appears about 15 minutes before a scheduled study session starts. This only fires while a PlanAround tab is open in this browser.</p>
-          </>
-        )}
+          </details>
+
+          <details className="py-4">
+            <summary className="cursor-pointer text-sm font-semibold marker:text-[var(--muted-ink)]">Data and calendar</summary>
+            <div className="mt-3">
+              <p className="max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Everything is stored only in this browser. Back up your data before clearing browser storage or moving to another device.</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button type="button" onClick={exportData} className="min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
+                  Export backup
+                </button>
+                <button type="button" onClick={() => importFileInputRef.current?.click()} className="min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
+                  Import backup
+                </button>
+                <button type="button" onClick={downloadIcs} className="min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
+                  Download calendar
+                </button>
+                <input ref={importFileInputRef} type="file" accept="application/json" onChange={handleImportFile} className="hidden" aria-hidden="true" tabIndex={-1} />
+              </div>
+              {dataMessage ? <p className="mt-3 text-sm text-[var(--muted-ink)]" role="status">{dataMessage}</p> : null}
+
+              <div className="mt-5 border-t border-[var(--line)] pt-4">
+                <p className="text-sm font-medium">Start a new semester</p>
+                <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Download a backup, then clear this term&apos;s timetable, assignments and plans. Your preferences stay saved.</p>
+                <button type="button" onClick={startNewSemester} className="mt-3 min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:text-red-700">
+                  Start new semester
+                </button>
+              </div>
+            </div>
+          </details>
+        </div>
       </section>
 
-      <section aria-labelledby="defaults-heading">
-        <h2 id="defaults-heading" className="text-sm font-semibold">Defaults &amp; data</h2>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button type="button" onClick={() => setPreferences(normalizePlanningPreferences(DEFAULT_PLANNING_PREFERENCES))} className="min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
-            Restore scheduling defaults
-          </button>
-          <p className="text-sm text-[var(--muted-ink)]">Saved on this device</p>
-        </div>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Planning preferences are stored in this browser with the rest of your PlanAround data. This only resets scheduling preferences - your Calendar, assignments and study progress are untouched.</p>
-
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <button type="button" onClick={exportData} className="min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
-            Export backup (.json)
-          </button>
-          <button type="button" onClick={() => importFileInputRef.current?.click()} className="min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
-            Import backup
-          </button>
-          <button type="button" onClick={downloadIcs} className="min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-[var(--accent)]">
-            Download calendar (.ics)
-          </button>
-          <input ref={importFileInputRef} type="file" accept="application/json" onChange={handleImportFile} className="hidden" aria-hidden="true" tabIndex={-1} />
-        </div>
-        {dataMessage ? <p className="mt-3 text-sm text-[var(--muted-ink)]" role="status">{dataMessage}</p> : null}
-        <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround has no account or cloud sync - all data lives only in this browser. Export a backup to move it to another device or protect against clearing your browser data. Importing a backup overwrites everything currently stored here. The calendar download covers study sessions, classes and commitments as a read-only .ics file for Google/Outlook/Apple Calendar.</p>
-
-        <div className="mt-6 border-t border-[var(--line)] pt-5">
-          <p className="text-sm font-medium">New semester</p>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Downloads a backup, then clears your timetable, modules, commitments and assignments so you can set up a new term from scratch. Scheduling preferences are kept.</p>
-          <button type="button" onClick={startNewSemester} className="mt-3 min-h-10 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--muted-ink)] transition-colors hover:border-red-300 hover:text-red-700">
-            Start new semester
-          </button>
-        </div>
-
-        <div className="mt-6 border-t border-red-200 pt-5">
-          <p className="text-sm font-medium text-red-800">Clear all PlanAround data</p>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Permanently removes everything stored by PlanAround on this device, including scheduling preferences. This does not create a backup.</p>
-          <button type="button" onClick={clearAllData} className="mt-3 min-h-10 rounded-xl border border-red-200 px-4 text-sm font-semibold text-red-700 transition-colors hover:border-red-400 hover:bg-red-50">
-            Clear all data
-          </button>
-        </div>
+      <section className="border-t border-red-200 pt-6" aria-labelledby="clear-data-heading">
+        <h2 id="clear-data-heading" className="text-sm font-semibold text-red-800">Clear all PlanAround data</h2>
+        <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">Permanently remove your timetable, assignments, plans, preferences and reminders from this device. This does not create a backup.</p>
+        <button type="button" onClick={clearAllData} className="mt-3 min-h-10 rounded-xl border border-red-200 px-4 text-sm font-semibold text-red-700 transition-colors hover:border-red-400 hover:bg-red-50">
+          Clear all data
+        </button>
       </section>
     </div>
   );

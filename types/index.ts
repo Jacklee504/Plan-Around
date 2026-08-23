@@ -87,7 +87,7 @@ export type WorkloadBreakdown = {
   taskHours: WorkloadTask[];
 };
 
-export type StudyBlock = {
+export type AssignmentSession = {
   id: string;
   assignmentId: string;
   date: string;
@@ -99,21 +99,21 @@ export type StudyBlock = {
   missedAt?: string;
 };
 
-export type PreferredStudyTime = "none" | "morning" | "afternoon" | "evening";
+export type PreferredAssignmentTime = "none" | "morning" | "afternoon" | "evening";
 
 export type PlanningPreferences = {
-  studyStart: string;
-  studyEnd: string;
+  assignmentStart: string;
+  assignmentEnd: string;
   preferredSessionMinutes: 60 | 90 | 120;
-  dailyStudyTargetMinutes: 120 | 180 | 240 | 300;
-  preferredTimeOfDay: PreferredStudyTime;
-  enabledStudyDays: number[];
+  dailyAssignmentTargetMinutes: 120 | 180 | 240 | 300;
+  preferredTimeOfDay: PreferredAssignmentTime;
+  enabledAssignmentDays: number[];
 };
 
 export type ScheduleStatus = "on-track" | "tight" | "not-enough-time";
 
 export type ScheduleResult = {
-  studyBlocks: StudyBlock[];
+  assignmentSessions: AssignmentSession[];
   status: ScheduleStatus;
   requiredHours: number;
   scheduledHours: number;

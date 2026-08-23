@@ -16,11 +16,11 @@ Students usually know when an assignment is due, but not how much time it deserv
 - Add recurring and one-off commitments.
 - Analyse an assignment brief pasted as text, uploaded as a screenshot, or uploaded as a PDF (text extracted locally first, image analysis only if needed), or enter it manually.
 - Estimate workload from credits, assignment weighting and rubric structure.
-- Schedule study sessions around the student's actual availability.
-- Adjust scheduling preferences (study window, session length, daily target, time of day, study days) in Settings.
+- Schedule assignment sessions around the student's actual availability.
+- Adjust scheduling preferences (assignment window, session length, daily target, time of day, assignment days) in Settings.
 - See overall progress and workload insights across every assignment in Plan.
-- Export a full data backup (`.json`) and re-import it, or download study sessions, classes and commitments as a read-only `.ics` calendar file, from Settings.
-- Opt in to a browser notification 15 minutes before a scheduled study session starts, while a PlanAround tab is open.
+- Export a full data backup (`.json`) and re-import it, or download assignment sessions, classes and commitments as a read-only `.ics` calendar file, from Settings.
+- Opt in to a browser notification 15 minutes before a scheduled assignment session starts, while a PlanAround tab is open.
 - Start a new semester from Settings: downloads a backup, then clears the timetable, modules, commitments and assignments while keeping scheduling preferences.
 - Install PlanAround as an offline-capable app (PWA) on desktop or mobile; Calendar has a responsive single-day mobile view alongside the full desktop week grid.
 
@@ -29,7 +29,7 @@ Students usually know when an assignment is due, but not how much time it deserv
 The plan is no longer a one-shot output:
 
 - the Calendar can navigate to any week, not only the current one;
-- study sessions can be marked completed;
+- assignment sessions can be marked completed;
 - changed availability (timetable, commitments, module or assignment edits) or a changed scheduling preference in Settings stales an existing plan;
 - completed work is preserved across a replan and is never regenerated or lost;
 - remaining, not total, work is what gets replanned;
@@ -39,7 +39,7 @@ See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full detail on each of these.
 
 ## AI vs deterministic boundary
 
-AI is used only to interpret unstructured input: timetable screenshots and assignment briefs. It never calculates workload, decides study times, or changes calendar data automatically, and nothing it extracts is auto-accepted.
+AI is used only to interpret unstructured input: timetable screenshots and assignment briefs. It never calculates workload, decides assignment times, or changes calendar data automatically, and nothing it extracts is auto-accepted.
 
 Workload calculation, scheduling, stale-plan detection, replanning and plan-change explanations are all deterministic TypeScript.
 

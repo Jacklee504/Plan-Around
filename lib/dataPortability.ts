@@ -1,4 +1,4 @@
-import { readStoredValue, storageKeys, writeStoredValue } from "./storage";
+import { legacyAssignmentSessionStorageKey, readStoredValue, storageKeys, writeStoredValue } from "./storage";
 
 export const DATA_EXPORT_VERSION = 1;
 
@@ -24,7 +24,7 @@ const storageKeyShapes: Record<string, StoredValueShape> = {
   [storageKeys.onboarding]: "object",
   [storageKeys.assignments]: "array",
   [storageKeys.activeAssignmentId]: "string",
-  [storageKeys.studyBlocks]: "array",
+  [storageKeys.assignmentSessions]: "array",
   [storageKeys.planSnapshots]: "object",
   [storageKeys.planningPreferences]: "object",
   [storageKeys.notificationsEnabled]: "boolean",
@@ -129,4 +129,11 @@ export function applyPlanAroundImport(exportPayload: PlanAroundExport) {
       writeStoredValue(key, exportPayload.data[key]);
     }
   });
+
+  if (
+    !Object.prototype.hasOwnProperty.call(exportPayload.data, storageKeys.assignmentSessions) &&
+    Array.isArray(exportPayload.data[legacyAssignmentSessionStorageKey])
+  ) {
+    writeStoredValue(storageKeys.assignmentSessions, exportPayload.data[legacyAssignmentSessionStorageKey]);
+  }
 }

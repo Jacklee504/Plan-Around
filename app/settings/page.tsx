@@ -5,8 +5,8 @@ export default function SettingsPage() {
   return (
     <AppShell
       eyebrow="Preferences"
-      title="Plan study around how you work."
-      description="These settings affect where future study sessions are placed. They never change how much work an assignment needs."
+      title="Fit each assignment around your week."
+      description="Choose when and how PlanAround schedules assignment work. Preferences save automatically."
     >
       <SettingsWorkspace />
     </AppShell>

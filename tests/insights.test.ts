@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calculateOverallInsights } from "../lib/insights";
-import type { Assignment, Module, StudyBlock } from "../types";
+import type { Assignment, Module, AssignmentSession } from "../types";
 
 const NOW = new Date(2026, 7, 19, 9, 0, 0); // Wednesday 2026-08-19
 
@@ -14,7 +14,7 @@ const assignment1: Assignment = {
   tasks: [],
 };
 
-function block(overrides: Partial<StudyBlock> = {}): StudyBlock {
+function block(overrides: Partial<AssignmentSession> = {}): AssignmentSession {
   return { id: "b1", assignmentId: "a1", date: "2026-08-18", start: "09:00", end: "10:00", taskId: "assignment-work", taskName: "Assignment work", ...overrides };
 }
 

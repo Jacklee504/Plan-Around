@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateRemainingWorkload,
-  canCompleteStudyBlock,
+  canCompleteAssignmentSession,
   completedMinutes,
   completedMinutesByTask,
-  completedStudyBlocks,
-  incompleteStudyBlocks,
+  completedAssignmentSessions,
+  incompleteAssignmentSessions,
   removeAssignmentPlanningState,
   replaceIncompleteBlocksForAssignment,
   restoreAssignmentPlanningState,
-  studyBlockMinutes,
-} from "../lib/studyProgress";
-import type { StudyBlock, WorkloadBreakdown } from "../types";
+  assignmentSessionMinutes,
+} from "../lib/assignmentProgress";
+import type { AssignmentSession, WorkloadBreakdown } from "../types";
 
-function block(overrides: Partial<StudyBlock> = {}): StudyBlock {
+function block(overrides: Partial<AssignmentSession> = {}): AssignmentSession {
   return {
     id: "block-1",
     assignmentId: "assignment-1",
@@ -26,19 +26,19 @@ function block(overrides: Partial<StudyBlock> = {}): StudyBlock {
   };
 }
 
-describe("studyProgress", () => {
+describe("assignmentProgress", () => {
   it("calculates block duration in minutes for 60, 90 and 120 minute blocks", () => {
-    expect(studyBlockMinutes(block({ start: "09:00", end: "10:00" }))).toBe(60);
-    expect(studyBlockMinutes(block({ start: "09:00", end: "10:30" }))).toBe(90);
-    expect(studyBlockMinutes(block({ start: "09:00", end: "11:00" }))).toBe(120);
+    expect(assignmentSessionMinutes(block({ start: "09:00", end: "10:00" }))).toBe(60);
+    expect(assignmentSessionMinutes(block({ start: "09:00", end: "10:30" }))).toBe(90);
+    expect(assignmentSessionMinutes(block({ start: "09:00", end: "11:00" }))).toBe(120);
   });
 
   it("filters completed and incomplete blocks", () => {
     const complete = block({ id: "a", completedAt: "2026-08-17T09:30:00.000Z" });
     const incomplete = block({ id: "b" });
 
-    expect(completedStudyBlocks([complete, incomplete])).toEqual([complete]);
-    expect(incompleteStudyBlocks([complete, incomplete])).toEqual([incomplete]);
+    expect(completedAssignmentSessions([complete, incomplete])).toEqual([complete]);
+    expect(incompleteAssignmentSessions([complete, incomplete])).toEqual([incomplete]);
   });
 
   it("sums total completed minutes", () => {
@@ -66,54 +66,54 @@ describe("studyProgress", () => {
     const legacyBlock = block({ id: "legacy" });
     delete (legacyBlock as { completedAt?: string }).completedAt;
 
-    expect(completedStudyBlocks([legacyBlock])).toEqual([]);
-    expect(incompleteStudyBlocks([legacyBlock])).toEqual([legacyBlock]);
+    expect(completedAssignmentSessions([legacyBlock])).toEqual([]);
+    expect(incompleteAssignmentSessions([legacyBlock])).toEqual([legacyBlock]);
     expect(completedMinutes([legacyBlock])).toBe(0);
   });
 });
 
-describe("canCompleteStudyBlock", () => {
+describe("canCompleteAssignmentSession", () => {
   it("allows completion when the scheduled start was 1 minute ago", () => {
     const now = new Date(2026, 7, 17, 9, 1);
-    expect(canCompleteStudyBlock(block({ date: "2026-08-17", start: "09:00" }), now)).toBe(true);
+    expect(canCompleteAssignmentSession(block({ date: "2026-08-17", start: "09:00" }), now)).toBe(true);
   });
 
   it("allows completion exactly at the scheduled start", () => {
     const now = new Date(2026, 7, 17, 9, 0);
-    expect(canCompleteStudyBlock(block({ date: "2026-08-17", start: "09:00" }), now)).toBe(true);
+    expect(canCompleteAssignmentSession(block({ date: "2026-08-17", start: "09:00" }), now)).toBe(true);
   });
 
   it("blocks completion 1 minute before the scheduled start", () => {
     const now = new Date(2026, 7, 17, 8, 59);
-    expect(canCompleteStudyBlock(block({ date: "2026-08-17", start: "09:00" }), now)).toBe(false);
+    expect(canCompleteAssignmentSession(block({ date: "2026-08-17", start: "09:00" }), now)).toBe(false);
   });
 
   it("allows completion for a session scheduled yesterday", () => {
     const now = new Date(2026, 7, 18, 9, 0);
-    expect(canCompleteStudyBlock(block({ date: "2026-08-17", start: "09:00" }), now)).toBe(true);
+    expect(canCompleteAssignmentSession(block({ date: "2026-08-17", start: "09:00" }), now)).toBe(true);
   });
 
   it("blocks completion for a session scheduled tomorrow", () => {
     const now = new Date(2026, 7, 17, 9, 0);
-    expect(canCompleteStudyBlock(block({ date: "2026-08-18", start: "09:00" }), now)).toBe(false);
+    expect(canCompleteAssignmentSession(block({ date: "2026-08-18", start: "09:00" }), now)).toBe(false);
   });
 
   it("compares correctly across the late-March DST boundary using local date components", () => {
     const now = new Date(2026, 2, 30, 3, 0);
-    expect(canCompleteStudyBlock(block({ date: "2026-03-29", start: "23:00" }), now)).toBe(true);
-    expect(canCompleteStudyBlock(block({ date: "2026-03-31", start: "01:00" }), now)).toBe(false);
+    expect(canCompleteAssignmentSession(block({ date: "2026-03-29", start: "23:00" }), now)).toBe(true);
+    expect(canCompleteAssignmentSession(block({ date: "2026-03-31", start: "01:00" }), now)).toBe(false);
   });
 
   it("compares correctly across the late-October DST boundary using local date components", () => {
     const now = new Date(2026, 9, 26, 3, 0);
-    expect(canCompleteStudyBlock(block({ date: "2026-10-25", start: "23:00" }), now)).toBe(true);
-    expect(canCompleteStudyBlock(block({ date: "2026-10-27", start: "01:00" }), now)).toBe(false);
+    expect(canCompleteAssignmentSession(block({ date: "2026-10-25", start: "23:00" }), now)).toBe(true);
+    expect(canCompleteAssignmentSession(block({ date: "2026-10-27", start: "01:00" }), now)).toBe(false);
   });
 
   it("treats an already-completed block as undoable regardless of its scheduled time", () => {
     const now = new Date(2026, 7, 1, 0, 0);
     const completedFutureBlock = block({ date: "2026-08-17", start: "09:00", completedAt: "2026-08-17T09:05:00.000Z" });
-    expect(canCompleteStudyBlock(completedFutureBlock, now)).toBe(true);
+    expect(canCompleteAssignmentSession(completedFutureBlock, now)).toBe(true);
   });
 });
 
@@ -218,7 +218,7 @@ describe("calculateRemainingWorkload", () => {
 });
 
 describe("removeAssignmentPlanningState / restoreAssignmentPlanningState", () => {
-  it("removes only the deleted assignment's StudyBlocks and plan snapshot, leaving other assignments untouched", () => {
+  it("removes only the deleted assignment's AssignmentSessions and plan snapshot, leaving other assignments untouched", () => {
     const forDeletedIncomplete = block({ id: "a", assignmentId: "assignment-1" });
     const forDeletedCompleted = block({ id: "b", assignmentId: "assignment-1", completedAt: "2026-08-17T10:00:00.000Z" });
     const forOther = block({ id: "c", assignmentId: "assignment-2" });
@@ -230,24 +230,24 @@ describe("removeAssignmentPlanningState / restoreAssignmentPlanningState", () =>
       "assignment-1",
     );
 
-    expect(result.remainingStudyBlocks).toEqual([forOther]);
-    expect(result.removedStudyBlocks).toEqual([forDeletedIncomplete, forDeletedCompleted]);
+    expect(result.remainingAssignmentSessions).toEqual([forOther]);
+    expect(result.removedAssignmentSessions).toEqual([forDeletedIncomplete, forDeletedCompleted]);
     expect(result.remainingPlanSnapshots).toEqual({ "assignment-2": "fingerprint-2" });
     expect(result.removedPlanSnapshot).toBe("fingerprint-1");
   });
 
-  it("is a no-op for an assignment with no StudyBlocks or snapshot", () => {
+  it("is a no-op for an assignment with no AssignmentSessions or snapshot", () => {
     const forOther = block({ id: "c", assignmentId: "assignment-2" });
 
     const result = removeAssignmentPlanningState([forOther], { "assignment-2": "fingerprint-2" }, "assignment-1");
 
-    expect(result.remainingStudyBlocks).toEqual([forOther]);
-    expect(result.removedStudyBlocks).toEqual([]);
+    expect(result.remainingAssignmentSessions).toEqual([forOther]);
+    expect(result.removedAssignmentSessions).toEqual([]);
     expect(result.remainingPlanSnapshots).toEqual({ "assignment-2": "fingerprint-2" });
     expect(result.removedPlanSnapshot).toBeUndefined();
   });
 
-  it("restores a deleted assignment's StudyBlocks and plan snapshot together (Undo)", () => {
+  it("restores a deleted assignment's AssignmentSessions and plan snapshot together (Undo)", () => {
     const forOther = block({ id: "c", assignmentId: "assignment-2" });
     const planSnapshots = { "assignment-2": "fingerprint-2" };
     const removed = removeAssignmentPlanningState(
@@ -257,14 +257,14 @@ describe("removeAssignmentPlanningState / restoreAssignmentPlanningState", () =>
     );
 
     const restored = restoreAssignmentPlanningState(
-      removed.remainingStudyBlocks,
+      removed.remainingAssignmentSessions,
       removed.remainingPlanSnapshots,
       "assignment-1",
-      removed.removedStudyBlocks,
+      removed.removedAssignmentSessions,
       removed.removedPlanSnapshot,
     );
 
-    expect(restored.restoredStudyBlocks).toEqual([forOther, block({ id: "a", assignmentId: "assignment-1" })]);
+    expect(restored.restoredAssignmentSessions).toEqual([forOther, block({ id: "a", assignmentId: "assignment-1" })]);
     expect(restored.restoredPlanSnapshots).toEqual({ "assignment-1": "fingerprint-1", "assignment-2": "fingerprint-2" });
   });
 
@@ -273,7 +273,7 @@ describe("removeAssignmentPlanningState / restoreAssignmentPlanningState", () =>
 
     const restored = restoreAssignmentPlanningState([forOther], { "assignment-2": "fingerprint-2" }, "assignment-1", [], undefined);
 
-    expect(restored.restoredStudyBlocks).toEqual([forOther]);
+    expect(restored.restoredAssignmentSessions).toEqual([forOther]);
     expect(restored.restoredPlanSnapshots).toEqual({ "assignment-2": "fingerprint-2" });
   });
 });

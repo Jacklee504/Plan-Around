@@ -28,7 +28,7 @@ describe("dataPortability", () => {
 
   it("round-trips every known storage key through export, serialize, parse and import", () => {
     writeStoredValue(storageKeys.modules, [{ id: "m1", name: "Databases", credits: 5 }]);
-    writeStoredValue(storageKeys.studyBlocks, [{ id: "b1", assignmentId: "a1", date: "2026-08-20", start: "09:00", end: "10:00", taskId: "t1", taskName: "Draft" }]);
+    writeStoredValue(storageKeys.assignmentSessions, [{ id: "b1", assignmentId: "a1", date: "2026-08-20", start: "09:00", end: "10:00", taskId: "t1", taskName: "Draft" }]);
 
     const exportPayload = buildPlanAroundExport();
     expect(exportPayload.version).toBe(1);
@@ -39,12 +39,12 @@ describe("dataPortability", () => {
     expect(parsed).not.toBeNull();
 
     writeStoredValue(storageKeys.modules, []);
-    writeStoredValue(storageKeys.studyBlocks, []);
+    writeStoredValue(storageKeys.assignmentSessions, []);
 
     applyPlanAroundImport(parsed!);
 
     expect(readStoredValue(storageKeys.modules, [])).toEqual([{ id: "m1", name: "Databases", credits: 5 }]);
-    expect(readStoredValue(storageKeys.studyBlocks, [])).toEqual([
+    expect(readStoredValue(storageKeys.assignmentSessions, [])).toEqual([
       { id: "b1", assignmentId: "a1", date: "2026-08-20", start: "09:00", end: "10:00", taskId: "t1", taskName: "Draft" },
     ]);
   });

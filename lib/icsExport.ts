@@ -1,5 +1,5 @@
 import { addCalendarWeeks, calendarDateForDay, dateFromDateKey, getCalendarWeekStart, getMondayWeekKeyForDate } from "./calendarWeek";
-import type { Commitment, DatedCommitment, StudyBlock, TimetableEntry } from "@/types";
+import type { Commitment, DatedCommitment, AssignmentSession, TimetableEntry } from "@/types";
 
 const DEFAULT_WEEKS_AHEAD = 8;
 
@@ -45,7 +45,7 @@ function isTimetableEntryActiveOnDate(entry: TimetableEntry, date: Date) {
 }
 
 export type IcsExportInput = {
-  studyBlocks: StudyBlock[];
+  assignmentSessions: AssignmentSession[];
   timetableEntries: TimetableEntry[];
   commitments: Commitment[];
   datedCommitments: DatedCommitment[];
@@ -58,21 +58,21 @@ export type IcsExportOptions = {
 };
 
 /**
- * Builds a downloadable .ics document covering study sessions (already
+ * Builds a downloadable .ics document covering assignment sessions (already
  * concrete dates), one-off commitments (already concrete dates), and
  * recurring timetable entries/commitments expanded into concrete instances
  * across a bounded window - a calendar app has no concept of PlanAround's
  * own skip-this-week/skip-every-week attendance state, so that has to be
  * resolved into real dates (or omitted) at export time.
  */
-export function buildStudyCalendarIcs(input: IcsExportInput, options: IcsExportOptions = {}): string {
+export function buildAssignmentCalendarIcs(input: IcsExportInput, options: IcsExportOptions = {}): string {
   const now = options.now ?? new Date();
   const weeksAhead = options.weeksAhead ?? DEFAULT_WEEKS_AHEAD;
   const dtstamp = icsTimestamp(now);
   const lines: string[] = [];
 
-  input.studyBlocks.forEach((block) => {
-    lines.push(...buildEvent(`study-${block.id}`, `Study: ${block.taskName}`, dateFromDateKey(block.date), block.start, block.end, dtstamp));
+  input.assignmentSessions.forEach((block) => {
+    lines.push(...buildEvent(`assignment-${block.id}`, `Assignment: ${block.taskName}`, dateFromDateKey(block.date), block.start, block.end, dtstamp));
   });
 
   input.datedCommitments.forEach((commitment) => {
@@ -98,7 +98,7 @@ export function buildStudyCalendarIcs(input: IcsExportInput, options: IcsExportO
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//PlanAround//Study Calendar Export//EN",
+    "PRODID:-//PlanAround//Assignment Calendar Export//EN",
     "CALSCALE:GREGORIAN",
     ...lines,
     "END:VCALENDAR",

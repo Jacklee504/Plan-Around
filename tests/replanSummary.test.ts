@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { summarizeReplan } from "../lib/replanSummary";
-import type { StudyBlock } from "../types";
+import type { AssignmentSession } from "../types";
 
-function block(overrides: Partial<StudyBlock> = {}): StudyBlock {
+function block(overrides: Partial<AssignmentSession> = {}): AssignmentSession {
   return {
     id: "block-1",
     assignmentId: "assignment-1",

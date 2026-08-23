@@ -16,7 +16,7 @@ import { calendarDateForDay, localDateKey } from "@/lib/calendarWeek";
 import type {
   Commitment,
   DatedCommitment,
-  StudyBlock,
+  AssignmentSession,
   TimetableEntry,
 } from "@/types";
 
@@ -42,15 +42,15 @@ type WeeklyCalendarProps = {
   timetableEntries: TimetableEntry[];
   commitments: Commitment[];
   datedCommitments?: DatedCommitment[];
-  studyBlocks?: StudyBlock[];
-  studyBlockLabels?: Record<string, string>;
+  assignmentSessions?: AssignmentSession[];
+  assignmentSessionLabels?: Record<string, string>;
   visibleWeekStart?: string;
   selectedEntryId?: string | null;
   isEntrySkipped?: (entry: TimetableEntry, date?: string) => boolean;
   onSelectEntry?: (entry: TimetableEntry) => void;
   onSelectCommitment?: (commitment: Commitment) => void;
   onSelectDatedCommitment?: (commitment: DatedCommitment) => void;
-  onSelectStudyBlock?: (block: StudyBlock) => void;
+  onSelectAssignmentSession?: (block: AssignmentSession) => void;
   onSelectEmptySlot?: (slot: CalendarSlot) => void;
 };
 
@@ -234,14 +234,14 @@ type DayColumnProps = {
   timetableEntries: TimetableEntry[];
   commitments: Commitment[];
   datedCommitments: DatedCommitment[];
-  studyBlocks: StudyBlock[];
-  studyBlockLabels: Record<string, string>;
+  assignmentSessions: AssignmentSession[];
+  assignmentSessionLabels: Record<string, string>;
   selectedEntryId: string | null;
   isEntrySkipped: (entry: TimetableEntry, date?: string) => boolean;
   onSelectEntry?: (entry: TimetableEntry) => void;
   onSelectCommitment?: (commitment: Commitment) => void;
   onSelectDatedCommitment?: (commitment: DatedCommitment) => void;
-  onSelectStudyBlock?: (block: StudyBlock) => void;
+  onSelectAssignmentSession?: (block: AssignmentSession) => void;
   onSelectEmptySlot?: (slot: CalendarSlot) => void;
 };
 
@@ -252,14 +252,14 @@ function DayColumn({
   timetableEntries,
   commitments,
   datedCommitments,
-  studyBlocks,
-  studyBlockLabels,
+  assignmentSessions,
+  assignmentSessionLabels,
   selectedEntryId,
   isEntrySkipped,
   onSelectEntry,
   onSelectCommitment,
   onSelectDatedCommitment,
-  onSelectStudyBlock,
+  onSelectAssignmentSession,
   onSelectEmptySlot,
 }: DayColumnProps) {
   return (
@@ -409,7 +409,7 @@ function DayColumn({
             </div>
           );
         })}
-      {studyBlocks
+      {assignmentSessions
         .filter((block) => block.date === currentDate)
         .map((block) => {
           const density = calendarBlockDensity(
@@ -422,21 +422,21 @@ function DayColumn({
           const className = `absolute left-1 right-1 z-20 overflow-hidden rounded-lg border text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${cardPadding(density)} ${completed ? "border-[var(--line)] bg-[var(--surface-soft)] text-[var(--muted-ink)]" : missed ? "border-red-200 bg-red-50 text-red-700" : "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:border-[var(--accent-strong)]"}`;
           const content = (
             <CalendarCard
-              label={studyBlockLabels[block.id] ?? block.taskName}
+              label={assignmentSessionLabels[block.id] ?? block.taskName}
               detail={completed ? "Completed" : missed ? "Missed" : undefined}
               density={density}
             />
           );
 
-          return onSelectStudyBlock ? (
+          return onSelectAssignmentSession ? (
             <button
               key={block.id}
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                onSelectStudyBlock(block);
+                onSelectAssignmentSession(block);
               }}
-              aria-label={`Edit study session: ${block.taskName}, ${block.start} to ${block.end}`}
+              aria-label={`Edit assignment session: ${block.taskName}, ${block.start} to ${block.end}`}
               title={block.taskName}
               className={className}
               style={blockPosition(block.start, block.end, range.startHour)}
@@ -453,15 +453,15 @@ export function WeeklyCalendar({
   timetableEntries,
   commitments,
   datedCommitments = [],
-  studyBlocks = [],
-  studyBlockLabels = {},
+  assignmentSessions = [],
+  assignmentSessionLabels = {},
   visibleWeekStart,
   selectedEntryId = null,
   isEntrySkipped = () => false,
   onSelectEntry,
   onSelectCommitment,
   onSelectDatedCommitment,
-  onSelectStudyBlock,
+  onSelectAssignmentSession,
   onSelectEmptySlot,
 }: WeeklyCalendarProps) {
   const todayDateKey = localDateKey(new Date());
@@ -471,19 +471,18 @@ export function WeeklyCalendar({
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(todayDayOfWeek ?? 1);
   const [showFullDay, setShowFullDay] = useState(false);
 
-  // Trims the grid to the hours actually in use (padded, minimum 8h) so a
-  // week of 9-5 classes doesn't render the full 08:00-22:00 range - never
-  // hides anything, just the empty hours around it. "Show full day" opts
-  // back into the fixed range.
+  // Trims the grid to the hours actually in use (minimum 8h) so a week of
+  // 9-5 classes doesn't render the full 08:00-22:00 range. "Show full day"
+  // remains available whenever the compact view omits empty hours.
   const compactRange = useMemo(
     () =>
       calendarVisibleRange({
         timetableEntries,
         commitments,
         datedCommitments,
-        studyBlocks,
+        assignmentSessions,
       }),
-    [commitments, datedCommitments, studyBlocks, timetableEntries],
+    [commitments, datedCommitments, assignmentSessions, timetableEntries],
   );
   const isAlreadyFullDay =
     compactRange.startHour === CALENDAR_START_HOUR && compactRange.endHour === CALENDAR_END_HOUR;
@@ -495,14 +494,14 @@ export function WeeklyCalendar({
     timetableEntries,
     commitments,
     datedCommitments,
-    studyBlocks,
-    studyBlockLabels,
+    assignmentSessions,
+    assignmentSessionLabels,
     selectedEntryId,
     isEntrySkipped,
     onSelectEntry,
     onSelectCommitment,
     onSelectDatedCommitment,
-    onSelectStudyBlock,
+    onSelectAssignmentSession,
     onSelectEmptySlot,
   };
 

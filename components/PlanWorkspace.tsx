@@ -4,16 +4,16 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { calculateOverallInsights } from "@/lib/insights";
 import { assignmentPartNumber, formatAssignmentPart } from "@/lib/assignmentParts";
-import { createPlanFingerprint, getPlanChangeReasons, getReservableStudyBlocks, type PlanChangeReason } from "@/lib/planSnapshot";
-import { generateStudySchedule } from "@/lib/scheduler";
+import { createPlanFingerprint, getPlanChangeReasons, getReservableAssignmentSessions, type PlanChangeReason } from "@/lib/planSnapshot";
+import { generateAssignmentSchedule } from "@/lib/scheduler";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
 import { calculateWorkloadBreakdown } from "@/lib/workload";
-import { calculateRemainingWorkload, canCompleteStudyBlock, completedMinutes, replaceIncompleteBlocksForAssignment, studyBlockMinutes, studyBlockScheduledStart } from "@/lib/studyProgress";
+import { calculateRemainingWorkload, canCompleteAssignmentSession, completedMinutes, replaceIncompleteBlocksForAssignment, assignmentSessionMinutes, assignmentSessionScheduledStart } from "@/lib/assignmentProgress";
 import { summarizeReplan, type ReplanSummary } from "@/lib/replanSummary";
 import { DEFAULT_PLANNING_PREFERENCES, normalizePlanningPreferences } from "@/lib/planningPreferences";
 import { OnboardingRequired } from "@/components/OnboardingRequired";
 import { useOnboardingState } from "@/lib/onboarding";
-import type { Assignment, Commitment, DatedCommitment, Module, PlanningPreferences, ScheduleResult, StudyBlock, TimetableEntry } from "@/types";
+import type { Assignment, Commitment, DatedCommitment, Module, PlanningPreferences, ScheduleResult, AssignmentSession, TimetableEntry } from "@/types";
 
 type PlanStatus = ScheduleResult["status"];
 
@@ -23,7 +23,7 @@ const planChangeReasonCopy: Record<PlanChangeReason, string> = {
   timetable: "Timetable availability changed",
   "recurring-commitments": "Recurring commitments changed",
   "dated-commitments": "One-off availability changed",
-  "planning-preferences": "Study preferences changed",
+  "planning-preferences": "Availability preferences changed",
 };
 
 type ReplanUpdate = { summary: ReplanSummary; reasons: PlanChangeReason[]; status: PlanStatus };
@@ -60,17 +60,17 @@ function formatDeadline(date: string) {
   return new Intl.DateTimeFormat("en-IE", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${date}T12:00:00`));
 }
 
-function blockDuration(block: StudyBlock) {
-  return formatHours(studyBlockMinutes(block) / 60);
+function blockDuration(block: AssignmentSession) {
+  return formatHours(assignmentSessionMinutes(block) / 60);
 }
 
-function getResultForExistingBlocks(blocks: StudyBlock[], recalculatedResult: ScheduleResult): ScheduleResult | null {
+function getResultForExistingBlocks(blocks: AssignmentSession[], recalculatedResult: ScheduleResult): ScheduleResult | null {
   if (!blocks.length) return null;
-  const scheduledHours = blocks.reduce((total, block) => total + studyBlockMinutes(block) / 60, 0);
+  const scheduledHours = blocks.reduce((total, block) => total + assignmentSessionMinutes(block) / 60, 0);
 
   return {
     ...recalculatedResult,
-    studyBlocks: blocks,
+    assignmentSessions: blocks,
     scheduledHours,
     unscheduledHours: Math.max(0, recalculatedResult.requiredHours - scheduledHours),
   };
@@ -83,7 +83,7 @@ export function PlanWorkspace() {
   const [commitments, setCommitments] = useState<Commitment[]>([]);
   const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>([]);
   const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
-  const [studyBlocks, setStudyBlocks] = useState<StudyBlock[]>([]);
+  const [assignmentSessions, setAssignmentSessions] = useState<AssignmentSession[]>([]);
   const [planSnapshots, setPlanSnapshots] = useState<Record<string, string>>({});
   const [planningPreferences, setPlanningPreferences] = useState<PlanningPreferences>(DEFAULT_PLANNING_PREFERENCES);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
@@ -101,7 +101,7 @@ export function PlanWorkspace() {
       setCommitments(readStoredValue<Commitment[]>(storageKeys.commitments, []));
       setDatedCommitments(readStoredValue<DatedCommitment[]>(storageKeys.datedCommitments, []));
       setTimetableEntries(readStoredValue<TimetableEntry[]>(storageKeys.timetableEntries, []));
-      setStudyBlocks(readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []));
+      setAssignmentSessions(readStoredValue<AssignmentSession[]>(storageKeys.assignmentSessions, []));
       setPlanSnapshots(readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {}));
       setPlanningPreferences(normalizePlanningPreferences(readStoredValue<unknown>(storageKeys.planningPreferences, DEFAULT_PLANNING_PREFERENCES)));
       const requestedAssignmentId = new URLSearchParams(window.location.search).get("assignment");
@@ -119,8 +119,8 @@ export function PlanWorkspace() {
   }, []);
 
   useEffect(() => {
-    if (isLoaded) writeStoredValue(storageKeys.studyBlocks, studyBlocks);
-  }, [isLoaded, studyBlocks]);
+    if (isLoaded) writeStoredValue(storageKeys.assignmentSessions, assignmentSessions);
+  }, [isLoaded, assignmentSessions]);
 
   useEffect(() => {
     if (isLoaded) writeStoredValue(storageKeys.planSnapshots, planSnapshots);
@@ -130,9 +130,9 @@ export function PlanWorkspace() {
   // start passes, instead of leaving it stuck on "Scheduled" until something
   // else happens to trigger a render.
   useEffect(() => {
-    const nextBoundary = studyBlocks.reduce<number | null>((earliest, block) => {
+    const nextBoundary = assignmentSessions.reduce<number | null>((earliest, block) => {
       if (block.completedAt) return earliest;
-      const startMs = studyBlockScheduledStart(block).getTime();
+      const startMs = assignmentSessionScheduledStart(block).getTime();
       if (startMs <= now.getTime()) return earliest;
       return earliest === null ? startMs : Math.min(earliest, startMs);
     }, null);
@@ -145,20 +145,20 @@ export function PlanWorkspace() {
     const delay = Math.min(nextBoundary - now.getTime() + 1000, MAX_TIMER_DELAY_MS);
     const timer = window.setTimeout(() => setNow(new Date()), delay);
     return () => window.clearTimeout(timer);
-  }, [studyBlocks, now]);
+  }, [assignmentSessions, now]);
 
   const schedulableAssignments = useMemo(
     () => assignments.filter((assignment) => modules.some((module) => module.id === assignment.moduleId)),
     [assignments, modules],
   );
   const overallInsights = useMemo(
-    () => calculateOverallInsights(assignments, modules, studyBlocks, now),
-    [assignments, modules, studyBlocks, now],
+    () => calculateOverallInsights(assignments, modules, assignmentSessions, now),
+    [assignments, modules, assignmentSessions, now],
   );
   const selectedAssignment = schedulableAssignments.find((assignment) => assignment.id === selectedAssignmentId) ?? null;
   const selectedModule = selectedAssignment ? modules.find((module) => module.id === selectedAssignment.moduleId) ?? null : null;
   const workload = selectedAssignment && selectedModule ? calculateWorkloadBreakdown(selectedModule.credits, selectedAssignment) : null;
-  const storedSelectedBlocks = selectedAssignment ? studyBlocks.filter((block) => block.assignmentId === selectedAssignment.id) : [];
+  const storedSelectedBlocks = selectedAssignment ? assignmentSessions.filter((block) => block.assignmentId === selectedAssignment.id) : [];
   const completedSelectedBlocks = storedSelectedBlocks.filter((block) => block.completedAt);
   const focusedMinutes = workload ? Math.round(workload.usableHours * 60) : 0;
   // Clamp so legacy or edge-case data can't show completed time exceeding the
@@ -173,11 +173,11 @@ export function PlanWorkspace() {
     ? false
     : Math.round(remainingWorkload.usableHours * 60) <= 0 && completedSelectedBlocks.length > 0;
   const reservedBlocks = selectedAssignment && selectedModule
-    ? getReservableStudyBlocks({
+    ? getReservableAssignmentSessions({
       currentAssignmentId: selectedAssignment.id,
       assignments,
       modules,
-      studyBlocks,
+      assignmentSessions,
       planSnapshots,
       timetableEntries,
       commitments,
@@ -205,7 +205,7 @@ export function PlanWorkspace() {
     ? getPlanChangeReasons(planSnapshots[selectedAssignment.id], { assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments, planningPreferences })
     : [];
   const recalculatedResult = selectedAssignment && workload
-    ? generateStudySchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks: assignmentReservedBlocks, preferences: planningPreferences })
+    ? generateAssignmentSchedule({ assignment: selectedAssignment, workload, timetableEntries, commitments, datedCommitments, reservedBlocks: assignmentReservedBlocks, preferences: planningPreferences })
     : null;
   // Preview of what replanning would actually change, shown before the click
   // instead of only after - built the same way generateOrReplan() itself
@@ -216,7 +216,7 @@ export function PlanWorkspace() {
   const replanPreview = isStoredPlanStale && selectedAssignment && remainingWorkload
     ? summarizeReplan(
       storedSelectedBlocks,
-      generateStudySchedule({
+      generateAssignmentSchedule({
         assignment: selectedAssignment,
         workload: remainingWorkload,
         timetableEntries,
@@ -224,7 +224,7 @@ export function PlanWorkspace() {
         datedCommitments,
         reservedBlocks: assignmentReservedBlocks,
         preferences: planningPreferences,
-      }).studyBlocks,
+      }).assignmentSessions,
     )
     : null;
   // While stale, only completed sessions remain valid history - obsolete
@@ -234,11 +234,11 @@ export function PlanWorkspace() {
     : null;
   const result = generatedResult ?? existingResult;
   const isCompletedHistoryOnly = isStoredPlanStale && !generatedResult;
-  // `result.studyBlocks` can be a snapshot taken at generation time, so completion
-  // toggles (which only update the `studyBlocks` state) would not appear here
+  // `result.assignmentSessions` can be a snapshot taken at generation time, so completion
+  // toggles (which only update the `assignmentSessions` state) would not appear here
   // without re-reading each block's current state by id.
-  const liveBlocksById = new Map(studyBlocks.map((block) => [block.id, block]));
-  const groupedBlocks = (result?.studyBlocks ?? []).reduce<Record<string, StudyBlock[]>>((groups, resultBlock) => {
+  const liveBlocksById = new Map(assignmentSessions.map((block) => [block.id, block]));
+  const groupedBlocks = (result?.assignmentSessions ?? []).reduce<Record<string, AssignmentSession[]>>((groups, resultBlock) => {
     const block = liveBlocksById.get(resultBlock.id) ?? resultBlock;
     (groups[block.date] ??= []).push(block);
     return groups;
@@ -259,7 +259,7 @@ export function PlanWorkspace() {
     // regenerate (no completed work to preserve), and a true replan (some
     // work done, only the rest gets rescheduled). A remaining workload of
     // zero simply produces no new blocks, so completed history stands alone.
-    const scheduled = generateStudySchedule({
+    const scheduled = generateAssignmentSchedule({
       assignment: selectedAssignment,
       workload: remainingWorkload,
       timetableEntries,
@@ -271,23 +271,23 @@ export function PlanWorkspace() {
     // The scheduler only returns newly placed blocks, so completed history
     // is added back in for display - the same blocks already preserved in
     // storage below - to avoid a stale-looking list until the next reload.
-    const allPlacedBlocks = [...completedSelectedBlocks, ...scheduled.studyBlocks];
+    const allPlacedBlocks = [...completedSelectedBlocks, ...scheduled.assignmentSessions];
 
-    setStudyBlocks((current) => replaceIncompleteBlocksForAssignment(current, selectedAssignment.id, scheduled.studyBlocks));
+    setAssignmentSessions((current) => replaceIncompleteBlocksForAssignment(current, selectedAssignment.id, scheduled.assignmentSessions));
     setPlanSnapshots((current) => ({
       ...current,
       [selectedAssignment.id]: createPlanFingerprint({ assignment: selectedAssignment, module: selectedModule, timetableEntries, commitments, datedCommitments, planningPreferences }),
     }));
     setGeneratedResult({
       ...scheduled,
-      studyBlocks: allPlacedBlocks,
-      scheduledHours: allPlacedBlocks.reduce((total, block) => total + studyBlockMinutes(block) / 60, 0),
+      assignmentSessions: allPlacedBlocks,
+      scheduledHours: allPlacedBlocks.reduce((total, block) => total + assignmentSessionMinutes(block) / 60, 0),
     });
     // Only a regenerate or replan is an "update" - a first-time generate has
     // no prior plan to compare against, so there is nothing to explain yet.
     setLastReplanUpdate(
       storedSelectedBlocks.length
-        ? { summary: summarizeReplan(storedSelectedBlocks, scheduled.studyBlocks), reasons: staleReasons, status: scheduled.status }
+        ? { summary: summarizeReplan(storedSelectedBlocks, scheduled.assignmentSessions), reasons: staleReasons, status: scheduled.status }
         : null,
     );
   }
@@ -299,13 +299,13 @@ export function PlanWorkspace() {
     setLastReplanUpdate(null);
   }
 
-  function toggleStudyBlockCompletion(blockId: string) {
-    setStudyBlocks((current) =>
+  function toggleAssignmentSessionCompletion(blockId: string) {
+    setAssignmentSessions((current) =>
       current.map((block) => {
         if (block.id !== blockId) return block;
         if (block.completedAt) return { ...block, completedAt: undefined };
-        // A future session cannot be newly marked complete - see canCompleteStudyBlock.
-        if (!canCompleteStudyBlock(block)) return block;
+        // A future session cannot be newly marked complete - see canCompleteAssignmentSession.
+        if (!canCompleteAssignmentSession(block)) return block;
         // Completing a session supersedes an earlier missed mark.
         return { ...block, completedAt: new Date().toISOString(), missedAt: undefined };
       }),
@@ -315,8 +315,8 @@ export function PlanWorkspace() {
   // Unlike completion, missed isn't gated by scheduled time - deciding a session
   // will be skipped doesn't require waiting for it to start, and a completed
   // session can't also be missed, so the toggle is a no-op once completed.
-  function toggleStudyBlockMissed(blockId: string) {
-    setStudyBlocks((current) =>
+  function toggleAssignmentSessionMissed(blockId: string) {
+    setAssignmentSessions((current) =>
       current.map((block) => {
         if (block.id !== blockId || block.completedAt) return block;
         if (block.missedAt) return { ...block, missedAt: undefined };
@@ -336,7 +336,7 @@ export function PlanWorkspace() {
       <section className="border-y border-[var(--line)] bg-[var(--surface-soft)] px-5 py-7" aria-labelledby="plan-empty-heading">
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Ready to schedule</p>
         <h2 id="plan-empty-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Add an assignment first.</h2>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround needs an assignment linked to one of your Calendar modules before it can find focused study periods.</p>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-ink)]">PlanAround needs an assignment linked to one of your Calendar modules before it can find time for assignment work.</p>
         <Link href="/assignment" className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-strong)]">Go to assignment</Link>
       </section>
     );
@@ -422,7 +422,7 @@ export function PlanWorkspace() {
           {isStoredPlanStale ? (
             <section className="border-y border-amber-200 bg-amber-50 px-5 py-4 text-amber-950" role="status">
               <p className="font-semibold">Your plan needs updating.</p>
-              <p className="mt-1 text-sm leading-6">Replan the remaining work to keep this schedule realistic. Completed study time will be preserved.</p>
+              <p className="mt-1 text-sm leading-6">Replan the remaining work to keep this schedule realistic. Completed assignment work will be preserved.</p>
               {staleReasons.length ? <p className="mt-1 text-sm leading-6">Reason: {staleReasons.map((reason) => planChangeReasonCopy[reason]).join(", ")}</p> : null}
               {replanPreview ? (
                 <p className="mt-1 text-sm leading-6">
@@ -443,7 +443,7 @@ export function PlanWorkspace() {
               ) : (
                 <>
                   <p className="mt-1">{lastReplanUpdate.summary.removedBlocks} old session{lastReplanUpdate.summary.removedBlocks === 1 ? "" : "s"} replaced with {lastReplanUpdate.summary.addedBlocks} new session{lastReplanUpdate.summary.addedBlocks === 1 ? "" : "s"}.</p>
-                  <p>{formatHours(lastReplanUpdate.summary.rescheduledMinutes / 60)} of remaining study time was rescheduled.</p>
+                  <p>{formatHours(lastReplanUpdate.summary.rescheduledMinutes / 60)} of remaining assignment work was rescheduled.</p>
                 </>
               )}
               {lastReplanUpdate.reasons.length ? <p>Reason: {lastReplanUpdate.reasons.map((reason) => planChangeReasonCopy[reason]).join(", ")}</p> : null}
@@ -484,13 +484,13 @@ export function PlanWorkspace() {
           ) : null}
 
           {result ? (
-            <section aria-labelledby="study-blocks-heading">
+            <section aria-labelledby="assignment-sessions-heading">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Generated sessions</p>
-                  <h2 id="study-blocks-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Your study blocks</h2>
+                  <h2 id="assignment-sessions-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Your assignment sessions</h2>
                 </div>
-                <p className="text-sm text-[var(--muted-ink)]">Aims for {formatHours(planningPreferences.dailyStudyTargetMinutes / 60)} a day where possible</p>
+                <p className="text-sm text-[var(--muted-ink)]">Aims for {formatHours(planningPreferences.dailyAssignmentTargetMinutes / 60)} a day where possible</p>
               </div>
               {Object.keys(groupedBlocks).length ? (
                 <div className="mt-5 space-y-6">
@@ -504,10 +504,10 @@ export function PlanWorkspace() {
                             <p className="text-sm text-[var(--muted-ink)]">{formatAssignmentPart(block.taskName, assignmentPartNumber(selectedAssignment, block.taskId))}</p>
                             <p className="text-sm font-semibold tabular-nums sm:text-right">{blockDuration(block)}</p>
                             <div className="flex flex-wrap items-center justify-end gap-2">
-                              {block.completedAt || canCompleteStudyBlock(block) ? (
+                              {block.completedAt || canCompleteAssignmentSession(block) ? (
                                 <button
                                   type="button"
-                                  onClick={() => toggleStudyBlockCompletion(block.id)}
+                                  onClick={() => toggleAssignmentSessionCompletion(block.id)}
                                   className={`min-h-9 rounded-lg px-3 text-xs font-semibold ${block.completedAt ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-[var(--accent)]"}`}
                                 >
                                   {block.completedAt ? "Completed" : "Mark complete"}
@@ -523,7 +523,7 @@ export function PlanWorkspace() {
                               {!block.completedAt ? (
                                 <button
                                   type="button"
-                                  onClick={() => toggleStudyBlockMissed(block.id)}
+                                  onClick={() => toggleAssignmentSessionMissed(block.id)}
                                   className={`min-h-9 rounded-lg px-3 text-xs font-semibold ${block.missedAt ? "bg-red-50 text-red-700" : "border border-[var(--line)] text-[var(--muted-ink)] hover:border-red-300 hover:text-red-700"}`}
                                 >
                                   {block.missedAt ? "Missed" : "Mark missed"}
@@ -536,7 +536,7 @@ export function PlanWorkspace() {
                     </section>
                   ))}
                 </div>
-              ) : <p className="mt-5 border-y border-[var(--line)] py-5 text-sm leading-6 text-[var(--muted-ink)]">No suitable study periods were found. Check the deadline and commitments in Calendar.</p>}
+              ) : <p className="mt-5 border-y border-[var(--line)] py-5 text-sm leading-6 text-[var(--muted-ink)]">No suitable time for assignment work was found. Check the deadline and commitments in Calendar.</p>}
             </section>
           ) : !isStoredPlanStale ? <section className="border-y border-[var(--line)] bg-[var(--surface-soft)] px-5 py-6 text-sm leading-6 text-[var(--muted-ink)]"><p className="font-semibold text-[var(--ink)]">Ready to build a realistic plan.</p><p className="mt-1">It will use sessions of roughly 60 to 120 minutes, avoid your recurring commitments, and aim to finish before the deadline date when capacity allows it.</p></section> : null}
         </>

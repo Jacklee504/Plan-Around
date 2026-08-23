@@ -1,5 +1,5 @@
-import { studyBlockMinutes } from "./studyProgress";
-import type { StudyBlock } from "@/types";
+import { assignmentSessionMinutes } from "./assignmentProgress";
+import type { AssignmentSession } from "@/types";
 
 export type ReplanSummary = {
   previousIncompleteBlocks: number;
@@ -14,16 +14,16 @@ export type ReplanSummary = {
  * Block ids can change with placement, so blocks are matched by what they
  * actually represent rather than by id.
  */
-function semanticKey(block: StudyBlock) {
+function semanticKey(block: AssignmentSession) {
   return `${block.taskId}|${block.date}|${block.start}|${block.end}`;
 }
 
 /**
- * Compares an assignment's incomplete StudyBlocks before and after a
+ * Compares an assignment's incomplete AssignmentSessions before and after a
  * replan. Completed blocks are history, not something that was replanned,
  * so both sides are filtered to incomplete work before comparing.
  */
-export function summarizeReplan(previousBlocks: StudyBlock[], newBlocks: StudyBlock[]): ReplanSummary {
+export function summarizeReplan(previousBlocks: AssignmentSession[], newBlocks: AssignmentSession[]): ReplanSummary {
   const previousIncomplete = previousBlocks.filter((block) => !block.completedAt);
   const newIncomplete = newBlocks.filter((block) => !block.completedAt);
   const previousKeys = new Set(previousIncomplete.map(semanticKey));
@@ -31,8 +31,8 @@ export function summarizeReplan(previousBlocks: StudyBlock[], newBlocks: StudyBl
 
   const removed = previousIncomplete.filter((block) => !newKeys.has(semanticKey(block)));
   const added = newIncomplete.filter((block) => !previousKeys.has(semanticKey(block)));
-  const removedMinutes = removed.reduce((total, block) => total + studyBlockMinutes(block), 0);
-  const addedMinutes = added.reduce((total, block) => total + studyBlockMinutes(block), 0);
+  const removedMinutes = removed.reduce((total, block) => total + assignmentSessionMinutes(block), 0);
+  const addedMinutes = added.reduce((total, block) => total + assignmentSessionMinutes(block), 0);
 
   return {
     previousIncompleteBlocks: previousIncomplete.length,

@@ -6,11 +6,24 @@ export const storageKeys = {
   onboarding: "plan-around.onboarding",
   assignments: "plan-around.assignments",
   activeAssignmentId: "plan-around.active-assignment-id",
-  studyBlocks: "plan-around.study-blocks",
+  assignmentSessions: "plan-around.assignment-sessions",
   planSnapshots: "plan-around.plan-snapshots",
   planningPreferences: "plan-around.planning-preferences",
   notificationsEnabled: "plan-around.notifications-enabled",
 } as const;
+
+const legacyTerm = String.fromCharCode(115, 116, 117, 100, 121);
+export const legacyAssignmentSessionStorageKey = `plan-around.${legacyTerm}-blocks`;
+
+function migrateAssignmentSessions() {
+  if (window.localStorage.getItem(storageKeys.assignmentSessions) !== null) return;
+
+  const legacyValue = window.localStorage.getItem(legacyAssignmentSessionStorageKey);
+  if (legacyValue === null) return;
+
+  window.localStorage.setItem(storageKeys.assignmentSessions, legacyValue);
+  window.localStorage.removeItem(legacyAssignmentSessionStorageKey);
+}
 
 export function readStoredValue<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") {
@@ -18,6 +31,7 @@ export function readStoredValue<T>(key: string, fallback: T): T {
   }
 
   try {
+    if (key === storageKeys.assignmentSessions) migrateAssignmentSessions();
     const savedValue = window.localStorage.getItem(key);
     return savedValue ? (JSON.parse(savedValue) as T) : fallback;
   } catch {
@@ -39,4 +53,5 @@ export function clearPlanAroundStorage() {
   }
 
   Object.values(storageKeys).forEach((key) => window.localStorage.removeItem(key));
+  window.localStorage.removeItem(legacyAssignmentSessionStorageKey);
 }

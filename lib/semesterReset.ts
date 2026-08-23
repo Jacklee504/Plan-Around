@@ -15,7 +15,7 @@ export function resetForNewSemester() {
   writeStoredValue(storageKeys.commitments, []);
   writeStoredValue(storageKeys.datedCommitments, []);
   writeStoredValue(storageKeys.timetableEntries, []);
-  writeStoredValue(storageKeys.studyBlocks, []);
+  writeStoredValue(storageKeys.assignmentSessions, []);
   writeStoredValue(storageKeys.planSnapshots, {});
   writeStoredValue(storageKeys.onboarding, { completed: false } satisfies OnboardingState);
 }

@@ -6,7 +6,7 @@ export default function AssignmentPage() {
     <AppShell
       eyebrow="Assignments"
       title="Add an assignment."
-      description="Start with the essentials. PlanAround will make an explainable workload recommendation before it creates a study plan."
+      description="Start with the essentials. PlanAround will make an explainable workload recommendation before it creates your assignment plan."
     >
       <AssignmentWorkspace />
     </AppShell>

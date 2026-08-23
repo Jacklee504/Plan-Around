@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useOnboardingState } from "@/lib/onboarding";
-import { useStudySessionNotifications } from "@/lib/studyNotifications";
+import { useAssignmentSessionNotifications } from "@/lib/assignmentNotifications";
 
 type AppShellProps = {
   children: ReactNode;
@@ -18,13 +18,13 @@ const navigation = [
   { href: "/setup", label: "Calendar" },
   { href: "/assignment", label: "Assignments" },
   { href: "/plan", label: "Plan" },
-  { href: "/settings", label: "Settings" },
+  { href: "/settings", label: "Preferences" },
 ];
 
 export function AppShell({ children, eyebrow, title, description }: AppShellProps) {
   const pathname = usePathname();
   const { onboarding, isOnboardingLoaded } = useOnboardingState();
-  useStudySessionNotifications();
+  useAssignmentSessionNotifications();
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-5 pb-10 pt-5 sm:px-8 sm:pt-8">

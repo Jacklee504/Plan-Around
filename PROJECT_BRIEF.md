@@ -2,7 +2,7 @@
 
 ## Purpose
 
-PlanAround is a desktop-focused student planning web app that turns assignment requirements and a student's actual availability into an explainable study plan.
+PlanAround is a desktop-focused student planning web app that turns assignment requirements and a student's actual availability into an explainable assignment plan.
 
 It combines timetable information, recurring commitments, one-off events, module workload and assignment structure to answer two questions:
 
@@ -74,7 +74,7 @@ The generated plan includes:
 - focused work;
 - project buffer;
 - task-level workload split;
-- scheduled study blocks;
+- scheduled assignment blocks;
 - schedule status.
 
 Plan also shows an overview of progress across every assignment: total and this-week completed time, sessions completed, and a per-assignment completion rate.
@@ -83,19 +83,19 @@ Plan also shows an overview of progress across every assignment: total and this-
 
 The student can adjust how the scheduler places sessions without changing what work is required:
 
-- study window (earliest start, latest finish);
+- assignment window (earliest start, latest finish);
 - preferred session length (60, 90 or 120 minutes);
-- daily study target (2-5 hours, a soft first-pass portion size);
+- daily assignment target (2-5 hours, a soft first-pass portion size);
 - preferred time of day (morning, afternoon, evening or no preference);
-- which days study sessions can be placed on.
+- which days assignment sessions can be placed on.
 
 Defaults reproduce the pre-Settings scheduler behaviour exactly. Preferences change where the scheduler places sessions - they never change the underlying credit-based workload, assignment weighting, buffer, task-mark weighting or complexity adjustment, and they never alter completed work.
 
 Settings also covers data and lifecycle, independent of scheduling preferences:
 
-- opt in to a browser notification 15 minutes before a scheduled study session starts, while a PlanAround tab is open;
+- opt in to a browser notification 15 minutes before a scheduled assignment session starts, while a PlanAround tab is open;
 - export a full data backup (`.json`) and re-import it on the same or another device;
-- download study sessions, classes and commitments as a read-only `.ics` file for Google/Outlook/Apple Calendar;
+- download assignment sessions, classes and commitments as a read-only `.ics` file for Google/Outlook/Apple Calendar;
 - start a new semester: downloads a backup, then clears the timetable, modules, commitments and assignments, keeping only scheduling preferences.
 
 PlanAround can also be installed as an offline-capable app (a service worker caches the app shell and static assets; navigation still prefers the network when available).
@@ -107,7 +107,7 @@ AI is used only to interpret unstructured input such as timetable screenshots an
 AI does not:
 
 - calculate workload hours;
-- decide study times;
+- decide assignment times;
 - modify calendar constraints automatically;
 - bypass user review.
 
@@ -128,7 +128,7 @@ A larger model (Qwen3.5-397B-A17B) was evaluated earlier in development but is n
 
 ## Planning Approach
 
-PlanAround estimates assignment workload using module credits, assessment weighting and rubric structure rather than asking an AI model to guess a study duration.
+PlanAround estimates assignment workload using module credits, assessment weighting and rubric structure rather than asking an AI model to guess a assignment duration.
 
 The workload is then scheduled deterministically around the student's classes and commitments before the deadline.
 
@@ -141,9 +141,9 @@ The scheduler uses the student's actual availability and avoids:
 - attended teaching sessions;
 - recurring commitments;
 - one-off dated commitments;
-- existing study sessions from other current plans.
+- existing assignment sessions from other current plans.
 
-It prefers practical study sessions of roughly 60–120 minutes and aims to finish before the deadline where possible.
+It prefers practical assignment sessions of roughly 60–120 minutes and aims to finish before the deadline where possible.
 
 The result is shown as:
 
@@ -155,7 +155,7 @@ If relevant inputs change, the existing plan is treated as outdated and must be 
 
 ## Progress
 
-A StudyBlock can record completion through an optional `completedAt` timestamp. Study blocks generated before this feature have no `completedAt`, so they load as incomplete without any storage migration.
+A AssignmentSession can record completion through an optional `completedAt` timestamp. Assignment blocks generated before this feature have no `completedAt`, so they load as incomplete without any storage migration.
 
 Completed minutes are tracked per task, and progress is shown against the assignment's recommended workload rather than a raw block count.
 
@@ -170,7 +170,7 @@ Completed minutes are tracked per task, and progress is shown against the assign
 ## Explainability
 
 - Stale reasons come from a deterministic comparison of the current plan inputs against the inputs snapshot stored when the plan was made (assignment, module workload, timetable, recurring commitments, dated commitments, planning preferences).
-- Replan summaries compare the old and new scheduled study blocks to report how many sessions were replaced and how much remaining time moved.
+- Replan summaries compare the old and new scheduled assignment blocks to report how many sessions were replaced and how much remaining time moved.
 - AI is not used to explain or choose schedule changes; both the stale reasons and the replan summary are plain deterministic TypeScript.
 
 ## Multi-week Calendar
@@ -197,7 +197,7 @@ Workload calculation and scheduling are implemented as deterministic TypeScript 
 
 ## Scope
 
-The hackathon prototype focuses on the complete flow from timetable and assignment input to a realistic study plan.
+The hackathon prototype focuses on the complete flow from timetable and assignment input to a realistic assignment plan.
 
 It is designed primarily for desktop use, with a responsive layout (including a single-day mobile Calendar view) so the core flow also works on a phone.
 

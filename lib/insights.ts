@@ -1,7 +1,7 @@
 import { addCalendarWeeks, getCalendarWeekStart } from "./calendarWeek";
-import { completedMinutes } from "./studyProgress";
+import { completedMinutes } from "./assignmentProgress";
 import { calculateWorkloadBreakdown } from "./workload";
-import type { Assignment, Module, StudyBlock } from "@/types";
+import type { Assignment, Module, AssignmentSession } from "@/types";
 
 export type AssignmentInsight = {
   assignmentId: string;
@@ -29,7 +29,7 @@ export type OverallInsights = {
 export function calculateOverallInsights(
   assignments: Assignment[],
   modules: Module[],
-  studyBlocks: StudyBlock[],
+  assignmentSessions: AssignmentSession[],
   now: Date = new Date(),
 ): OverallInsights {
   const weekStart = getCalendarWeekStart(now);
@@ -40,7 +40,7 @@ export function calculateOverallInsights(
       const assignmentModule = modules.find((candidate) => candidate.id === assignment.moduleId);
       if (!assignmentModule) return null;
 
-      const assignmentBlocks = studyBlocks.filter((block) => block.assignmentId === assignment.id);
+      const assignmentBlocks = assignmentSessions.filter((block) => block.assignmentId === assignment.id);
       const workload = calculateWorkloadBreakdown(assignmentModule.credits, assignment);
       const recommendedMinutes = Math.round(workload.usableHours * 60);
       const completed = Math.min(recommendedMinutes, completedMinutes(assignmentBlocks));
@@ -55,7 +55,7 @@ export function calculateOverallInsights(
     })
     .filter((insight): insight is AssignmentInsight => insight !== null);
 
-  const completedBlocks = studyBlocks.filter((block) => block.completedAt);
+  const completedBlocks = assignmentSessions.filter((block) => block.completedAt);
   const thisWeekCompletedMinutes = completedMinutes(
     completedBlocks.filter((block) => block.date >= weekStart && block.date < weekEnd),
   );

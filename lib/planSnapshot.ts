@@ -1,5 +1,5 @@
 import { arePlanningPreferencesDefault, normalizePlanningPreferences } from "./planningPreferences";
-import type { Assignment, Commitment, DatedCommitment, Module, PlanningPreferences, StudyBlock, TimetableEntry } from "@/types";
+import type { Assignment, Commitment, DatedCommitment, Module, PlanningPreferences, AssignmentSession, TimetableEntry } from "@/types";
 
 export type PlanInputs = {
   assignment: Assignment;
@@ -79,7 +79,7 @@ type ReservableBlocksInput = Pick<PlanInputs, "timetableEntries" | "commitments"
   currentAssignmentId: string;
   assignments: Assignment[];
   modules: Module[];
-  studyBlocks: StudyBlock[];
+  assignmentSessions: AssignmentSession[];
   planSnapshots: Record<string, string>;
 };
 
@@ -89,11 +89,11 @@ type ReservableBlocksInput = Pick<PlanInputs, "timetableEntries" | "commitments"
  * made stale by an edited timetable, commitment, workload, or planning
  * preference from blocking a new plan.
  */
-export function getReservableStudyBlocks({
+export function getReservableAssignmentSessions({
   currentAssignmentId,
   assignments,
   modules,
-  studyBlocks,
+  assignmentSessions,
   planSnapshots,
   timetableEntries,
   commitments,
@@ -121,7 +121,7 @@ export function getReservableStudyBlocks({
 
   // A completed block is finished history, not a future obligation, so it
   // should not reserve time away from a different assignment's plan.
-  return studyBlocks.filter((block) => reservableAssignmentIds.has(block.assignmentId) && !block.completedAt);
+  return assignmentSessions.filter((block) => reservableAssignmentIds.has(block.assignmentId) && !block.completedAt);
 }
 
 export type PlanChangeReason =

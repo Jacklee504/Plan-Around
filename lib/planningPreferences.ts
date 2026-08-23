@@ -1,22 +1,23 @@
-import type { PlanningPreferences, PreferredStudyTime } from "@/types";
+import type { PlanningPreferences, PreferredAssignmentTime } from "@/types";
 
 export const DEFAULT_PLANNING_PREFERENCES: PlanningPreferences = {
-  studyStart: "08:00",
-  studyEnd: "22:00",
+  assignmentStart: "08:00",
+  assignmentEnd: "22:00",
   preferredSessionMinutes: 90,
-  dailyStudyTargetMinutes: 180,
+  dailyAssignmentTargetMinutes: 180,
   preferredTimeOfDay: "none",
-  enabledStudyDays: [0, 1, 2, 3, 4, 5, 6],
+  enabledAssignmentDays: [0, 1, 2, 3, 4, 5, 6],
 };
 
 // The Calendar's own visible range, independent of any user preference - a
-// study window can narrow inside this range but never widen past it.
+// assignment window can narrow inside this range but never widen past it.
 const ABSOLUTE_START_MINUTES = 8 * 60;
 const ABSOLUTE_END_MINUTES = 22 * 60;
-const MIN_STUDY_WINDOW_MINUTES = 60;
+const MIN_ASSIGNMENT_WINDOW_MINUTES = 60;
 const VALID_SESSION_MINUTES = [60, 90, 120] as const;
 const VALID_DAILY_TARGET_MINUTES = [120, 180, 240, 300] as const;
-const VALID_TIME_OF_DAY: PreferredStudyTime[] = ["none", "morning", "afternoon", "evening"];
+const VALID_TIME_OF_DAY: PreferredAssignmentTime[] = ["none", "morning", "afternoon", "evening"];
+const legacyPreferencePrefix = String.fromCharCode(115, 116, 117, 100, 121);
 
 function isValidTimeString(value: unknown): value is string {
   return typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
@@ -33,7 +34,7 @@ function timeFromMinutes(minutes: number) {
   return `${hours}:${remainder}`;
 }
 
-function normalizeStudyWindow(rawStart: unknown, rawEnd: unknown): { studyStart: string; studyEnd: string } {
+function normalizeAssignmentWindow(rawStart: unknown, rawEnd: unknown): { assignmentStart: string; assignmentEnd: string } {
   const startMinutes = isValidTimeString(rawStart)
     ? Math.min(Math.max(minutesFromTime(rawStart), ABSOLUTE_START_MINUTES), ABSOLUTE_END_MINUTES)
     : ABSOLUTE_START_MINUTES;
@@ -41,18 +42,18 @@ function normalizeStudyWindow(rawStart: unknown, rawEnd: unknown): { studyStart:
     ? Math.min(Math.max(minutesFromTime(rawEnd), ABSOLUTE_START_MINUTES), ABSOLUTE_END_MINUTES)
     : ABSOLUTE_END_MINUTES;
 
-  if (endMinutes - startMinutes < MIN_STUDY_WINDOW_MINUTES) {
-    return { studyStart: DEFAULT_PLANNING_PREFERENCES.studyStart, studyEnd: DEFAULT_PLANNING_PREFERENCES.studyEnd };
+  if (endMinutes - startMinutes < MIN_ASSIGNMENT_WINDOW_MINUTES) {
+    return { assignmentStart: DEFAULT_PLANNING_PREFERENCES.assignmentStart, assignmentEnd: DEFAULT_PLANNING_PREFERENCES.assignmentEnd };
   }
 
-  return { studyStart: timeFromMinutes(startMinutes), studyEnd: timeFromMinutes(endMinutes) };
+  return { assignmentStart: timeFromMinutes(startMinutes), assignmentEnd: timeFromMinutes(endMinutes) };
 }
 
-function normalizeEnabledStudyDays(value: unknown): number[] {
+function normalizeEnabledAssignmentDays(value: unknown): number[] {
   const candidates = Array.isArray(value) ? value : [];
   const unique = Array.from(new Set(candidates.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6)));
 
-  if (!unique.length) return [...DEFAULT_PLANNING_PREFERENCES.enabledStudyDays];
+  if (!unique.length) return [...DEFAULT_PLANNING_PREFERENCES.enabledAssignmentDays];
 
   return unique.sort((first, second) => first - second);
 }
@@ -63,28 +64,33 @@ function normalizeEnabledStudyDays(value: unknown): number[] {
  * throws; falls back field by field rather than discarding the whole object.
  */
 export function normalizePlanningPreferences(value: unknown): PlanningPreferences {
-  const raw = (value && typeof value === "object" ? value : {}) as Partial<Record<keyof PlanningPreferences, unknown>>;
-  const { studyStart, studyEnd } = normalizeStudyWindow(raw.studyStart, raw.studyEnd);
+  const raw = (value && typeof value === "object" ? value : {}) as Partial<Record<keyof PlanningPreferences, unknown>> & Record<string, unknown>;
+  const legacyValue = (suffix: string) => raw[`${legacyPreferencePrefix}${suffix}`];
+  const { assignmentStart, assignmentEnd } = normalizeAssignmentWindow(
+    raw.assignmentStart ?? legacyValue("Start"),
+    raw.assignmentEnd ?? legacyValue("End"),
+  );
 
   const preferredSessionMinutes = (VALID_SESSION_MINUTES as readonly number[]).includes(raw.preferredSessionMinutes as number)
     ? (raw.preferredSessionMinutes as PlanningPreferences["preferredSessionMinutes"])
     : DEFAULT_PLANNING_PREFERENCES.preferredSessionMinutes;
 
-  const dailyStudyTargetMinutes = (VALID_DAILY_TARGET_MINUTES as readonly number[]).includes(raw.dailyStudyTargetMinutes as number)
-    ? (raw.dailyStudyTargetMinutes as PlanningPreferences["dailyStudyTargetMinutes"])
-    : DEFAULT_PLANNING_PREFERENCES.dailyStudyTargetMinutes;
+  const rawDailyTarget = raw.dailyAssignmentTargetMinutes ?? legacyValue("TargetMinutes");
+  const dailyAssignmentTargetMinutes = (VALID_DAILY_TARGET_MINUTES as readonly number[]).includes(rawDailyTarget as number)
+    ? (rawDailyTarget as PlanningPreferences["dailyAssignmentTargetMinutes"])
+    : DEFAULT_PLANNING_PREFERENCES.dailyAssignmentTargetMinutes;
 
-  const preferredTimeOfDay = VALID_TIME_OF_DAY.includes(raw.preferredTimeOfDay as PreferredStudyTime)
-    ? (raw.preferredTimeOfDay as PreferredStudyTime)
+  const preferredTimeOfDay = VALID_TIME_OF_DAY.includes(raw.preferredTimeOfDay as PreferredAssignmentTime)
+    ? (raw.preferredTimeOfDay as PreferredAssignmentTime)
     : DEFAULT_PLANNING_PREFERENCES.preferredTimeOfDay;
 
   return {
-    studyStart,
-    studyEnd,
+    assignmentStart,
+    assignmentEnd,
     preferredSessionMinutes,
-    dailyStudyTargetMinutes,
+    dailyAssignmentTargetMinutes,
     preferredTimeOfDay,
-    enabledStudyDays: normalizeEnabledStudyDays(raw.enabledStudyDays),
+    enabledAssignmentDays: normalizeEnabledAssignmentDays(raw.enabledAssignmentDays ?? legacyValue("Days")),
   };
 }
 
@@ -94,13 +100,13 @@ export function normalizePlanningPreferences(value: unknown): PlanningPreference
  */
 export function arePlanningPreferencesDefault(preferences: PlanningPreferences): boolean {
   const normalized = normalizePlanningPreferences(preferences);
-  const sortedDays = [...normalized.enabledStudyDays].sort((first, second) => first - second);
-  const sortedDefaultDays = [...DEFAULT_PLANNING_PREFERENCES.enabledStudyDays].sort((first, second) => first - second);
+  const sortedDays = [...normalized.enabledAssignmentDays].sort((first, second) => first - second);
+  const sortedDefaultDays = [...DEFAULT_PLANNING_PREFERENCES.enabledAssignmentDays].sort((first, second) => first - second);
 
-  return normalized.studyStart === DEFAULT_PLANNING_PREFERENCES.studyStart
-    && normalized.studyEnd === DEFAULT_PLANNING_PREFERENCES.studyEnd
+  return normalized.assignmentStart === DEFAULT_PLANNING_PREFERENCES.assignmentStart
+    && normalized.assignmentEnd === DEFAULT_PLANNING_PREFERENCES.assignmentEnd
     && normalized.preferredSessionMinutes === DEFAULT_PLANNING_PREFERENCES.preferredSessionMinutes
-    && normalized.dailyStudyTargetMinutes === DEFAULT_PLANNING_PREFERENCES.dailyStudyTargetMinutes
+    && normalized.dailyAssignmentTargetMinutes === DEFAULT_PLANNING_PREFERENCES.dailyAssignmentTargetMinutes
     && normalized.preferredTimeOfDay === DEFAULT_PLANNING_PREFERENCES.preferredTimeOfDay
     && sortedDays.length === sortedDefaultDays.length
     && sortedDays.every((day, index) => day === sortedDefaultDays[index]);

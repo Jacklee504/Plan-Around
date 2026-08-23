@@ -6,7 +6,7 @@ export default function SetupPage() {
     <AppShell
       eyebrow="Calendar"
       title="Your actual week, in one place."
-      description="Bring in your semester timetable, then keep classes and personal commitments together in the calendar your study plan will use."
+      description="Bring in your semester timetable, then keep classes and personal commitments together in the calendar your assignment plans use."
     >
       <SetupWorkspace />
     </AppShell>

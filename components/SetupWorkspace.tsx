@@ -32,7 +32,7 @@ import type {
   CommitmentCategory,
   DatedCommitment,
   Module,
-  StudyBlock,
+  AssignmentSession,
   TimetableAttendance,
   TimetableEntry,
 } from "@/types";
@@ -66,7 +66,7 @@ type CalendarEventDraft = {
   end: string;
   category: CommitmentCategory;
 };
-type StudyBlockEditDraft = {
+type AssignmentSessionEditDraft = {
   id: string;
   date: string;
   start: string;
@@ -333,16 +333,16 @@ function EventDialog({
   );
 }
 
-function StudyBlockDialog({
+function AssignmentSessionDialog({
   block,
   onSave,
   onClose,
 }: {
-  block: StudyBlock;
-  onSave: (draft: StudyBlockEditDraft) => void;
+  block: AssignmentSession;
+  onSave: (draft: AssignmentSessionEditDraft) => void;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<StudyBlockEditDraft>({
+  const [draft, setDraft] = useState<AssignmentSessionEditDraft>({
     id: block.id,
     date: block.date,
     start: block.start,
@@ -352,7 +352,7 @@ function StudyBlockDialog({
   const [error, setError] = useState("");
   const isCompleted = Boolean(block.completedAt);
 
-  function updateDraft(changes: Partial<StudyBlockEditDraft>) {
+  function updateDraft(changes: Partial<AssignmentSessionEditDraft>) {
     setDraft((current) => ({ ...current, ...changes }));
     setError("");
   }
@@ -378,11 +378,11 @@ function StudyBlockDialog({
           onSave(draft);
         }}
         onMouseDown={(event) => event.stopPropagation()}
-        aria-labelledby="study-block-heading"
+        aria-labelledby="assignment-session-heading"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 id="study-block-heading" className="text-xl font-semibold tracking-[-0.03em]">Adjust this session.</h2>
+            <h2 id="assignment-session-heading" className="text-xl font-semibold tracking-[-0.03em]">Adjust this session.</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">{block.taskName}</p>
           </div>
           <button type="button" onClick={onClose} className="min-h-10 px-2 text-sm font-semibold text-[var(--muted-ink)] hover:text-[var(--ink)]">Close</button>
@@ -529,7 +529,7 @@ function SetupWorkspaceContent({
 }: SetupWorkspaceContentProps) {
   const [modules, setModules] = useState<Module[]>([]);
 const [assignments, setAssignments] = useState<Assignment[]>([]);
-const [studyBlocks, setStudyBlocks] = useState<StudyBlock[]>([]);
+const [assignmentSessions, setAssignmentSessions] = useState<AssignmentSession[]>([]);
 const [commitments, setCommitments] = useState<Commitment[]>([]);
 const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
     [],
@@ -543,7 +543,7 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
   );
   const [eventDraft, setEventDraft] = useState<CalendarEventDraft | null>(null);
   const [eventError, setEventError] = useState("");
-  const [studyBlockDraft, setStudyBlockDraft] = useState<StudyBlock | null>(null);
+  const [assignmentSessionDraft, setAssignmentSessionDraft] = useState<AssignmentSession | null>(null);
   const [showImporter, setShowImporter] = useState(!onboardingCompleted);
   const [importState, setImportState] = useState<
     "idle" | "reading" | "complete" | "error"
@@ -571,8 +571,8 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
       setAssignments(
         readStoredValue<Assignment[]>(storageKeys.assignments, []),
       );
-      setStudyBlocks(
-        readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []),
+      setAssignmentSessions(
+        readStoredValue<AssignmentSession[]>(storageKeys.assignmentSessions, []),
       );
       setCommitments(
         readStoredValue<Commitment[]>(storageKeys.commitments, []),
@@ -604,8 +604,8 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
     if (isLoaded) writeStoredValue(storageKeys.modules, modules);
   }, [isLoaded, modules]);
   useEffect(() => {
-    if (isLoaded) writeStoredValue(storageKeys.studyBlocks, studyBlocks);
-  }, [isLoaded, studyBlocks]);
+    if (isLoaded) writeStoredValue(storageKeys.assignmentSessions, assignmentSessions);
+  }, [isLoaded, assignmentSessions]);
   useEffect(() => {
     if (isLoaded) writeStoredValue(storageKeys.commitments, commitments);
   }, [isLoaded, commitments]);
@@ -637,13 +637,13 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
   const totalBlockedTime = timetableEntries.length + commitments.length;
   const hasBaseline = totalBlockedTime > 0;
   const canCompleteSetup = hasBaseline;
-  const studyBlockLabels = useMemo(() => {
+  const assignmentSessionLabels = useMemo(() => {
     const assignmentsById = new Map(
       assignments.map((assignment) => [assignment.id, assignment]),
     );
     const modulesById = new Map(modules.map((module) => [module.id, module]));
 
-    return studyBlocks.reduce<Record<string, string>>((labels, block) => {
+    return assignmentSessions.reduce<Record<string, string>>((labels, block) => {
       const assignment = assignmentsById.get(block.assignmentId);
       const moduleCode = assignment
         ? modulesById.get(assignment.moduleId)?.code?.trim()
@@ -657,7 +657,7 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
       }
       return labels;
     }, {});
-  }, [assignments, modules, studyBlocks]);
+  }, [assignments, modules, assignmentSessions]);
   const shouldShowImporter =
     !reviewEntries && (showImporter || !timetableEntries.length);
   const shouldShowPreUploadGuide =
@@ -802,8 +802,8 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
     setEventDraft(null);
   }
 
-  function saveStudyBlock(draft: StudyBlockEditDraft) {
-    setStudyBlocks((current) => current.map((block) => {
+  function saveAssignmentSession(draft: AssignmentSessionEditDraft) {
+    setAssignmentSessions((current) => current.map((block) => {
       if (block.id !== draft.id) return block;
       const isCompleted = Boolean(block.completedAt);
       return {
@@ -816,7 +816,7 @@ const [datedCommitments, setDatedCommitments] = useState<DatedCommitment[]>(
           : block.missedAt ?? new Date().toISOString(),
       };
     }));
-    setStudyBlockDraft(null);
+    setAssignmentSessionDraft(null);
   }
 
 async function importTimetable(file: File | undefined) {
@@ -1259,7 +1259,7 @@ async function importTimetable(file: File | undefined) {
               <div>
                 <h3 className="text-sm font-semibold">Plan around your week</h3>
                 <p className="mt-1 text-sm leading-6 text-[var(--muted-ink)]">
-                  Turn the finished calendar into a realistic study plan.
+                  Turn the finished calendar into a realistic assignment plan.
                 </p>
               </div>
             </li>
@@ -1369,8 +1369,8 @@ async function importTimetable(file: File | undefined) {
                 timetableEntries={timetableEntries}
                 commitments={commitments}
                 datedCommitments={onboardingCompleted ? datedCommitments : []}
-                studyBlocks={onboardingCompleted ? studyBlocks : []}
-                studyBlockLabels={studyBlockLabels}
+                assignmentSessions={onboardingCompleted ? assignmentSessions : []}
+                assignmentSessionLabels={assignmentSessionLabels}
                 visibleWeekStart={
                   onboardingCompleted ? visibleCalendarWeekStart : undefined
                 }
@@ -1394,12 +1394,12 @@ async function importTimetable(file: File | undefined) {
                     ? (commitment) => openDatedCommitment(commitment)
                     : undefined
                 }
-                onSelectStudyBlock={
+                onSelectAssignmentSession={
                   onboardingCompleted
                     ? (block) => {
                         setSelectedEntryId(null);
                         setEventDraft(null);
-                        setStudyBlockDraft(block);
+                        setAssignmentSessionDraft(block);
                       }
                     : undefined
                 }
@@ -1454,7 +1454,7 @@ async function importTimetable(file: File | undefined) {
             <section className="border-t border-[var(--line)] pt-5">
               <p className="text-sm leading-6 text-[var(--muted-ink)]">
                 Click a class to manage attendance, a commitment to edit it, or a
-                study session to adjust its time or mark it missed.
+                assignment session to adjust its time or mark it missed.
               </p>
             </section>
           )}
@@ -1477,11 +1477,11 @@ async function importTimetable(file: File | undefined) {
           error={eventError}
         />
       ) : null}
-      {studyBlockDraft ? (
-        <StudyBlockDialog
-          block={studyBlockDraft}
-          onSave={saveStudyBlock}
-          onClose={() => setStudyBlockDraft(null)}
+      {assignmentSessionDraft ? (
+        <AssignmentSessionDialog
+          block={assignmentSessionDraft}
+          onSave={saveAssignmentSession}
+          onClose={() => setAssignmentSessionDraft(null)}
         />
       ) : null}
       {onboardingCompleted && selectedEntry ? (

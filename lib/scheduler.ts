@@ -4,21 +4,21 @@ import type {
   Commitment,
   DatedCommitment,
   PlanningPreferences,
-  PreferredStudyTime,
+  PreferredAssignmentTime,
   ScheduleResult,
-  StudyBlock,
+  AssignmentSession,
   TimetableEntry,
   WorkloadBreakdown,
   WorkloadTask,
 } from "@/types";
 
-// Defaults only - the effective study window, preferred session length and
+// Defaults only - the effective assignment window, preferred session length and
 // daily target are resolved per call from (normalized) PlanningPreferences.
 export const SCHEDULER_START_HOUR = 8;
 export const SCHEDULER_END_HOUR = 22;
-export const MIN_STUDY_SESSION_MINUTES = 60;
-export const PREFERRED_STUDY_SESSION_MINUTES = 90;
-export const MAX_STUDY_SESSION_MINUTES = 120;
+export const MIN_ASSIGNMENT_SESSION_MINUTES = 60;
+export const PREFERRED_ASSIGNMENT_SESSION_MINUTES = 90;
+export const MAX_ASSIGNMENT_SESSION_MINUTES = 120;
 export const DAILY_ASSIGNMENT_TARGET_MINUTES = 180;
 
 const MORNING_BOUNDARY_MINUTES = 12 * 60;
@@ -26,7 +26,7 @@ const AFTERNOON_BOUNDARY_MINUTES = 17 * 60;
 
 type TimeBand = "morning" | "afternoon" | "evening";
 
-const BAND_PRIORITY: Record<Exclude<PreferredStudyTime, "none">, TimeBand[]> = {
+const BAND_PRIORITY: Record<Exclude<PreferredAssignmentTime, "none">, TimeBand[]> = {
   morning: ["morning", "afternoon", "evening"],
   afternoon: ["afternoon", "evening", "morning"],
   evening: ["evening", "afternoon", "morning"],
@@ -42,7 +42,7 @@ type SchedulerInput = {
   /** Exact-date commitments block only their recorded date. */
   datedCommitments?: DatedCommitment[];
   /** Existing sessions for other assignments. Unlike commitments, these block one exact date only. */
-  reservedBlocks?: StudyBlock[];
+  reservedBlocks?: AssignmentSession[];
   now?: Date;
   preferences?: PlanningPreferences;
 };
@@ -149,7 +149,7 @@ function splitRangeAtBandBoundaries(range: TimeRange): TimeRange[] {
  * the order the scheduler encounters them changes. "none" preserves the
  * existing chronological range shape exactly.
  */
-function orderRangesByTimeOfDay(ranges: TimeRange[], preferredTimeOfDay: PreferredStudyTime): TimeRange[] {
+function orderRangesByTimeOfDay(ranges: TimeRange[], preferredTimeOfDay: PreferredAssignmentTime): TimeRange[] {
   if (preferredTimeOfDay === "none") return ranges;
 
   const priority = BAND_PRIORITY[preferredTimeOfDay];
@@ -168,15 +168,15 @@ function availableRanges(
   timetableEntries: TimetableEntry[],
   commitments: Commitment[],
   datedCommitments: DatedCommitment[],
-  reservedBlocks: StudyBlock[],
+  reservedBlocks: AssignmentSession[],
   windowStartMinutes: number,
   windowEndMinutes: number,
-  enabledStudyDays: number[],
-  preferredTimeOfDay: PreferredStudyTime,
+  enabledAssignmentDays: number[],
+  preferredTimeOfDay: PreferredAssignmentTime,
 ) {
-  // A disabled study day has zero capacity outright; recurring commitments
+  // A disabled assignment day has zero capacity outright; recurring commitments
   // never need inspecting because the whole date is already unavailable.
-  if (!enabledStudyDays.includes(date.getDay())) return [];
+  if (!enabledAssignmentDays.includes(date.getDay())) return [];
 
   const recurringRanges = [
     ...timetableEntries
@@ -210,7 +210,7 @@ function availableRanges(
   // The minimum-session filter runs once, before band-splitting, so a
   // qualifying range's minutes always count toward capacity even if a split
   // produces a smaller sub-60-minute segment at a band boundary.
-  const qualifyingRanges = freeRanges.filter((range) => range.end - range.start >= MIN_STUDY_SESSION_MINUTES);
+  const qualifyingRanges = freeRanges.filter((range) => range.end - range.start >= MIN_ASSIGNMENT_SESSION_MINUTES);
   return orderRangesByTimeOfDay(qualifyingRanges, preferredTimeOfDay);
 }
 
@@ -220,11 +220,11 @@ function buildAvailability(
   timetableEntries: TimetableEntry[],
   commitments: Commitment[],
   datedCommitments: DatedCommitment[],
-  reservedBlocks: StudyBlock[],
+  reservedBlocks: AssignmentSession[],
   preferences: PlanningPreferences,
 ) {
-  const windowStartMinutes = minutesFromTime(preferences.studyStart);
-  const windowEndMinutes = minutesFromTime(preferences.studyEnd);
+  const windowStartMinutes = minutesFromTime(preferences.assignmentStart);
+  const windowEndMinutes = minutesFromTime(preferences.assignmentEnd);
   const dates: DatedAvailability[] = [];
   for (let date = startOfDay(start); date < endExclusive; date = addDays(date, 1)) {
     dates.push({
@@ -238,7 +238,7 @@ function buildAvailability(
         reservedBlocks,
         windowStartMinutes,
         windowEndMinutes,
-        preferences.enabledStudyDays,
+        preferences.enabledAssignmentDays,
         preferences.preferredTimeOfDay,
       ),
     });
@@ -258,23 +258,23 @@ function removePastAvailability(availability: DatedAvailability[], now: Date) {
   const nextHalfHour = Math.ceil(currentMinutes / 30) * 30;
   currentDay.ranges = currentDay.ranges
     .map((range) => ({ ...range, start: Math.max(range.start, nextHalfHour) }))
-    .filter((range) => range.end - range.start >= MIN_STUDY_SESSION_MINUTES);
+    .filter((range) => range.end - range.start >= MIN_ASSIGNMENT_SESSION_MINUTES);
 }
 
 function nextTask(tasks: TaskRemaining[]) {
   return tasks.find((task) => task.remainingMinutes > 0) ?? null;
 }
 
-function canMergeBlocks(first: StudyBlock, second: StudyBlock) {
+function canMergeBlocks(first: AssignmentSession, second: AssignmentSession) {
   return first.assignmentId === second.assignmentId
     && first.taskId === second.taskId
     && first.date === second.date
     && first.end === second.start
-    && minutesFromTime(second.end) - minutesFromTime(first.start) <= MAX_STUDY_SESSION_MINUTES;
+    && minutesFromTime(second.end) - minutesFromTime(first.start) <= MAX_ASSIGNMENT_SESSION_MINUTES;
 }
 
-function absorbShortBlocks(blocks: StudyBlock[]) {
-  const normalized: StudyBlock[] = [];
+function absorbShortBlocks(blocks: AssignmentSession[]) {
+  const normalized: AssignmentSession[] = [];
 
   for (let index = 0; index < blocks.length; index += 1) {
     const block = blocks[index];
@@ -299,15 +299,15 @@ function absorbShortBlocks(blocks: StudyBlock[]) {
   return normalized;
 }
 
-function fillStudyBlocks(
+function fillAssignmentSessions(
   availability: DatedAvailability[],
   assignment: Assignment,
   workload: WorkloadBreakdown,
   preferredSessionMinutes: number,
-  dailyStudyTargetMinutes: number,
+  dailyAssignmentTargetMinutes: number,
 ) {
   const tasks = workload.taskHours.map((task) => ({ ...task, remainingMinutes: Math.round(task.recommendedHours * 60) }));
-  const studyBlocks: StudyBlock[] = [];
+  const assignmentSessions: AssignmentSession[] = [];
 
   function fillDay(day: DatedAvailability, dailyLimit: number) {
     let dayMinutes = 0;
@@ -322,24 +322,24 @@ function fillStudyBlocks(
         const dailyRemaining = dailyLimit - dayMinutes;
         const isFinalHalfHour = task.remainingMinutes === 30;
 
-        if (dailyRemaining < MIN_STUDY_SESSION_MINUTES && !isFinalHalfHour) break;
-        if (rangeRemaining < MIN_STUDY_SESSION_MINUTES && !isFinalHalfHour) break;
+        if (dailyRemaining < MIN_ASSIGNMENT_SESSION_MINUTES && !isFinalHalfHour) break;
+        if (rangeRemaining < MIN_ASSIGNMENT_SESSION_MINUTES && !isFinalHalfHour) break;
 
-        const preferredLength = Math.min(preferredSessionMinutes, MAX_STUDY_SESSION_MINUTES, dailyRemaining, rangeRemaining);
+        const preferredLength = Math.min(preferredSessionMinutes, MAX_ASSIGNMENT_SESSION_MINUTES, dailyRemaining, rangeRemaining);
         let duration = Math.min(preferredLength, task.remainingMinutes);
 
         // Keep the final half-hour attached to a normal session whenever the
         // current free period allows it. If it cannot be extended, leave a full
         // hour for a later eligible period instead of creating a 30-minute block.
         if (task.remainingMinutes - duration === 30) {
-          const expandedDuration = Math.min(task.remainingMinutes, MAX_STUDY_SESSION_MINUTES, dailyRemaining, rangeRemaining);
+          const expandedDuration = Math.min(task.remainingMinutes, MAX_ASSIGNMENT_SESSION_MINUTES, dailyRemaining, rangeRemaining);
           duration = expandedDuration > duration ? expandedDuration : duration >= 90 ? duration - 30 : duration;
         }
 
-        if (duration < MIN_STUDY_SESSION_MINUTES && !isFinalHalfHour) break;
+        if (duration < MIN_ASSIGNMENT_SESSION_MINUTES && !isFinalHalfHour) break;
         if (duration === 0) break;
 
-        studyBlocks.push({
+        assignmentSessions.push({
           id: `${assignment.id}-${day.dateKey}-${timeFromMinutes(cursor)}-${task.id}`,
           assignmentId: assignment.id,
           date: day.dateKey,
@@ -360,19 +360,19 @@ function fillStudyBlocks(
   // First distribute work using the daily target as a soft portion size. A second
   // pass only uses extra free time when the workload cannot otherwise fit before
   // the deadline - the target is a distribution preference, not a hard cap.
-  availability.forEach((day) => fillDay(day, dailyStudyTargetMinutes));
+  availability.forEach((day) => fillDay(day, dailyAssignmentTargetMinutes));
   if (nextTask(tasks)) {
     availability.forEach((day) => fillDay(day, DAY_MINUTES));
   }
 
-  return absorbShortBlocks(studyBlocks);
+  return absorbShortBlocks(assignmentSessions);
 }
 
-function totalBlockMinutes(blocks: StudyBlock[]) {
+function totalBlockMinutes(blocks: AssignmentSession[]) {
   return blocks.reduce((total, block) => total + minutesFromTime(block.end) - minutesFromTime(block.start), 0);
 }
 
-export function generateStudySchedule({
+export function generateAssignmentSchedule({
   assignment,
   workload,
   timetableEntries,
@@ -406,18 +406,18 @@ export function generateStudySchedule({
   const canKeepDeadlineBuffer = requiredMinutes <= bufferedCapacity;
   const canFitBeforeDeadline = requiredMinutes <= deadlineCapacity;
   const availability = canKeepDeadlineBuffer ? bufferedAvailability : fullAvailability;
-  const studyBlocks = fillStudyBlocks(
+  const assignmentSessions = fillAssignmentSessions(
     availability,
     assignment,
     workload,
     resolvedPreferences.preferredSessionMinutes,
-    resolvedPreferences.dailyStudyTargetMinutes,
+    resolvedPreferences.dailyAssignmentTargetMinutes,
   );
-  const scheduledMinutes = totalBlockMinutes(studyBlocks);
+  const scheduledMinutes = totalBlockMinutes(assignmentSessions);
   const unscheduledMinutes = Math.max(0, requiredMinutes - scheduledMinutes);
 
   return {
-    studyBlocks,
+    assignmentSessions,
     status: canKeepDeadlineBuffer ? "on-track" : canFitBeforeDeadline ? "tight" : "not-enough-time",
     requiredHours: hoursFromMinutes(requiredMinutes),
     scheduledHours: hoursFromMinutes(scheduledMinutes),

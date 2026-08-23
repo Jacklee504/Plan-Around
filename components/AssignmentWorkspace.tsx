@@ -10,8 +10,8 @@ import { extractPdfEmbeddedText, hasUsefulEmbeddedText, isPdfFile, renderPdfToIm
 import { assignmentAnalysisInputKey, MAX_BRIEF_CHARACTERS, type AssignmentAnalysisInput, type AssignmentAnalysisResponse } from "@/lib/assignmentAnalysis";
 import { findMatchingModule } from "@/lib/moduleMatch";
 import { readStoredValue, storageKeys, writeStoredValue } from "@/lib/storage";
-import { removeAssignmentPlanningState, restoreAssignmentPlanningState } from "@/lib/studyProgress";
-import type { Assignment, AssignmentTask, Module, StudyBlock } from "@/types";
+import { removeAssignmentPlanningState, restoreAssignmentPlanningState } from "@/lib/assignmentProgress";
+import type { Assignment, AssignmentTask, Module, AssignmentSession } from "@/types";
 import { OnboardingRequired } from "@/components/OnboardingRequired";
 import { useOnboardingState } from "@/lib/onboarding";
 
@@ -32,7 +32,7 @@ type TaskDraft = {
 
 type DeletedAssignmentUndo = {
   assignment: Assignment;
-  studyBlocks: StudyBlock[];
+  assignmentSessions: AssignmentSession[];
   planSnapshot: string | undefined;
 };
 
@@ -348,39 +348,39 @@ export function AssignmentWorkspace() {
   }
 
   function deleteAssignment(assignment: Assignment) {
-    // Deletion removes the assignment's planning state (StudyBlocks, plan
+    // Deletion removes the assignment's planning state (AssignmentSessions, plan
     // snapshot) as one coherent operation, not just the Assignment record -
-    // otherwise orphaned StudyBlocks keep appearing in Calendar and can keep
+    // otherwise orphaned AssignmentSessions keep appearing in Calendar and can keep
     // reserving time for a deleted assignment. Undo restores all three together.
-    const { remainingStudyBlocks, remainingPlanSnapshots, removedStudyBlocks, removedPlanSnapshot } = removeAssignmentPlanningState(
-      readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []),
+    const { remainingAssignmentSessions, remainingPlanSnapshots, removedAssignmentSessions, removedPlanSnapshot } = removeAssignmentPlanningState(
+      readStoredValue<AssignmentSession[]>(storageKeys.assignmentSessions, []),
       readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {}),
       assignment.id,
     );
 
     setAssignments((current) => current.filter((item) => item.id !== assignment.id));
 
-    if (removedStudyBlocks.length) writeStoredValue(storageKeys.studyBlocks, remainingStudyBlocks);
+    if (removedAssignmentSessions.length) writeStoredValue(storageKeys.assignmentSessions, remainingAssignmentSessions);
     if (removedPlanSnapshot !== undefined) writeStoredValue(storageKeys.planSnapshots, remainingPlanSnapshots);
 
-    setDeletedAssignment({ assignment, studyBlocks: removedStudyBlocks, planSnapshot: removedPlanSnapshot });
+    setDeletedAssignment({ assignment, assignmentSessions: removedAssignmentSessions, planSnapshot: removedPlanSnapshot });
     setStatus("");
   }
 
   function restoreDeletedAssignment() {
     if (!deletedAssignment) return;
-    const { assignment, studyBlocks, planSnapshot } = deletedAssignment;
+    const { assignment, assignmentSessions, planSnapshot } = deletedAssignment;
 
     setAssignments((current) => [...current, assignment]);
 
-    const { restoredStudyBlocks, restoredPlanSnapshots } = restoreAssignmentPlanningState(
-      readStoredValue<StudyBlock[]>(storageKeys.studyBlocks, []),
+    const { restoredAssignmentSessions, restoredPlanSnapshots } = restoreAssignmentPlanningState(
+      readStoredValue<AssignmentSession[]>(storageKeys.assignmentSessions, []),
       readStoredValue<Record<string, string>>(storageKeys.planSnapshots, {}),
       assignment.id,
-      studyBlocks,
+      assignmentSessions,
       planSnapshot,
     );
-    if (studyBlocks.length) writeStoredValue(storageKeys.studyBlocks, restoredStudyBlocks);
+    if (assignmentSessions.length) writeStoredValue(storageKeys.assignmentSessions, restoredAssignmentSessions);
     if (planSnapshot !== undefined) writeStoredValue(storageKeys.planSnapshots, restoredPlanSnapshots);
 
     setDeletedAssignment(null);

@@ -1,7 +1,7 @@
 import type {
   Commitment,
   DatedCommitment,
-  StudyBlock,
+  AssignmentSession,
   TimetableEntry,
 } from "@/types";
 
@@ -19,7 +19,7 @@ export type CalendarTimeRange = {
 };
 
 type CalendarItem = Pick<
-  Commitment | DatedCommitment | StudyBlock | TimetableEntry,
+  Commitment | DatedCommitment | AssignmentSession | TimetableEntry,
   "start" | "end"
 >;
 
@@ -75,28 +75,28 @@ function fitMinimumRange(range: CalendarTimeRange): CalendarTimeRange {
 /**
  * Finds the smallest useful calendar window without hiding any scheduled
  * item, so a week with only 9-5 classes doesn't render the full 8am-10pm
- * grid. A preferred study window can be included by callers when that
+ * grid. A preferred assignment window can be included by callers when that
  * setting exists, so the compact view doesn't hide the student's own
- * configured study hours either.
+ * configured assignment hours either.
  */
 export function calendarVisibleRange({
   timetableEntries = [],
   commitments = [],
   datedCommitments = [],
-  studyBlocks = [],
+  assignmentSessions = [],
   preferredHours,
 }: {
   timetableEntries?: TimetableEntry[];
   commitments?: Commitment[];
   datedCommitments?: DatedCommitment[];
-  studyBlocks?: StudyBlock[];
+  assignmentSessions?: AssignmentSession[];
   preferredHours?: { start: string; end: string };
 } = {}): CalendarTimeRange {
   const items: CalendarItem[] = [
     ...timetableEntries,
     ...commitments,
     ...datedCommitments,
-    ...studyBlocks,
+    ...assignmentSessions,
   ];
 
   if (preferredHours) items.push(preferredHours);
@@ -112,7 +112,7 @@ export function calendarVisibleRange({
   const latestEnd = Math.max(...items.map((item) => minutesFromTime(item.end)));
   const range = {
     startHour: clampHour(Math.floor(earliestStart / 60) - 1),
-    endHour: clampHour(Math.ceil(latestEnd / 60) + 1),
+    endHour: clampHour(Math.ceil(latestEnd / 60)),
   };
 
   return fitMinimumRange(range);

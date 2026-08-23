@@ -23,10 +23,10 @@ describe("resetForNewSemester", () => {
     writeStoredValue(storageKeys.commitments, [{ id: "c1" }]);
     writeStoredValue(storageKeys.datedCommitments, [{ id: "d1" }]);
     writeStoredValue(storageKeys.timetableEntries, [{ id: "e1" }]);
-    writeStoredValue(storageKeys.studyBlocks, [{ id: "b1" }]);
+    writeStoredValue(storageKeys.assignmentSessions, [{ id: "b1" }]);
     writeStoredValue(storageKeys.planSnapshots, { a1: "fingerprint" });
     writeStoredValue(storageKeys.onboarding, { completed: true, completedAt: "2026-01-01T00:00:00.000Z" });
-    writeStoredValue(storageKeys.planningPreferences, { studyStart: "09:00" });
+    writeStoredValue(storageKeys.planningPreferences, { assignmentStart: "09:00" });
     writeStoredValue(storageKeys.notificationsEnabled, true);
   });
 
@@ -38,7 +38,7 @@ describe("resetForNewSemester", () => {
     expect(readStoredValue(storageKeys.commitments, ["not-empty"])).toEqual([]);
     expect(readStoredValue(storageKeys.datedCommitments, ["not-empty"])).toEqual([]);
     expect(readStoredValue(storageKeys.timetableEntries, ["not-empty"])).toEqual([]);
-    expect(readStoredValue(storageKeys.studyBlocks, ["not-empty"])).toEqual([]);
+    expect(readStoredValue(storageKeys.assignmentSessions, ["not-empty"])).toEqual([]);
     expect(readStoredValue(storageKeys.planSnapshots, { keep: true })).toEqual({});
   });
 
@@ -51,7 +51,7 @@ describe("resetForNewSemester", () => {
   it("leaves personal device settings untouched", () => {
     resetForNewSemester();
 
-    expect(readStoredValue(storageKeys.planningPreferences, {})).toEqual({ studyStart: "09:00" });
+    expect(readStoredValue(storageKeys.planningPreferences, {})).toEqual({ assignmentStart: "09:00" });
     expect(readStoredValue(storageKeys.notificationsEnabled, false)).toBe(true);
   });
 

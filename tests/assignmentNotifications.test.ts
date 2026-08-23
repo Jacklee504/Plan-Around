@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { findBlocksDueForNotification, NOTIFY_MINUTES_BEFORE } from "../lib/studyNotifications";
-import type { StudyBlock } from "../types";
+import { findBlocksDueForNotification, NOTIFY_MINUTES_BEFORE } from "../lib/assignmentNotifications";
+import type { AssignmentSession } from "../types";
 
 const NOW = new Date(2026, 7, 19, 9, 0, 0);
 
-function block(overrides: Partial<StudyBlock> = {}): StudyBlock {
+function block(overrides: Partial<AssignmentSession> = {}): AssignmentSession {
   return { id: "b1", assignmentId: "a1", date: "2026-08-19", start: "09:10", end: "10:00", taskId: "t1", taskName: "Draft", ...overrides };
 }
 
