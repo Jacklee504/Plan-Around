@@ -121,7 +121,7 @@ export function AssignmentWorkspace() {
   function resetForm() {
     setDraft(emptyAssignmentDraft);
     setTasks([]);
-    setIsReviewingTasks(false);
+    setIsReviewingTasks(true);
     setShowAssignmentDetails(false);
     updateBriefText("");
     setHasAnalysedBrief(false);
@@ -507,8 +507,8 @@ export function AssignmentWorkspace() {
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">2 · Review</p>
-                    <h2 id="review-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Confirm the assignment tasks.</h2>
-                    <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">Check the task breakdown before creating the assignment plan.</p>
+                    <h2 id="review-heading" className="mt-1 text-xl font-semibold tracking-[-0.03em]">Review the assignment.</h2>
+                    <p className="mt-2 text-sm leading-6 text-[var(--muted-ink)]">Check the details and task breakdown before creating the assignment plan.</p>
                   </div>
                   <button type="button" onClick={() => { setError(""); setIsReviewingTasks(false); }} className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]">Edit details</button>
                 </div>
