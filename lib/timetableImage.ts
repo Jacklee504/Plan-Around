@@ -13,6 +13,10 @@ const PANEL_GAP = 12;
 // after base64 encoding, while a normal digital timetable panel stays PNG.
 const WEEKDAY_PANEL_TARGET_BYTES = 400_000;
 
+function isDarkPixel(pixels: Uint8ClampedArray, offset: number) {
+  return pixels[offset] + pixels[offset + 1] + pixels[offset + 2] < DARK_PIXEL_SUM_THRESHOLD;
+}
+
 /**
  * Finds the long vertical borders of a timetable grid. This stays deliberately
  * conservative: an unrecognised layout simply uses the existing whole-image
@@ -30,7 +34,7 @@ export function timetableGridVerticalLines(
     let darkPixels = 0;
     for (let y = 0; y < height; y += 1) {
       const offset = (y * width + x) * 4;
-      if (pixels[offset] + pixels[offset + 1] + pixels[offset + 2] < DARK_PIXEL_SUM_THRESHOLD) {
+      if (isDarkPixel(pixels, offset)) {
         darkPixels += 1;
       }
     }
@@ -60,6 +64,35 @@ export function timetableDayPanelBounds(verticalLines: number[]) {
     dayLeft,
     dayRight: verticalLines[index + 2],
   }));
+}
+
+/**
+ * Finds the top and bottom of the grid from its vertical borders. Keeping the
+ * crop to the grid gives the model more useful pixels for session text and
+ * block boundaries, instead of page titles, notes, or surrounding whitespace.
+ */
+export function timetableGridRowBounds(
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number,
+  verticalLines: number[],
+) {
+  const requiredDarkLines = Math.max(2, Math.ceil(verticalLines.length * 0.75));
+  let top = -1;
+  let bottom = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    let darkLines = 0;
+    for (const x of verticalLines) {
+      const offset = (y * width + x) * 4;
+      if (isDarkPixel(pixels, offset)) darkLines += 1;
+    }
+    if (darkLines < requiredDarkLines) continue;
+    if (top === -1) top = y;
+    bottom = y + 1;
+  }
+
+  return top >= 0 && bottom > top ? { top, bottom } : null;
 }
 
 function loadImage(file: File) {
@@ -107,8 +140,9 @@ export async function prepareTimetableAnalysisImages(file: File): Promise<Prepar
   if (!sourceContext) throw new Error("This browser could not prepare the timetable screenshot.");
   sourceContext.drawImage(image, 0, 0);
 
+  const pixels = sourceContext.getImageData(0, 0, source.width, source.height).data;
   const verticalLines = timetableGridVerticalLines(
-    sourceContext.getImageData(0, 0, source.width, source.height).data,
+    pixels,
     source.width,
     source.height,
   );
@@ -116,18 +150,21 @@ export async function prepareTimetableAnalysisImages(file: File): Promise<Prepar
 
   const [tableLeft, timeColumnRight] = verticalLines;
   const timeColumnWidth = timeColumnRight - tableLeft;
+  const rowBounds = timetableGridRowBounds(pixels, source.width, source.height, verticalLines);
+  const sourceTop = rowBounds?.top ?? 0;
+  const sourceHeight = rowBounds ? rowBounds.bottom - rowBounds.top : source.height;
   const dayPanels = timetableDayPanelBounds(verticalLines);
   return Promise.all(dayPanels.map(async (panel, panelIndex) => {
     const dayWidth = panel.dayRight - panel.dayLeft;
     const weekdayPanel = document.createElement("canvas");
     weekdayPanel.width = timeColumnWidth + PANEL_GAP + dayWidth;
-    weekdayPanel.height = source.height;
+    weekdayPanel.height = sourceHeight;
     const context = weekdayPanel.getContext("2d");
     if (!context) throw new Error("This browser could not prepare the timetable screenshot.");
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, weekdayPanel.width, weekdayPanel.height);
-    context.drawImage(source, tableLeft, 0, timeColumnWidth, source.height, 0, 0, timeColumnWidth, source.height);
-    context.drawImage(source, panel.dayLeft, 0, dayWidth, source.height, timeColumnWidth + PANEL_GAP, 0, dayWidth, source.height);
+    context.drawImage(source, tableLeft, sourceTop, timeColumnWidth, sourceHeight, 0, 0, timeColumnWidth, sourceHeight);
+    context.drawImage(source, panel.dayLeft, sourceTop, dayWidth, sourceHeight, timeColumnWidth + PANEL_GAP, 0, dayWidth, sourceHeight);
 
     const weekdayPanelFile = new File(
       [await canvasBlob(weekdayPanel)],

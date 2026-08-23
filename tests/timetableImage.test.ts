@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { timetableDayPanelBounds, timetableGridVerticalLines } from "../lib/timetableImage";
+import { timetableDayPanelBounds, timetableGridRowBounds, timetableGridVerticalLines } from "../lib/timetableImage";
 
-function pixelsWithVerticalLines(width: number, height: number, lines: number[]) {
+function pixelsWithVerticalLines(width: number, height: number, lines: number[], top = 0, bottom = height) {
   const pixels = new Uint8ClampedArray(width * height * 4).fill(255);
   for (const x of lines) {
-    for (let y = 0; y < height; y += 1) {
+    for (let y = top; y < bottom; y += 1) {
       const offset = (y * width + x) * 4;
       pixels[offset] = 100;
       pixels[offset + 1] = 100;
@@ -36,5 +36,12 @@ describe("timetableGridVerticalLines", () => {
 
     expect(panels).toHaveLength(5);
     expect(panels.map(({ dayLeft, dayRight }) => dayRight - dayLeft)).toEqual([22, 22, 22, 22, 22]);
+  });
+
+  it("trims surrounding page content while retaining the full grid", () => {
+    const lines = [10, 24, 46, 68, 90, 112, 134];
+    const pixels = pixelsWithVerticalLines(150, 100, lines, 12, 91);
+
+    expect(timetableGridRowBounds(pixels, 150, 100, lines)).toEqual({ top: 12, bottom: 91 });
   });
 });
